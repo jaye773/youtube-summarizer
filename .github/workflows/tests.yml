@@ -42,6 +42,7 @@ jobs:
     - name: Run tests with coverage
       env:
         GOOGLE_API_KEY: test_api_key
+        TESTING: true
       run: |
         pytest --cov=app --cov-report=xml --cov-report=term-missing -v
     
