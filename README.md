@@ -59,10 +59,13 @@ Create a `.env` file in the project root:
 GOOGLE_API_KEY=your_google_api_key_here
 ```
 
-### 3. Create Data Directory
+### 3. Initialize Data Directory
+Run the initialization script to create the proper directory structure:
 ```bash
-mkdir -p data
+./init_data.sh
 ```
+
+This creates the `data` directory with the correct file structure to avoid volume mounting issues.
 
 ### 4. Run with Docker Compose
 ```bash

@@ -14,11 +14,10 @@ services:
     # Pass the environment variable from the .env file to the container
     environment:
       - GOOGLE_API_KEY=${GOOGLE_API_KEY}
-    # Mount host directories/files into the container to persist data
+    # Mount the data directory to persist data
     volumes:
-      # Map the local summary cache file to the one inside the container
-      - ./data/summary_cache.json:/app/summary_cache.json
-      # Map the local audio cache directory to the one inside the container
-      - ./data/audio_cache:/app/audio_cache
+      # Map the entire data directory instead of individual files
+      # This avoids the "is a directory" error when files don't exist
+      - ./data:/app/data
     # Restart the container automatically if it fails
     restart: unless-stopped

@@ -2,7 +2,7 @@ import json
 import unittest
 from unittest.mock import MagicMock, mock_open, patch
 
-from app import AUDIO_CACHE_DIR, load_summary_cache, save_summary_cache
+from app import AUDIO_CACHE_DIR, DATA_DIR, load_summary_cache, save_summary_cache
 
 
 class TestCacheFunctions(unittest.TestCase):

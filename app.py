@@ -18,8 +18,11 @@ from youtube_transcript_api import (NoTranscriptFound, TranscriptsDisabled,
 app = Flask(__name__)
 
 # --- CACHE CONFIGURATION ---
-SUMMARY_CACHE_FILE = "summary_cache.json"
-AUDIO_CACHE_DIR = "audio_cache"  # Directory to store generated MP3s
+# Use data directory if running in Docker/Podman, otherwise use current directory
+DATA_DIR = os.environ.get("DATA_DIR", "data" if os.path.exists("/.dockerenv") else ".")
+os.makedirs(DATA_DIR, exist_ok=True)
+SUMMARY_CACHE_FILE = os.path.join(DATA_DIR, "summary_cache.json")
+AUDIO_CACHE_DIR = os.path.join(DATA_DIR, "audio_cache")
 
 os.makedirs(AUDIO_CACHE_DIR, exist_ok=True)
 print(f"✅ Audio cache directory is set to: '{AUDIO_CACHE_DIR}/'")
