@@ -29,6 +29,10 @@ Thumbs.db
 
 # Logs
 *.log
+
+# Linting
+.pylintrc
+pylint_report.md
 logs/
 
 # Temporary files
@@ -44,4 +48,13 @@ logs/
 
 # Environment variables
 .env.local
-.env.*.local 
+.env.*.local
+
+# Testing
+.coverage
+htmlcov/
+.pytest_cache/
+*.coverage
+coverage.xml
+.tox/
+test-reports/ 

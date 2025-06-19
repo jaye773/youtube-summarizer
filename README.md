@@ -25,6 +25,7 @@
 - [Project Structure](#project-structure)
 - [API Requirements](#api-requirements)
 - [Troubleshooting](#troubleshooting)
+- [Testing](#testing)
 - [Contributing](#contributing)
 - [License](#license)
 
@@ -188,9 +189,47 @@ To set up:
    - Change the port in `docker-compose.yml` or when running the app
    - Example: `python app.py --port 5002`
 
+## 🧪 Testing
+
+The project includes comprehensive unit and integration tests.
+
+### Running Tests
+
+1. **Install development dependencies**:
+```bash
+pip install -r requirements-dev.txt
+```
+
+2. **Run all tests**:
+```bash
+python run_tests.py
+```
+
+3. **Run tests with pytest directly**:
+```bash
+pytest -v
+```
+
+4. **Run tests with coverage**:
+```bash
+pytest --cov=app --cov-report=html
+```
+
+5. **Run specific test file**:
+```bash
+pytest tests/test_app.py -v
+```
+
+### Test Structure
+
+- `tests/test_app.py` - Flask endpoint tests
+- `tests/test_transcript_and_summary.py` - Transcript and summary generation tests
+- `tests/test_cache.py` - Cache functionality tests
+- `tests/test_integration.py` - End-to-end integration tests
+
 ## 🤝 Contributing
 
-Feel free to submit issues, fork the repository, and create pull requests for any improvements.
+Feel free to submit issues, fork the repository, and create pull requests for any improvements. Please ensure all tests pass before submitting a PR.
 
 ## 📄 License
 

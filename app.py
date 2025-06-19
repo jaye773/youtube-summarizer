@@ -2,7 +2,7 @@ import os
 import re
 import json
 import hashlib # For generating filenames
-from datetime import datetime
+from datetime import datetime, timezone
 import google.generativeai as genai
 from flask import Flask, request, jsonify, render_template, Response
 from youtube_transcript_api import YouTubeTranscriptApi, NoTranscriptFound, TranscriptsDisabled
@@ -38,27 +38,44 @@ print(f"✅ Loaded {len(summary_cache)} summaries from cache.")
 
 
 # --- API CLIENT INITIALIZATION ---
-try:
-    api_key = os.environ.get("GOOGLE_API_KEY")
-    if not api_key: raise ValueError("GOOGLE_API_KEY environment variable is not set.")
+api_key = os.environ.get("GOOGLE_API_KEY")
+tts_client = None
+youtube = None
+model = None
 
-    tts_client = texttospeech.TextToSpeechClient(client_options=ClientOptions(api_key=api_key))
-    genai.configure(api_key=api_key)
-    youtube = build('youtube', 'v3', developerKey=api_key)
-
-except Exception as e:
-    print(f"FATAL: Could not configure APIs. Is GOOGLE_API_KEY set? Error: {e}")
-    exit()
-
-model = genai.GenerativeModel(model_name="gemini-2.5-flash-preview-05-20")
+# Only initialize API clients if API key is available and we're not in test mode
+if api_key and not os.environ.get("TESTING"):
+    try:
+        tts_client = texttospeech.TextToSpeechClient(client_options=ClientOptions(api_key=api_key))
+        genai.configure(api_key=api_key)
+        youtube = build('youtube', 'v3', developerKey=api_key)
+        model = genai.GenerativeModel(model_name="gemini-2.5-flash-preview-05-20")
+    except Exception as e:
+        print(f"Warning: Could not configure APIs. Error: {e}")
+elif not api_key and not os.environ.get("TESTING"):
+    print("Warning: GOOGLE_API_KEY environment variable is not set. Some features will be unavailable.")
+    
+# For testing, create the model even without API key
+if os.environ.get("TESTING") and not model:
+    try:
+        model = genai.GenerativeModel(model_name="gemini-2.5-flash-preview-05-20")
+    except:
+        pass
 
 # --- HELPER FUNCTIONS (No changes) ---
 def clean_youtube_url(url):
     if not isinstance(url, str) or not url.strip(): return ""
-    parsed_url = url.replace("&list=WL", "")
+    # First remove &list=WL from the URL
+    url = url.replace("&list=WL", "")
     parsed_url = urlparse(url)
     query_params = parse_qs(parsed_url.query)
-    allowed_params = {k: query_params[k] for k in ['v', 'list'] if k in query_params}
+    # Only keep 'v' and 'list' parameters, but exclude 'list' if it's 'WL'
+    allowed_params = {}
+    for k in ['v', 'list']:
+        if k in query_params:
+            if k == 'list' and query_params[k][0] == 'WL':
+                continue  # Skip watch later list
+            allowed_params[k] = query_params[k]
     return urlunparse(parsed_url._replace(query=urlencode(allowed_params, doseq=True)))
 
 def get_playlist_id(url):
@@ -74,6 +91,9 @@ def get_video_id(url):
 
 def get_video_details(video_ids):
     details = {}
+    if not youtube:
+        print("YouTube API client not initialized")
+        return {}
     try:
         request = youtube.videos().list(part="snippet", id=",".join(video_ids))
         response = request.execute()
@@ -86,6 +106,8 @@ def get_video_details(video_ids):
         return {}
 
 def get_videos_from_playlist(playlist_id):
+    if not youtube:
+        return None, "YouTube API client not initialized"
     video_items = []
     next_page_token = None
     while True:
@@ -181,6 +203,9 @@ def summarize_links():
 
         if playlist_id:
             try:
+                if not youtube:
+                    results.append({"type": "error", "url": url, "error": "YouTube API client not initialized"})
+                    continue
                 pl_meta_request = youtube.playlists().list(part='snippet', id=playlist_id)
                 pl_meta_response = pl_meta_request.execute()
                 if not pl_meta_response.get('items'):
@@ -218,7 +243,7 @@ def summarize_links():
                             'title': vid_title,
                             'summary': summary,
                             'thumbnail_url': thumbnail_url,
-                            'summarized_at': datetime.utcnow().isoformat(),
+                            'summarized_at': datetime.now(timezone.utc).isoformat(),
                             'audio_filename': audio_filename,
                             'video_url': video_url  # Storing the canonical video URL
                         }
@@ -249,7 +274,7 @@ def summarize_links():
                         'title': title,
                         'summary': summary,
                         'thumbnail_url': thumbnail_url,
-                        'summarized_at': datetime.utcnow().isoformat(),
+                        'summarized_at': datetime.now(timezone.utc).isoformat(),
                         'audio_filename': audio_filename,
                         'video_url': video_url # Storing the canonical video URL
                     }
