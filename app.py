@@ -11,8 +11,7 @@ from google.api_core.client_options import ClientOptions
 from google.cloud import texttospeech
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
-from youtube_transcript_api import (NoTranscriptFound, TranscriptsDisabled,
-                                    YouTubeTranscriptApi)
+from youtube_transcript_api import NoTranscriptFound, TranscriptsDisabled, YouTubeTranscriptApi
 
 # --- CONFIGURATION ---
 app = Flask(__name__)
@@ -266,9 +265,15 @@ def get_cached_summaries():
 
 @app.route("/summarize", methods=["POST"])
 def summarize_links():
-    urls = request.get_json().get("urls", [])
-    if not urls:
-        return jsonify({"error": "No URLs provided"}), 400
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({"error": "Invalid JSON in request body"}), 400
+        urls = data.get("urls", [])
+        if not urls:
+            return jsonify({"error": "No URLs provided"}), 400
+    except Exception as e:
+        return jsonify({"error": f"Failed to parse request: {str(e)}"}), 400
 
     results = []
     for url in urls:
@@ -421,9 +426,15 @@ def summarize_links():
 
 @app.route("/speak", methods=["POST"])
 def speak():
-    text_to_speak = request.get_json().get("text")
-    if not text_to_speak:
-        return Response("No text provided", status=400)
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({"error": "Invalid JSON in request body"}), 400
+        text_to_speak = data.get("text")
+        if not text_to_speak:
+            return jsonify({"error": "No text provided"}), 400
+    except Exception as e:
+        return jsonify({"error": f"Failed to parse request: {str(e)}"}), 400
 
     filename = f"{hashlib.sha256(text_to_speak.encode('utf-8')).hexdigest()}.mp3"
     filepath = os.path.join(AUDIO_CACHE_DIR, filename)
@@ -451,6 +462,42 @@ def speak():
     except Exception as e:
         print(f"Error in TTS endpoint: {e}")
         return Response(f"Failed to generate audio: {e}", status=500)
+
+
+# Error handlers to ensure JSON responses for API endpoints
+@app.errorhandler(400)
+def bad_request(e):
+    api_paths = ["/summarize", "/speak", "/get_cached_summaries"]
+    if any(request.path.startswith(path) for path in api_paths):
+        return jsonify({"error": "Bad request: " + str(e)}), 400
+    return e
+
+
+@app.errorhandler(404)
+def not_found(e):
+    api_paths = ["/summarize", "/speak", "/get_cached_summaries"]
+    if any(request.path.startswith(path) for path in api_paths):
+        return jsonify({"error": "Endpoint not found"}), 404
+    return e
+
+
+@app.errorhandler(500)
+def server_error(e):
+    api_paths = ["/summarize", "/speak", "/get_cached_summaries"]
+    if any(request.path.startswith(path) for path in api_paths):
+        return jsonify({"error": "Internal server error: " + str(e)}), 500
+    return e
+
+
+@app.errorhandler(Exception)
+def handle_exception(e):
+    # Log the error
+    app.logger.error(f"Unhandled exception: {str(e)}")
+    api_paths = ["/summarize", "/speak", "/get_cached_summaries"]
+    if any(request.path.startswith(path) for path in api_paths):
+        return jsonify({"error": "An unexpected error occurred: " + str(e)}), 500
+    # For non-API routes, let Flask handle it normally
+    return e
 
 
 if __name__ == "__main__":

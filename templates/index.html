@@ -177,12 +177,23 @@
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ urls: urls }),
                 });
+                
+                // Check if the response is JSON before trying to parse it
+                const contentType = response.headers.get('content-type');
+                if (!contentType || !contentType.includes('application/json')) {
+                    // If not JSON, it's likely an HTML error page
+                    const text = await response.text();
+                    console.error('Server returned non-JSON response:', text);
+                    throw new Error('Server error: Expected JSON response but received HTML. Please check if the server is running correctly.');
+                }
+                
                 const data = await response.json();
                 if (!response.ok) throw new Error(data.error || 'An unknown server error occurred.');
                 const newResultsContainer = document.getElementById('new-results');
                 displayResults(data, newResultsContainer, true);
                 linksTextarea.value = '';
             } catch (error) {
+                console.error('Error during summarization:', error);
                 alert(`An Error Occurred: ${error.message}`);
             } finally {
                 summarizeBtn.disabled = false;
@@ -234,7 +245,13 @@
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ text: textToSpeak }),
                 });
-                if (!response.ok) throw new Error('Failed to generate audio from server.');
+                if (!response.ok) {
+                    const contentType = response.headers.get('content-type');
+                    if (contentType && contentType.includes('text/html')) {
+                        throw new Error('Server returned an error page. The server might be experiencing issues.');
+                    }
+                    throw new Error('Failed to generate audio from server.');
+                }
                 const audioBlob = await response.blob();
                 player.src = URL.createObjectURL(audioBlob);
                 await player.play();

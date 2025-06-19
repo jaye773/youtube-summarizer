@@ -1,8 +1,7 @@
 import unittest
 from unittest.mock import MagicMock, patch
 
-from app import (generate_summary, get_transcript, get_video_details,
-                 get_videos_from_playlist)
+from app import generate_summary, get_transcript, get_video_details, get_videos_from_playlist
 
 
 class TestTranscriptAndSummary(unittest.TestCase):

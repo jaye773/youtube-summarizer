@@ -2,9 +2,10 @@
 """
 Test runner script for YouTube Summarizer
 """
-import sys
-import subprocess
 import os
+import subprocess
+import sys
+
 
 def run_tests():
     """Run all tests with coverage"""
@@ -12,17 +13,11 @@ def run_tests():
     print("=" * 50)
 
     # Set environment variables for testing
-    os.environ['GOOGLE_API_KEY'] = 'test_api_key'
-    os.environ['TESTING'] = '1'
+    os.environ["GOOGLE_API_KEY"] = "test_api_key"
+    os.environ["TESTING"] = "1"
 
     # Run pytest with coverage
-    cmd = [
-        sys.executable, '-m', 'pytest',
-        '--cov=app',
-        '--cov-report=term-missing',
-        '--cov-report=html',
-        '-v'
-    ]
+    cmd = [sys.executable, "-m", "pytest", "--cov=app", "--cov-report=term-missing", "--cov-report=html", "-v"]
 
     result = subprocess.run(cmd)
 
@@ -35,5 +30,6 @@ def run_tests():
 
     return result.returncode
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     sys.exit(run_tests())

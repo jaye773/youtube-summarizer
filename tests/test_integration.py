@@ -70,9 +70,7 @@ class TestIntegration(unittest.TestCase):
         playlist_url = "https://www.youtube.com/playlist?list=PLrAXtmErZgOeiKm4sgNOknGvNjby9efdf"
 
         # Mock playlist metadata
-        mock_youtube.playlists().list().execute.return_value = {
-            "items": [{"snippet": {"title": "Test Playlist"}}]
-        }
+        mock_youtube.playlists().list().execute.return_value = {"items": [{"snippet": {"title": "Test Playlist"}}]}
 
         # Mock playlist items
         pl_items_request = MagicMock()

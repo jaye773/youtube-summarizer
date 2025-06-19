@@ -129,10 +129,10 @@ if [ "$RUN_ALL" = true ] || [ "$RUN_FORMAT" = true ]; then
     print_status "Sorting imports with isort..."
     
     if [ "$FIX_ISSUES" = true ]; then
-        isort . --skip venv --skip htmlcov
+        python3 -m isort . --skip venv --skip htmlcov --line-length 120
         print_success "Imports sorted"
     else
-        if isort . --check-only --diff --skip venv --skip htmlcov; then
+        if python3 -m isort . --check-only --diff --skip venv --skip htmlcov --line-length 120; then
             print_success "Import order is correct"
         else
             print_warning "Import order issues found. Run with --fix to auto-fix"
@@ -234,8 +234,8 @@ fi
 if [ "$RUN_ALL" = true ] || [ "$RUN_LINT" = true ]; then
     print_status "Running security checks with bandit..."
     
-    if command_exists bandit; then
-        bandit -r . -x /venv/,/htmlcov/,/tests/ -ll || true
+    if python3 -c "import bandit" 2>/dev/null; then
+        python3 -m bandit -r . -x /venv/,/htmlcov/,/tests/ -ll || true
         print_success "Security scan completed"
     else
         print_warning "Bandit not installed. Run: pip install bandit"

@@ -117,6 +117,7 @@ class TestAudioCache(unittest.TestCase):
     def test_audio_cache_directory_creation(self):
         """Test that audio cache directory is created"""
         import os
+
         from app import AUDIO_CACHE_DIR
 
         # The directory should exist
