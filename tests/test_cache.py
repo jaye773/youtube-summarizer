@@ -2,7 +2,7 @@ import json
 import unittest
 from unittest.mock import MagicMock, mock_open, patch
 
-from app import AUDIO_CACHE_DIR, DATA_DIR, load_summary_cache, save_summary_cache
+from app import load_summary_cache, save_summary_cache
 
 
 class TestCacheFunctions(unittest.TestCase):
@@ -25,6 +25,7 @@ class TestCacheFunctions(unittest.TestCase):
             },
         }
 
+    @patch("app.SUMMARY_CACHE_FILE", "summary_cache.json")
     @patch("os.path.exists")
     @patch("builtins.open", new_callable=mock_open, read_data="{}")
     def test_load_summary_cache_empty_file(self, mock_file, mock_exists):
@@ -36,6 +37,7 @@ class TestCacheFunctions(unittest.TestCase):
         self.assertEqual(cache, {})
         mock_file.assert_called_once_with("summary_cache.json", "r")
 
+    @patch("app.SUMMARY_CACHE_FILE", "summary_cache.json")
     @patch("os.path.exists")
     @patch("builtins.open", new_callable=mock_open)
     def test_load_summary_cache_with_data(self, mock_file, mock_exists):
@@ -48,6 +50,7 @@ class TestCacheFunctions(unittest.TestCase):
         self.assertEqual(len(cache), 2)
         self.assertEqual(cache["video1"]["title"], "Test Video 1")
 
+    @patch("app.SUMMARY_CACHE_FILE", "summary_cache.json")
     @patch("os.path.exists")
     def test_load_summary_cache_no_file(self, mock_exists):
         """Test loading cache when file doesn't exist"""
@@ -57,6 +60,7 @@ class TestCacheFunctions(unittest.TestCase):
 
         self.assertEqual(cache, {})
 
+    @patch("app.SUMMARY_CACHE_FILE", "summary_cache.json")
     @patch("os.path.exists")
     @patch("builtins.open", new_callable=mock_open, read_data="invalid json")
     def test_load_summary_cache_invalid_json(self, mock_file, mock_exists):
@@ -67,6 +71,7 @@ class TestCacheFunctions(unittest.TestCase):
 
         self.assertEqual(cache, {})
 
+    @patch("app.SUMMARY_CACHE_FILE", "summary_cache.json")
     @patch("builtins.open", new_callable=mock_open)
     def test_save_summary_cache(self, mock_file):
         """Test saving cache data"""
@@ -82,6 +87,7 @@ class TestCacheFunctions(unittest.TestCase):
         parsed_data = json.loads(written_data)
         self.assertEqual(parsed_data, self.test_cache_data)
 
+    @patch("app.SUMMARY_CACHE_FILE", "summary_cache.json")
     @patch("builtins.open", new_callable=mock_open)
     def test_save_summary_cache_empty(self, mock_file):
         """Test saving empty cache"""
@@ -106,9 +112,12 @@ class TestAudioCache(unittest.TestCase):
         self.test_text = "This is test text for audio generation"
         self.expected_hash = "5f1e3c8e9b4e1c0f8e9f5e8c9b4e1c0f8e9f5e8c9b4e1c0f8e9f5e8c9b4e1c0f"
 
+    @patch("app.DATA_DIR", ".")
+    @patch("app.AUDIO_CACHE_DIR", "./audio_cache")
     def test_audio_cache_directory_creation(self):
         """Test that audio cache directory is created"""
         import os
+        from app import AUDIO_CACHE_DIR
 
         # The directory should exist
         self.assertTrue(os.path.exists(AUDIO_CACHE_DIR))
