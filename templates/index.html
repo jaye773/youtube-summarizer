@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>YouTube Summarizer (Video & Playlist)</title>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; line-height: 1.6; background-color: #f4f7f6; color: #333; margin: 0; padding: 20px; }
+        .container { max-width: 800px; margin: 0 auto; background-color: #fff; padding: 30px; border-radius: 10px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
+        h1 { text-align: center; color: #2c3e50; margin-bottom: 20px; }
+        textarea { width: 100%; height: 150px; padding: 12px; border-radius: 6px; border: 1px solid #ccc; font-size: 16px; box-sizing: border-box; margin-bottom: 20px; }
+        button { display: block; width: 100%; padding: 15px; background-color: #8e44ad; color: white; border: none; border-radius: 6px; font-size: 18px; font-weight: bold; cursor: pointer; transition: background-color 0.3s; }
+        button:hover { background-color: #732d91; }
+        button:disabled { background-color: #bdc3c7; cursor: not-allowed; }
+        #loader { text-align: center; display: none; margin-top: 20px; font-size: 18px; color: #7f8c8d; }
+        #results { margin-top: 30px; }
+        .results-section h2 { color: #2c3e50; border-bottom: 2px solid #ecf0f1; padding-bottom: 10px; }
+        .playlist-container { border: 1px solid #bdc3c7; border-radius: 10px; padding: 20px; margin-bottom: 25px; background-color: #fdfefe; }
+        .playlist-container > h2 { margin-top: 0; color: #8e44ad; border-bottom: 2px solid #f0eaf4; padding-bottom: 10px; }
+        .result-card { background-color: #ecf0f1; padding: 15px; border-radius: 8px; margin-bottom: 20px; border-left: 5px solid #8e44ad; display: flex; align-items: flex-start; gap: 15px; }
+        .thumbnail { width: 160px; height: 90px; object-fit: cover; border-radius: 6px; flex-shrink: 0; }
+        .summary-content { flex-grow: 1; min-width: 0; }
+        .card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+        .card-header h3 { margin: 0; color: #2c3e50; word-wrap: break-word; }
+        .speak-btn { background: none; border: none; font-size: 24px; cursor: pointer; padding: 0 5px; width: auto; transition: transform 0.2s; margin-left: 10px; }
+        .speak-btn:hover { transform: scale(1.2); background: none; }
+        .result-card pre { white-space: pre-wrap; word-wrap: break-word; background-color: #ffffff; padding: 15px; border-radius: 5px; margin-top: 0; }
+        .error-card { border-left-color: #e74c3c; background-color: #fbeeee; }
+        .error-card p { color: #c0392b; font-weight: bold; }
+
+        /* --- NEW CSS FOR PROGRESS BAR --- */
+        .progress-container {
+            display: none; /* Hidden by default */
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 10px;
+        }
+        .progress-track {
+            flex-grow: 1;
+            height: 8px;
+            background-color: #dcdde1;
+            border-radius: 4px;
+            cursor: pointer;
+            position: relative;
+        }
+        .progress-fill {
+            height: 100%;
+            width: 0%;
+            background-color: #8e44ad;
+            border-radius: 4px;
+        }
+        .time-display {
+            font-size: 0.8em;
+            font-family: monospace;
+            color: #555;
+            flex-shrink: 0;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <h1>Universal YouTube Summarizer 🔮</h1>
+        <p>Paste any mix of YouTube video or playlist links below (one per line) to get a summary.</p>
+        
+        <textarea id="youtube-links" placeholder="e.g., https://www.youtube.com/watch?v=...\nhttps://www.youtube.com/playlist?list=..."></textarea>
+        
+        <button id="summarize-btn">Summarize Links</button>
+
+        <div id="loader"><p>Working my magic... this may take a while for large playlists. 🪄</p></div>
+
+        <div id="results">
+            <div id="new-results" class="results-section"></div>
+            <div id="initial-results" class="results-section"></div>
+        </div>
+    </div>
+
+    <script>
+        const summarizeBtn = document.getElementById('summarize-btn');
+        const linksTextarea = document.getElementById('youtube-links');
+        const loader = document.getElementById('loader');
+
+        // --- UPDATED State Object ---
+        let currentAudioPlayer = {
+            player: new Audio(),
+            button: null,
+            text: null,
+            state: 'stopped',
+            // References to the active progress bar elements
+            progressContainer: null,
+            progressFill: null,
+            currentTimeEl: null,
+            totalTimeEl: null
+        };
+        
+        const player = currentAudioPlayer.player;
+
+        // --- NEW Event Listeners for Progress Bar ---
+        player.addEventListener('timeupdate', () => {
+            if (!currentAudioPlayer.progressContainer || player.duration === 0) return;
+            // Update the fill width
+            const progressPercent = (player.currentTime / player.duration) * 100;
+            currentAudioPlayer.progressFill.style.width = `${progressPercent}%`;
+            // Update the current time display
+            currentAudioPlayer.currentTimeEl.textContent = formatTime(player.currentTime);
+        });
+
+        player.addEventListener('loadedmetadata', () => {
+            if (!currentAudioPlayer.totalTimeEl || player.duration === 0) return;
+            // Set the total duration display
+            currentAudioPlayer.totalTimeEl.textContent = formatTime(player.duration);
+        });
+
+        player.addEventListener('ended', () => {
+            resetAudioPlayerUI();
+        });
+        
+        function resetAudioPlayerUI() {
+            if (currentAudioPlayer.button) currentAudioPlayer.button.textContent = '🔊';
+            if (currentAudioPlayer.progressContainer) {
+                currentAudioPlayer.progressContainer.style.display = 'none';
+                currentAudioPlayer.progressFill.style.width = '0%';
+                currentAudioPlayer.currentTimeEl.textContent = '0:00';
+            }
+            currentAudioPlayer.state = 'stopped';
+            currentAudioPlayer.button = null;
+            currentAudioPlayer.text = null;
+            currentAudioPlayer.progressContainer = null;
+        }
+
+        function formatTime(seconds) {
+            const minutes = Math.floor(seconds / 60);
+            const remainingSeconds = Math.floor(seconds % 60);
+            return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`;
+        }
+        
+        // --- Page Load and Main Button Logic (No major changes) ---
+        document.addEventListener('DOMContentLoaded', loadInitialSummaries);
+
+        async function loadInitialSummaries() {
+            loader.innerHTML = '<p>Loading previous summaries...</p>';
+            loader.style.display = 'block';
+            const initialResultsContainer = document.getElementById('initial-results');
+            initialResultsContainer.innerHTML = '';
+            try {
+                const response = await fetch('/get_cached_summaries');
+                if (!response.ok) throw new Error('Could not fetch cached summaries.');
+                const data = await response.json();
+                if (data && data.length > 0) {
+                    initialResultsContainer.innerHTML = '<h2>Previously Summarized</h2>';
+                    displayResults(data, initialResultsContainer, false);
+                }
+            } catch (error) {
+                console.error("Error loading initial summaries:", error);
+            } finally {
+                loader.style.display = 'none';
+                loader.innerHTML = '<p>Working my magic... this may take a while for large playlists. 🪄</p>';
+            }
+        }
+
+        summarizeBtn.addEventListener('click', async () => {
+            if (currentAudioPlayer.state !== 'stopped') {
+                player.pause();
+                resetAudioPlayerUI();
+            }
+            const urls = linksTextarea.value.split('\n').filter(url => url.trim() !== '');
+            if (urls.length === 0) {
+                alert('Please paste at least one YouTube link.');
+                return;
+            }
+            summarizeBtn.disabled = true;
+            summarizeBtn.textContent = 'Processing...';
+            loader.style.display = 'block';
+            try {
+                const response = await fetch('/summarize', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ urls: urls }),
+                });
+                const data = await response.json();
+                if (!response.ok) throw new Error(data.error || 'An unknown server error occurred.');
+                const newResultsContainer = document.getElementById('new-results');
+                displayResults(data, newResultsContainer, true);
+                linksTextarea.value = '';
+            } catch (error) {
+                alert(`An Error Occurred: ${error.message}`);
+            } finally {
+                summarizeBtn.disabled = false;
+                summarizeBtn.textContent = 'Summarize Links';
+                loader.style.display = 'none';
+            }
+        });
+
+        // --- UPDATED Audio Handling Logic ---
+        async function handleSpeakClick(button, textToSpeak) {
+            const isSameAudio = (currentAudioPlayer.button === button && currentAudioPlayer.text === textToSpeak);
+            if (isSameAudio && currentAudioPlayer.state === 'playing') {
+                player.pause();
+                currentAudioPlayer.state = 'paused';
+                button.textContent = '▶️';
+                return;
+            }
+            if (isSameAudio && currentAudioPlayer.state === 'paused') {
+                await player.play();
+                currentAudioPlayer.state = 'playing';
+                button.textContent = '⏹️';
+                return;
+            }
+
+            // Stop and reset any previously active audio
+            if (currentAudioPlayer.state !== 'stopped') {
+                player.pause();
+                resetAudioPlayerUI();
+            }
+            
+            // Set up the new player state
+            currentAudioPlayer.button = button;
+            currentAudioPlayer.text = textToSpeak;
+            currentAudioPlayer.state = 'loading';
+            button.textContent = '⏳';
+            button.disabled = true;
+            
+            // Find and set up the progress bar elements for the *new* card
+            const card = button.closest('.result-card');
+            currentAudioPlayer.progressContainer = card.querySelector('.progress-container');
+            currentAudioPlayer.progressFill = card.querySelector('.progress-fill');
+            currentAudioPlayer.currentTimeEl = card.querySelector('.current-time');
+            currentAudioPlayer.totalTimeEl = card.querySelector('.total-time');
+            currentAudioPlayer.progressContainer.style.display = 'flex'; // Show the progress bar
+
+            try {
+                const response = await fetch('/speak', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ text: textToSpeak }),
+                });
+                if (!response.ok) throw new Error('Failed to generate audio from server.');
+                const audioBlob = await response.blob();
+                player.src = URL.createObjectURL(audioBlob);
+                await player.play();
+                currentAudioPlayer.state = 'playing';
+                button.textContent = '⏹️';
+            } catch (error) {
+                console.error('Error fetching speech:', error);
+                alert('Sorry, could not generate speech for this summary.');
+                resetAudioPlayerUI();
+            } finally {
+                button.disabled = false;
+            }
+        }
+
+        // --- HTML Creation and Display Logic ---
+        function displayResults(data, container, prepend = false) {
+            if (data.length === 0) return;
+            data.forEach(item => {
+                if (item.type === 'playlist') {
+                    const playlistContainer = document.createElement('div');
+                    playlistContainer.className = 'playlist-container';
+                    playlistContainer.innerHTML = `<h2>Playlist: ${item.title}</h2>`;
+                    if (item.error) {
+                        playlistContainer.innerHTML += `<div class="result-card error-card"><p>Error processing playlist: ${item.error}</p></div>`;
+                    }
+                    if (item.summaries) {
+                        item.summaries.forEach(video => addOrUpdateCard(video, playlistContainer, prepend));
+                    }
+                    if (prepend) container.prepend(playlistContainer);
+                    else container.appendChild(playlistContainer);
+                } else if (item.type === 'video') {
+                    addOrUpdateCard(item, container, prepend);
+                } else if (item.type === 'error') {
+                    const errorCard = createResultCard(item.url, null, item.error, null, null);
+                    if (prepend) container.prepend(errorCard);
+                    else container.appendChild(errorCard);
+                }
+            });
+        }
+
+        function addOrUpdateCard(video, container, prepend) {
+            const existingCard = document.querySelector(`.result-card[data-video-id='${video.video_id}']`);
+            if (existingCard) existingCard.remove();
+            const card = createResultCard(video.title, video.summary, video.error, video.thumbnail_url, video.video_id);
+            if (prepend) container.prepend(card);
+            else container.appendChild(card);
+        }
+
+        // --- UPDATED to create progress bar elements ---
+        function createResultCard(title, summary, error, thumbnail_url, videoId) {
+            const card = document.createElement('div');
+            card.className = 'result-card';
+            if (videoId) card.dataset.videoId = videoId;
+            
+            if (thumbnail_url) {
+                const img = document.createElement('img');
+                img.src = thumbnail_url;
+                img.className = 'thumbnail';
+                img.alt = `Thumbnail for ${title}`;
+                card.appendChild(img);
+            }
+
+            const summaryContent = document.createElement('div');
+            summaryContent.className = 'summary-content';
+            const headerDiv = document.createElement('div');
+            headerDiv.className = 'card-header';
+            const titleEl = document.createElement('h3');
+            titleEl.textContent = title;
+            headerDiv.appendChild(titleEl);
+            
+            summaryContent.appendChild(headerDiv);
+            
+            if (error) {
+                card.classList.add('error-card');
+                summaryContent.innerHTML += `<p>${error}</p>`;
+            } else if (summary) {
+                const speakBtn = document.createElement('button');
+                speakBtn.className = 'speak-btn';
+                speakBtn.textContent = '🔊';
+                speakBtn.title = 'Read summary aloud';
+                speakBtn.onclick = () => handleSpeakClick(speakBtn, summary);
+                headerDiv.appendChild(speakBtn);
+                
+                // Create progress bar elements
+                const progressContainer = document.createElement('div');
+                progressContainer.className = 'progress-container';
+                progressContainer.innerHTML = `
+                    <span class="time-display current-time">0:00</span>
+                    <div class="progress-track">
+                        <div class="progress-fill"></div>
+                    </div>
+                    <span class="time-display total-time">0:00</span>`;
+                
+                const summaryPre = document.createElement('pre');
+                summaryPre.textContent = summary;
+                
+                summaryContent.appendChild(progressContainer);
+                summaryContent.appendChild(summaryPre);
+
+                // Add seek functionality
+                const progressTrack = progressContainer.querySelector('.progress-track');
+                progressTrack.addEventListener('click', (e) => {
+                    // Only allow seeking on the currently active audio player
+                    if (currentAudioPlayer.progressContainer !== progressContainer) return;
+                    
+                    const trackWidth = progressTrack.offsetWidth;
+                    const clickX = e.offsetX;
+                    const duration = player.duration;
+                    if (duration > 0) {
+                        player.currentTime = (clickX / trackWidth) * duration;
+                    }
+                });
+            }
+            
+            card.appendChild(summaryContent);
+            return card;
+        }
+    </script>
+</body>
+</html>

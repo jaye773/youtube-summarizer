@@ -1,0 +1,24 @@
+# --- START OF FILE docker-compose.yml ---
+
+version: '3.8'
+
+services:
+  summarizer-app:
+    # Build the Docker image from the Dockerfile in the current directory
+    build: .
+    # Name the container for easier identification
+    container_name: youtube-summarizer
+    # Map port 5001 on the host machine to port 5001 in the container
+    ports:
+      - "5001:5001"
+    # Pass the environment variable from the .env file to the container
+    environment:
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY}
+    # Mount host directories/files into the container to persist data
+    volumes:
+      # Map the local summary cache file to the one inside the container
+      - ./data/summary_cache.json:/app/summary_cache.json
+      # Map the local audio cache directory to the one inside the container
+      - ./data/audio_cache:/app/audio_cache
+    # Restart the container automatically if it fails
+    restart: unless-stopped

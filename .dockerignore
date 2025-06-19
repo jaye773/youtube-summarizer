@@ -1,0 +1,24 @@
+# --- START OF FILE .dockerignore ---
+
+# Git files
+.git
+.gitignore
+
+# Docker files
+Dockerfile
+docker-compose.yml
+
+# Environment files
+.env
+.venv
+venv
+__pycache__
+
+# Persistent data (should not be part of the image)
+data/
+audio_cache/
+summary_cache.json
+
+# IDE files
+.idea/
+.vscode/
