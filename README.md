@@ -193,31 +193,18 @@ To set up:
 
 The project includes comprehensive unit and integration tests.
 
-### Running Tests
-
-1. **Install development dependencies**:
+### Quick Test
 ```bash
-pip install -r requirements-dev.txt
+./quick_test.sh
+# or
+make test
 ```
 
-2. **Run all tests**:
+### Full Test Suite with Coverage
 ```bash
 python run_tests.py
-```
-
-3. **Run tests with pytest directly**:
-```bash
-pytest -v
-```
-
-4. **Run tests with coverage**:
-```bash
-pytest --cov=app --cov-report=html
-```
-
-5. **Run specific test file**:
-```bash
-pytest tests/test_app.py -v
+# or
+make coverage
 ```
 
 ### Test Structure
@@ -226,6 +213,46 @@ pytest tests/test_app.py -v
 - `tests/test_transcript_and_summary.py` - Transcript and summary generation tests
 - `tests/test_cache.py` - Cache functionality tests
 - `tests/test_integration.py` - End-to-end integration tests
+
+## 🔍 Code Quality
+
+### Run All Quality Checks
+```bash
+./run_quality_checks.sh
+# or
+make quality
+```
+
+### Auto-fix Formatting Issues
+```bash
+./run_quality_checks.sh --fix
+# or
+make fix
+```
+
+### Individual Checks
+```bash
+make format   # Check code formatting
+make lint     # Run linting (pylint, flake8)
+make test     # Run tests only
+```
+
+### Development Commands
+Use the Makefile for convenient development commands:
+```bash
+make help      # Show all available commands
+make install   # Install all dependencies
+make run       # Run Flask app locally
+make clean     # Clean up cache files
+```
+
+### Quality Tools
+- **Black** - Code formatting
+- **isort** - Import sorting
+- **Flake8** - Style guide enforcement
+- **Pylint** - Static code analysis
+- **Bandit** - Security linting
+- **Coverage** - Test coverage reports
 
 ## 🤝 Contributing
 
