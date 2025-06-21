@@ -7,7 +7,6 @@
 [![Python](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 [![Flask](https://img.shields.io/badge/flask-3.0.2-green.svg)](https://flask.palletsprojects.com/)
 [![Docker](https://img.shields.io/badge/docker-%230db7ed.svg?logo=docker&logoColor=white)](https://www.docker.com/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 </div>
 
@@ -17,17 +16,17 @@
 
 ## 📋 Table of Contents
 
-- [Features](#features)
-- [Prerequisites](#prerequisites)
-- [Usage with Docker](#usage-with-docker-recommended)
-- [Usage without Docker](#usage-without-docker)
-- [How to Use](#how-to-use)
-- [Project Structure](#project-structure)
-- [API Requirements](#api-requirements)
-- [Troubleshooting](#troubleshooting)
-- [Testing](#testing)
-- [Contributing](#contributing)
-- [License](#license)
+- [Features](#-features)
+- [Prerequisites](#-prerequisites)
+- [Usage with Docker](#-usage-with-docker-recommended)
+- [Usage without Docker](#-usage-without-docker)
+- [How to Use](#-how-to-use)
+- [Project Structure](#-project-structure)
+- [API Requirements](#-api-requirements)
+- [Troubleshooting](#-troubleshooting)
+- [Testing](#-testing)
+- [Contributing](#-contributing)
+- [Changelog](CHANGELOG.md)
 
 ## ✨ Features
 
@@ -259,8 +258,4 @@ make clean     # Clean up cache files
 
 ## 🤝 Contributing
 
-Feel free to submit issues, fork the repository, and create pull requests for any improvements. Please ensure all tests pass before submitting a PR.
-
-## 📄 License
-
-This project is open source and available under the [MIT License](LICENSE). 
+Feel free to submit issues, fork the repository, and create pull requests for any improvements. Please ensure all tests pass before submitting a PR. 
