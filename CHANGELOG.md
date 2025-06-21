@@ -14,7 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 ### Security
 
-## [1.0.0] - 2024-12-19
+## [1.0.0] - 2025-06-21
 
 ### Added
 - Initial release of YouTube Summarizer
