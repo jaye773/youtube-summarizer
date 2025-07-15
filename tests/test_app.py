@@ -199,7 +199,6 @@ class TestYouTubeSummarizer(unittest.TestCase):
             self.assertEqual(data[0]["title"], "Test Video")
             self.assertIsNone(data[0]["video_url"])
 
-
     def test_speak_endpoint_invalid_json(self):
         """Test speak endpoint with invalid JSON"""
         response = self.client.post("/speak", data="invalid json", content_type="application/json")
