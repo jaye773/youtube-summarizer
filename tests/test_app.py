@@ -40,6 +40,7 @@ class TestYouTubeSummarizer(unittest.TestCase):
                 "thumbnail_url": "http://example.com/thumb.jpg",
                 "summary": "Test summary",
                 "summarized_at": "2024-01-01T00:00:00.000000",
+                "video_url": "https://www.youtube.com/watch?v=video1",
             }
         }
         with patch("app.summary_cache", mock_cache):
@@ -48,6 +49,7 @@ class TestYouTubeSummarizer(unittest.TestCase):
             data = json.loads(response.data)
             self.assertEqual(len(data), 1)
             self.assertEqual(data[0]["title"], "Test Video")
+            self.assertEqual(data[0]["video_url"], "https://www.youtube.com/watch?v=video1")
 
     def test_summarize_no_urls(self):
         """Test summarize endpoint with no URLs provided"""
@@ -85,6 +87,7 @@ class TestYouTubeSummarizer(unittest.TestCase):
         self.assertEqual(data[0]["type"], "video")
         self.assertEqual(data[0]["title"], "Test Video Title")
         self.assertEqual(data[0]["summary"], "This is a test summary")
+        self.assertEqual(data[0]["video_url"], f"https://www.youtube.com/watch?v={self.test_video_id}")
 
     @patch("app.summary_cache", {})  # Clear the cache for this test
     @patch("app.get_transcript")
@@ -110,6 +113,7 @@ class TestYouTubeSummarizer(unittest.TestCase):
             # Check that there's an error (the specific message might vary)
             self.assertIn("error", data[0])
             self.assertEqual(data[0]["error"], "No transcripts are available for this video.")
+            self.assertEqual(data[0]["video_url"], f"https://www.youtube.com/watch?v={self.test_video_id}")
 
     def test_speak_no_text(self):
         """Test speak endpoint with no text provided"""
@@ -147,6 +151,53 @@ class TestYouTubeSummarizer(unittest.TestCase):
             self.assertEqual(response.content_type, "audio/mpeg")
             # Verify file was written
             mock_file().write.assert_called_with(b"generated audio content")
+
+    @patch("app.summary_cache", {})  # Clear the cache for this test
+    @patch("app.generate_summary")
+    @patch("app.get_transcript")
+    @patch("app.get_video_details")
+    @patch("app.youtube")
+    def test_video_url_in_response(
+        self, mock_youtube, mock_get_video_details, mock_get_transcript, mock_generate_summary
+    ):
+        """Test that video URL is included in API responses"""
+        # Mock the functions
+        mock_get_video_details.return_value = {
+            self.test_video_id: {"title": "Test Video", "thumbnail_url": "http://example.com/thumb.jpg"}
+        }
+        mock_get_transcript.return_value = ("Test transcript", None)
+        mock_generate_summary.return_value = ("Test summary", None)
+        mock_youtube.return_value = MagicMock()
+
+        response = self.client.post(
+            "/summarize", data=json.dumps({"urls": [self.test_video_url]}), content_type="application/json"
+        )
+
+        self.assertEqual(response.status_code, 200)
+        data = json.loads(response.data)
+        self.assertEqual(len(data), 1)
+        self.assertEqual(data[0]["type"], "video")
+        self.assertIn("video_url", data[0])
+        self.assertEqual(data[0]["video_url"], f"https://www.youtube.com/watch?v={self.test_video_id}")
+
+    def test_get_cached_summaries_with_missing_video_url(self):
+        """Test getting cached summaries when video_url is missing from cache (backward compatibility)"""
+        mock_cache = {
+            "video1": {
+                "title": "Test Video",
+                "thumbnail_url": "http://example.com/thumb.jpg",
+                "summary": "Test summary",
+                "summarized_at": "2024-01-01T00:00:00.000000",
+                # Note: no video_url field to test backward compatibility
+            }
+        }
+        with patch("app.summary_cache", mock_cache):
+            response = self.client.get("/get_cached_summaries")
+            self.assertEqual(response.status_code, 200)
+            data = json.loads(response.data)
+            self.assertEqual(len(data), 1)
+            self.assertEqual(data[0]["title"], "Test Video")
+            self.assertIsNone(data[0]["video_url"])
 
     def test_speak_endpoint_invalid_json(self):
         """Test speak endpoint with invalid JSON"""

@@ -292,6 +292,7 @@ def get_cached_summaries():
             "thumbnail_url": d["thumbnail_url"],
             "summary": d["summary"],
             "summarized_at": d.get("summarized_at"),
+            "video_url": d.get("video_url"),
             "error": None,
         }
         for d in summary_cache.values()
@@ -474,6 +475,7 @@ def summarize_links():
                                 "title": cached_item["title"],
                                 "thumbnail_url": cached_item["thumbnail_url"],
                                 "summary": cached_item["summary"],
+                                "video_url": cached_item.get("video_url", f"https://www.youtube.com/watch?v={vid_id}"),
                                 "error": None,
                             }
                         )
@@ -502,6 +504,7 @@ def summarize_links():
                             "title": vid_title,
                             "thumbnail_url": thumbnail_url,
                             "summary": summary,
+                            "video_url": f"https://www.youtube.com/watch?v={vid_id}",
                             "error": err,
                         }
                     )
@@ -526,6 +529,7 @@ def summarize_links():
                         "title": cached_item["title"],
                         "thumbnail_url": cached_item["thumbnail_url"],
                         "summary": cached_item["summary"],
+                        "video_url": cached_item.get("video_url", f"https://www.youtube.com/watch?v={video_id}"),
                         "error": None,
                     }
                 )
@@ -558,6 +562,7 @@ def summarize_links():
                         "title": title,
                         "thumbnail_url": thumbnail_url,
                         "summary": summary,
+                        "video_url": f"https://www.youtube.com/watch?v={video_id}",
                         "error": err,
                     }
                 )

@@ -22,6 +22,8 @@
         .summary-content { flex-grow: 1; min-width: 0; }
         .card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
         .card-header h3 { margin: 0; color: #2c3e50; word-wrap: break-word; }
+        .card-header h3 a { color: #2c3e50; text-decoration: none; }
+        .card-header h3 a:hover { color: #8e44ad; text-decoration: underline; }
         .speak-btn { background: none; border: none; font-size: 24px; cursor: pointer; padding: 0 5px; width: auto; transition: transform 0.2s; margin-left: 10px; }
         .speak-btn:hover { transform: scale(1.2); background: none; }
         .result-card pre { white-space: pre-wrap; word-wrap: break-word; background-color: #ffffff; padding: 15px; border-radius: 5px; margin-top: 0; }
@@ -411,7 +413,7 @@
                 } else if (item.type === 'video') {
                     addOrUpdateCard(item, container, prepend);
                 } else if (item.type === 'error') {
-                    const errorCard = createResultCard(item.url, null, item.error, null, null);
+                    const errorCard = createResultCard(item.url, null, item.error, null, null, null);
                     if (prepend) container.prepend(errorCard);
                     else container.appendChild(errorCard);
                 }
@@ -421,13 +423,13 @@
         function addOrUpdateCard(video, container, prepend) {
             const existingCard = document.querySelector(`.result-card[data-video-id='${video.video_id}']`);
             if (existingCard) existingCard.remove();
-            const card = createResultCard(video.title, video.summary, video.error, video.thumbnail_url, video.video_id);
+            const card = createResultCard(video.title, video.summary, video.error, video.thumbnail_url, video.video_id, video.video_url);
             if (prepend) container.prepend(card);
             else container.appendChild(card);
         }
 
         // --- UPDATED to create progress bar elements ---
-        function createResultCard(title, summary, error, thumbnail_url, videoId) {
+        function createResultCard(title, summary, error, thumbnail_url, videoId, videoUrl) {
             const card = document.createElement('div');
             card.className = 'result-card';
             if (videoId) card.dataset.videoId = videoId;
@@ -445,7 +447,16 @@
             const headerDiv = document.createElement('div');
             headerDiv.className = 'card-header';
             const titleEl = document.createElement('h3');
-            titleEl.textContent = title;
+            if (videoUrl) {
+                const titleLink = document.createElement('a');
+                titleLink.href = videoUrl;
+                titleLink.target = '_blank';
+                titleLink.rel = 'noopener noreferrer';
+                titleLink.textContent = title;
+                titleEl.appendChild(titleLink);
+            } else {
+                titleEl.textContent = title;
+            }
             headerDiv.appendChild(titleEl);
             
             summaryContent.appendChild(headerDiv);
