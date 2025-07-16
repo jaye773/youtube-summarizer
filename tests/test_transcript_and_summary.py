@@ -177,13 +177,14 @@ class TestPlaylistFunctions(unittest.TestCase):
         self.assertIsNone(error)
         self.assertEqual(len(videos), 2)
 
+    @patch("app.youtube", None)
     def test_get_videos_from_playlist_error(self):
         """Test playlist retrieval when API fails"""
         # Since youtube is None in test mode, the function returns early
         videos, error = get_videos_from_playlist(self.test_playlist_id)
 
         self.assertIsNone(videos)
-        self.assertEqual(error, "YouTube API client not initialized")
+        self.assertEqual(error, "YouTube API client not initialized. Please check your GOOGLE_API_KEY configuration.")
 
 
 if __name__ == "__main__":
