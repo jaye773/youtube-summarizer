@@ -6,16 +6,16 @@ from datetime import datetime, timezone
 from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
 
 import google.generativeai as genai
-from dotenv import load_dotenv
 from flask import Flask, Response, jsonify, render_template, request
 from google.api_core.client_options import ClientOptions
 from google.cloud import texttospeech
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
-from youtube_transcript_api import NoTranscriptFound, TranscriptsDisabled, YouTubeTranscriptApi
-
-# Load environment variables from .env file
-load_dotenv()
+from youtube_transcript_api import (
+    NoTranscriptFound,
+    TranscriptsDisabled,
+    YouTubeTranscriptApi,
+)
 
 # --- CONFIGURATION ---
 app = Flask(__name__)
@@ -59,24 +59,18 @@ model = None
 # Only initialize API clients if API key is available and we're not in test mode
 if api_key and not os.environ.get("TESTING"):
     try:
-        print("🔑 Initializing Google APIs...")
-        tts_client = texttospeech.TextToSpeechClient(client_options=ClientOptions(api_key=api_key))
+        tts_client = texttospeech.TextToSpeechClient(
+            client_options=ClientOptions(api_key=api_key)
+        )
         genai.configure(api_key=api_key)
         youtube = build("youtube", "v3", developerKey=api_key)
         model = genai.GenerativeModel(model_name="gemini-2.5-flash-preview-05-20")
-        print("✅ Google APIs initialized successfully!")
     except Exception as e:
-        print(f"❌ Error: Could not initialize Google APIs. Error: {e}")
-        print("🔧 Please check your GOOGLE_API_KEY and ensure it has the required permissions.")
-        print("📋 Required APIs: YouTube Data API v3, Generative AI API, Text-to-Speech API")
+        print(f"Warning: Could not configure APIs. Error: {e}")
 elif not api_key and not os.environ.get("TESTING"):
-    print("❌ Error: GOOGLE_API_KEY environment variable is not set!")
-    print("🔧 To fix this:")
-    print("   1. Create a .env file in the project root with: GOOGLE_API_KEY=your_api_key_here")
-    print("   2. Or export the variable: export GOOGLE_API_KEY=your_api_key_here")
-    print("   3. Get your API key from: https://console.cloud.google.com/")
-    print("📋 Required APIs: YouTube Data API v3, Generative AI API, Text-to-Speech API")
-    print("⚠️  Some features will be unavailable until this is fixed.")
+    print(
+        "Warning: GOOGLE_API_KEY environment variable is not set. Some features will be unavailable."
+    )
 
 # For testing, create the model even without API key
 if os.environ.get("TESTING") and not model:
@@ -111,7 +105,10 @@ def get_playlist_id(url):
 
 
 def get_video_id(url):
-    patterns = [r"(?:v=|\/)([0-9A-Za-z_-]{11}).*", r"(?:youtu\.be\/)([0-9A-Za-z_-]{11}).*"]
+    patterns = [
+        r"(?:v=|\/)([0-9A-Za-z_-]{11}).*",
+        r"(?:youtu\.be\/)([0-9A-Za-z_-]{11}).*",
+    ]
     for pattern in patterns:
         if match := re.search(pattern, url):
             return match.group(1)
@@ -121,7 +118,7 @@ def get_video_id(url):
 def get_video_details(video_ids):
     details = {}
     if not youtube:
-        print("❌ YouTube API client not initialized - check your GOOGLE_API_KEY configuration")
+        print("YouTube API client not initialized")
         return {}
     try:
         request = youtube.videos().list(part="snippet", id=",".join(video_ids))
@@ -130,7 +127,9 @@ def get_video_details(video_ids):
             snippet = item.get("snippet", {})
             details[item["id"]] = {
                 "title": snippet.get("title", "Unknown Title"),
-                "thumbnail_url": snippet.get("thumbnails", {}).get("medium", {}).get("url"),
+                "thumbnail_url": snippet.get("thumbnails", {})
+                .get("medium", {})
+                .get("url"),
             }
         return details
     except HttpError as e:
@@ -140,13 +139,16 @@ def get_video_details(video_ids):
 
 def get_videos_from_playlist(playlist_id):
     if not youtube:
-        return None, "YouTube API client not initialized. Please check your GOOGLE_API_KEY configuration."
+        return None, "YouTube API client not initialized"
     video_items = []
     next_page_token = None
     while True:
         try:
             pl_request = youtube.playlistItems().list(
-                part="contentDetails,snippet", playlistId=playlist_id, maxResults=50, pageToken=next_page_token
+                part="contentDetails,snippet",
+                playlistId=playlist_id,
+                maxResults=50,
+                pageToken=next_page_token,
             )
             pl_response = pl_request.execute()
             video_items.extend(pl_response.get("items", []))
@@ -161,16 +163,23 @@ def get_videos_from_playlist(playlist_id):
 def get_transcript(video_id):
     if not video_id:
         return None, "No video ID provided"
-
-    # First, try to get transcript in preferred languages
     try:
-        transcript_list = YouTubeTranscriptApi.get_transcript(video_id, languages=["en", "en-US"])
+        transcript_list = YouTubeTranscriptApi.get_transcript(
+            video_id, languages=["en", "en-US"]
+        )
         transcript_text = " ".join([d["text"] for d in transcript_list])
-        return (transcript_text, None) if transcript_text.strip() else (None, "Transcript was found but it is empty.")
+        return (
+            (transcript_text, None)
+            if transcript_text.strip()
+            else (None, "Transcript was found but it is empty.")
+        )
     except NoTranscriptFound:
-        # Try fallback approach with any available English transcript
         try:
-            transcript_list = YouTubeTranscriptApi.list_transcripts(video_id).find_transcript(["en"]).fetch()
+            transcript_list = (
+                YouTubeTranscriptApi.list_transcripts(video_id)
+                .find_transcript(["en"])
+                .fetch()
+            )
             transcript_text = " ".join([d["text"] for d in transcript_list])
             return (
                 (transcript_text, None)
@@ -180,34 +189,17 @@ def get_transcript(video_id):
         except (NoTranscriptFound, TranscriptsDisabled):
             return None, "No transcripts are available for this video."
         except Exception as e:
-            error_msg = str(e).lower()
-            if "no element found" in error_msg or "xml" in error_msg:
-                return (
-                    None,
-                    "YouTube transcript service returned invalid data. The video may have unusual "
-                    "transcript formatting or YouTube may be temporarily blocking requests.",
-                )
-            return None, f"An unexpected error occurred while fetching the fallback transcript: {e}"
+            return (
+                None,
+                f"An unexpected error occurred while fetching the fallback transcript: {e}",
+            )
     except TranscriptsDisabled:
         return None, "Transcripts are disabled for this video."
     except Exception as e:
-        error_msg = str(e).lower()
-        if "no element found" in error_msg or "xml" in error_msg:
-            return (
-                None,
-                "YouTube transcript service returned invalid data. This can happen if YouTube is "
-                "temporarily blocking requests or if the video has unusual transcript formatting. "
-                "Please try again in a few minutes.",
-            )
-        elif "rate limit" in error_msg or "quota" in error_msg:
-            return None, "YouTube API rate limit exceeded. Please try again later."
-        elif "timeout" in error_msg or "connection" in error_msg:
-            return None, "Network connection issue. Please check your internet connection and try again."
-        else:
-            return (
-                None,
-                f"An unexpected error occurred: {e}. This can happen if YouTube is temporarily blocking requests.",
-            )
+        return (
+            None,
+            f"An unexpected error occurred. This can happen if YouTube is temporarily blocking requests. (Error: {e})",
+        )
 
 
 def generate_summary(transcript, title):
@@ -285,6 +277,10 @@ def home():
 def get_cached_summaries():
     if not summary_cache:
         return jsonify([])
+
+    # Get limit parameter from query string, default to None (no limit)
+    limit = request.args.get("limit", type=int)
+
     cached_list = [
         {
             "type": "video",
@@ -297,113 +293,105 @@ def get_cached_summaries():
         }
         for d in summary_cache.values()
     ]
-    cached_list.sort(key=lambda x: x.get("summarized_at", "1970-01-01T00:00:00.000000"), reverse=True)
+    cached_list.sort(
+        key=lambda x: x.get("summarized_at", "1970-01-01T00:00:00.000000"), reverse=True
+    )
+
+    # Apply limit if specified
+    if limit is not None:
+        if limit == 0:
+            cached_list = []
+        elif limit > 0:
+            cached_list = cached_list[:limit]
+        # If limit < 0 or invalid, ignore it and return all results
+
     return jsonify(cached_list)
 
 
 @app.route("/search_summaries", methods=["GET"])
 def search_summaries():
-    """Search through cached summaries by title and content"""
-    query = request.args.get("q", "").strip().lower()
+    query = request.args.get("q", "").strip()
     if not query:
-        return jsonify({"error": "No search query provided"}), 400
+        return (
+            jsonify({"error": "Query parameter 'q' is required and cannot be empty"}),
+            400,
+        )
 
     if not summary_cache:
         return jsonify([])
 
-    # Search through cached summaries
-    matching_summaries = []
+    # Perform case-insensitive search in both title and summary
+    results = []
     for video_id, data in summary_cache.items():
         title = data.get("title", "").lower()
         summary = data.get("summary", "").lower()
+        query_lower = query.lower()
 
-        # Check if query matches title or summary content
-        if query in title or query in summary:
-            matching_summaries.append(
+        if query_lower in title or query_lower in summary:
+            results.append(
                 {
-                    "type": "video",
                     "video_id": video_id,
                     "title": data["title"],
                     "thumbnail_url": data["thumbnail_url"],
                     "summary": data["summary"],
                     "summarized_at": data.get("summarized_at"),
                     "video_url": data.get("video_url"),
-                    "error": None,
                 }
             )
 
-    # Sort by summarized_at (most recent first)
-    matching_summaries.sort(key=lambda x: x.get("summarized_at", "1970-01-01T00:00:00.000000"), reverse=True)
-    return jsonify(matching_summaries)
+    # Sort by date (most recent first)
+    results.sort(
+        key=lambda x: x.get("summarized_at", "1970-01-01T00:00:00.000000"), reverse=True
+    )
+
+    return jsonify(results)
 
 
 @app.route("/api_status", methods=["GET"])
 def api_status():
-    """Check the status of API configurations"""
+    """Return the status of various API components"""
     status = {
-        "google_api_key_set": bool(os.environ.get("GOOGLE_API_KEY")),
+        "google_api_key_set": bool(api_key),
         "youtube_client_initialized": youtube is not None,
         "tts_client_initialized": tts_client is not None,
         "ai_model_initialized": model is not None,
         "testing_mode": bool(os.environ.get("TESTING")),
     }
-
-    if not status["google_api_key_set"]:
-        status["error"] = "GOOGLE_API_KEY environment variable is not set"
-        status["fix_instructions"] = [
-            "Create a .env file with: GOOGLE_API_KEY=your_api_key_here",
-            "Or export the variable: export GOOGLE_API_KEY=your_api_key_here",
-            "Get your API key from: https://console.cloud.google.com/",
-            "Enable: YouTube Data API v3, Generative AI API, Text-to-Speech API",
-        ]
-    elif not any(
-        [status["youtube_client_initialized"], status["tts_client_initialized"], status["ai_model_initialized"]]
-    ):
-        status["error"] = "API clients failed to initialize - check your API key permissions"
-        status["fix_instructions"] = [
-            "Verify your API key is valid",
-            "Check that required APIs are enabled in Google Cloud Console",
-            "Ensure your API key has the necessary permissions",
-        ]
-    else:
-        status["message"] = "API configuration looks good!"
-
     return jsonify(status)
 
 
 @app.route("/debug_transcript", methods=["GET"])
 def debug_transcript():
-    """Debug endpoint to test transcript fetching for a specific video"""
-    video_url = request.args.get("url", "").strip()
-    if not video_url:
-        return jsonify({"error": "No video URL provided. Use ?url=youtube_video_url"}), 400
+    """Debug endpoint to check transcript retrieval for a specific video"""
+    url = request.args.get("url", "").strip()
+    if not url:
+        return jsonify({"error": "URL parameter is required"}), 400
 
-    video_id = get_video_id(video_url)
+    video_id = get_video_id(url)
     if not video_id:
-        return jsonify({"error": "Invalid YouTube URL or could not extract video ID"}), 400
+        return jsonify({"error": "Invalid YouTube URL"}), 400
 
     # Get video details
-    video_details = get_video_details([video_id]).get(video_id, {})
+    details = get_video_details([video_id]).get(video_id, {})
+    video_title = details.get("title", "Unknown Title")
 
     # Try to get transcript
     transcript, error = get_transcript(video_id)
 
-    debug_info = {
+    result = {
         "video_id": video_id,
-        "video_url": video_url,
-        "video_title": video_details.get("title", "Unknown"),
-        "thumbnail_url": video_details.get("thumbnail_url"),
+        "video_title": video_title,
         "transcript_success": transcript is not None,
         "transcript_length": len(transcript) if transcript else 0,
         "error": error,
-        "youtube_api_working": youtube is not None,
     }
 
     if transcript:
-        # Only include first 500 characters of transcript for debugging
-        debug_info["transcript_preview"] = transcript[:500] + "..." if len(transcript) > 500 else transcript
+        result["transcript_preview"] = (
+            transcript[:200] + "..." if len(transcript) > 200 else transcript
+        )
 
-    return jsonify(debug_info)
+    return jsonify(result)
 
 
 @app.route("/summarize", methods=["POST"])
@@ -429,31 +417,43 @@ def summarize_links():
                         {
                             "type": "error",
                             "url": url,
-                            "error": (
-                                "YouTube API client not initialized. Please check your GOOGLE_API_KEY "
-                                "configuration and ensure YouTube Data API v3 is enabled."
-                            ),
+                            "error": "YouTube API client not initialized",
                         }
                     )
                     continue
-                pl_meta_request = youtube.playlists().list(part="snippet", id=playlist_id)
+                pl_meta_request = youtube.playlists().list(
+                    part="snippet", id=playlist_id
+                )
                 pl_meta_response = pl_meta_request.execute()
                 if not pl_meta_response.get("items"):
-                    results.append({"type": "error", "url": url, "error": "Could not find this playlist."})
+                    results.append(
+                        {
+                            "type": "error",
+                            "url": url,
+                            "error": "Could not find this playlist.",
+                        }
+                    )
                     continue
                 playlist_title = pl_meta_response["items"][0]["snippet"]["title"]
                 playlist_items, error = get_videos_from_playlist(playlist_id)
                 if error:
-                    results.append({"type": "playlist", "title": playlist_title, "error": error, "summaries": []})
+                    results.append(
+                        {
+                            "type": "playlist",
+                            "title": playlist_title,
+                            "error": error,
+                            "summaries": [],
+                        }
+                    )
                     continue
 
                 playlist_summaries = []
                 for item in playlist_items:
                     snippet = item.get("snippet", {})
                     vid_id = snippet.get("resourceId", {}).get("videoId")
-                    vid_title, thumbnail_url = snippet.get("title", "Unknown Title"), snippet.get("thumbnails", {}).get(
-                        "medium", {}
-                    ).get("url")
+                    vid_title, thumbnail_url = snippet.get(
+                        "title", "Unknown Title"
+                    ), snippet.get("thumbnails", {}).get("medium", {}).get("url")
 
                     if vid_title in ["Private video", "Deleted video"]:
                         playlist_summaries.append(
@@ -475,17 +475,24 @@ def summarize_links():
                                 "title": cached_item["title"],
                                 "thumbnail_url": cached_item["thumbnail_url"],
                                 "summary": cached_item["summary"],
-                                "video_url": cached_item.get("video_url", f"https://www.youtube.com/watch?v={vid_id}"),
+                                "video_url": cached_item.get(
+                                    "video_url",
+                                    f"https://www.youtube.com/watch?v={vid_id}",
+                                ),
                                 "error": None,
                             }
                         )
                         continue
 
                     transcript, err = get_transcript(vid_id)
-                    summary, err = (None, err) if err else generate_summary(transcript, vid_title)
+                    summary, err = (
+                        (None, err) if err else generate_summary(transcript, vid_title)
+                    )
 
                     if summary and not err:
-                        audio_filename = f"{hashlib.sha256(summary.encode('utf-8')).hexdigest()}.mp3"
+                        audio_filename = (
+                            f"{hashlib.sha256(summary.encode('utf-8')).hexdigest()}.mp3"
+                        )
                         # --- MODIFICATION START ---
                         video_url = f"https://www.youtube.com/watch?v={vid_id}"
                         summary_cache[vid_id] = {
@@ -508,7 +515,13 @@ def summarize_links():
                             "error": err,
                         }
                     )
-                results.append({"type": "playlist", "title": playlist_title, "summaries": playlist_summaries})
+                results.append(
+                    {
+                        "type": "playlist",
+                        "title": playlist_title,
+                        "summaries": playlist_summaries,
+                    }
+                )
             except Exception as e:
                 results.append(
                     {
@@ -529,7 +542,9 @@ def summarize_links():
                         "title": cached_item["title"],
                         "thumbnail_url": cached_item["thumbnail_url"],
                         "summary": cached_item["summary"],
-                        "video_url": cached_item.get("video_url", f"https://www.youtube.com/watch?v={video_id}"),
+                        "video_url": cached_item.get(
+                            "video_url", f"https://www.youtube.com/watch?v={video_id}"
+                        ),
                         "error": None,
                     }
                 )
@@ -537,12 +552,18 @@ def summarize_links():
 
             try:
                 details = get_video_details([video_id]).get(video_id, {})
-                title, thumbnail_url = details.get("title", "Unknown Video"), details.get("thumbnail_url")
+                title, thumbnail_url = details.get(
+                    "title", "Unknown Video"
+                ), details.get("thumbnail_url")
                 transcript, err = get_transcript(video_id)
-                summary, err = (None, err) if err else generate_summary(transcript, title)
+                summary, err = (
+                    (None, err) if err else generate_summary(transcript, title)
+                )
 
                 if summary and not err:
-                    audio_filename = f"{hashlib.sha256(summary.encode('utf-8')).hexdigest()}.mp3"
+                    audio_filename = (
+                        f"{hashlib.sha256(summary.encode('utf-8')).hexdigest()}.mp3"
+                    )
                     # --- MODIFICATION START ---
                     video_url = f"https://www.youtube.com/watch?v={video_id}"
                     summary_cache[video_id] = {
@@ -576,7 +597,13 @@ def summarize_links():
                     }
                 )
         else:
-            results.append({"type": "error", "url": url, "error": "Invalid or unsupported YouTube URL."})
+            results.append(
+                {
+                    "type": "error",
+                    "url": url,
+                    "error": "Invalid or unsupported YouTube URL.",
+                }
+            )
     return jsonify(results)
 
 
@@ -604,10 +631,16 @@ def speak():
     print(f"AUDIO CACHE MISS for file: {filename}. Generating...")
     try:
         synthesis_input = texttospeech.SynthesisInput(text=text_to_speak)
-        voice = texttospeech.VoiceSelectionParams(language_code="en-US", name="en-US-Studio-O")
-        audio_config = texttospeech.AudioConfig(audio_encoding=texttospeech.AudioEncoding.MP3)
+        voice = texttospeech.VoiceSelectionParams(
+            language_code="en-US", name="en-US-Studio-O"
+        )
+        audio_config = texttospeech.AudioConfig(
+            audio_encoding=texttospeech.AudioEncoding.MP3
+        )
 
-        response = tts_client.synthesize_speech(input=synthesis_input, voice=voice, audio_config=audio_config)
+        response = tts_client.synthesize_speech(
+            input=synthesis_input, voice=voice, audio_config=audio_config
+        )
 
         with open(filepath, "wb") as f:
             f.write(response.audio_content)
@@ -623,14 +656,7 @@ def speak():
 # Error handlers to ensure JSON responses for API endpoints
 @app.errorhandler(400)
 def bad_request(e):
-    api_paths = [
-        "/summarize",
-        "/speak",
-        "/get_cached_summaries",
-        "/search_summaries",
-        "/api_status",
-        "/debug_transcript",
-    ]
+    api_paths = ["/summarize", "/speak", "/get_cached_summaries"]
     if any(request.path.startswith(path) for path in api_paths):
         return jsonify({"error": "Bad request: " + str(e)}), 400
     return e
@@ -638,14 +664,7 @@ def bad_request(e):
 
 @app.errorhandler(404)
 def not_found(e):
-    api_paths = [
-        "/summarize",
-        "/speak",
-        "/get_cached_summaries",
-        "/search_summaries",
-        "/api_status",
-        "/debug_transcript",
-    ]
+    api_paths = ["/summarize", "/speak", "/get_cached_summaries"]
     if any(request.path.startswith(path) for path in api_paths):
         return jsonify({"error": "Endpoint not found"}), 404
     return e
@@ -653,14 +672,7 @@ def not_found(e):
 
 @app.errorhandler(500)
 def server_error(e):
-    api_paths = [
-        "/summarize",
-        "/speak",
-        "/get_cached_summaries",
-        "/search_summaries",
-        "/api_status",
-        "/debug_transcript",
-    ]
+    api_paths = ["/summarize", "/speak", "/get_cached_summaries"]
     if any(request.path.startswith(path) for path in api_paths):
         return jsonify({"error": "Internal server error: " + str(e)}), 500
     return e
@@ -670,14 +682,7 @@ def server_error(e):
 def handle_exception(e):
     # Log the error
     app.logger.error(f"Unhandled exception: {str(e)}")
-    api_paths = [
-        "/summarize",
-        "/speak",
-        "/get_cached_summaries",
-        "/search_summaries",
-        "/api_status",
-        "/debug_transcript",
-    ]
+    api_paths = ["/summarize", "/speak", "/get_cached_summaries"]
     if any(request.path.startswith(path) for path in api_paths):
         return jsonify({"error": "An unexpected error occurred: " + str(e)}), 500
     # For non-API routes, let Flask handle it normally

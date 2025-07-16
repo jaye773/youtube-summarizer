@@ -271,11 +271,11 @@
             const initialResultsContainer = document.getElementById('initial-results');
             initialResultsContainer.innerHTML = '';
             try {
-                const response = await fetch('/get_cached_summaries');
+                const response = await fetch('/get_cached_summaries?limit=5');
                 if (!response.ok) throw new Error('Could not fetch cached summaries.');
                 const data = await response.json();
                 if (data && data.length > 0) {
-                    initialResultsContainer.innerHTML = '<h2>Previously Summarized</h2>';
+                    initialResultsContainer.innerHTML = '<h2>Previously Summarized (Latest 5)</h2>';
                     displayResults(data, initialResultsContainer, false);
                 }
             } catch (error) {

@@ -184,7 +184,7 @@ class TestPlaylistFunctions(unittest.TestCase):
         videos, error = get_videos_from_playlist(self.test_playlist_id)
 
         self.assertIsNone(videos)
-        self.assertEqual(error, "YouTube API client not initialized. Please check your GOOGLE_API_KEY configuration.")
+        self.assertEqual(error, "YouTube API client not initialized")
 
 
 if __name__ == "__main__":

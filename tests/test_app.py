@@ -199,6 +199,120 @@ class TestYouTubeSummarizer(unittest.TestCase):
             self.assertEqual(data[0]["title"], "Test Video")
             self.assertIsNone(data[0]["video_url"])
 
+    def test_get_cached_summaries_with_limit(self):
+        """Test getting cached summaries with limit parameter"""
+        mock_cache = {
+            "video1": {
+                "title": "Video 1",
+                "thumbnail_url": "http://example.com/thumb1.jpg",
+                "summary": "Summary 1",
+                "summarized_at": "2024-01-01T00:00:00.000000",
+                "video_url": "https://www.youtube.com/watch?v=video1",
+            },
+            "video2": {
+                "title": "Video 2",
+                "thumbnail_url": "http://example.com/thumb2.jpg",
+                "summary": "Summary 2",
+                "summarized_at": "2024-01-02T00:00:00.000000",
+                "video_url": "https://www.youtube.com/watch?v=video2",
+            },
+            "video3": {
+                "title": "Video 3",
+                "thumbnail_url": "http://example.com/thumb3.jpg",
+                "summary": "Summary 3",
+                "summarized_at": "2024-01-03T00:00:00.000000",
+                "video_url": "https://www.youtube.com/watch?v=video3",
+            },
+        }
+        with patch("app.summary_cache", mock_cache):
+            # Test with limit of 2
+            response = self.client.get("/get_cached_summaries?limit=2")
+            self.assertEqual(response.status_code, 200)
+            data = json.loads(response.data)
+            self.assertEqual(len(data), 2)
+            # Should be sorted by date (most recent first)
+            self.assertEqual(data[0]["title"], "Video 3")
+            self.assertEqual(data[1]["title"], "Video 2")
+
+    def test_get_cached_summaries_with_limit_5(self):
+        """Test getting cached summaries with limit of 5 (initial page load scenario)"""
+        # Create 7 videos to test that only 5 are returned
+        mock_cache = {}
+        for i in range(1, 8):  # videos 1-7
+            mock_cache[f"video{i}"] = {
+                "title": f"Video {i}",
+                "thumbnail_url": f"http://example.com/thumb{i}.jpg",
+                "summary": f"Summary {i}",
+                "summarized_at": f"2024-01-{i:02d}T00:00:00.000000",
+                "video_url": f"https://www.youtube.com/watch?v=video{i}",
+            }
+
+        with patch("app.summary_cache", mock_cache):
+            # Test with limit of 5
+            response = self.client.get("/get_cached_summaries?limit=5")
+            self.assertEqual(response.status_code, 200)
+            data = json.loads(response.data)
+            self.assertEqual(len(data), 5)
+            # Should be the 5 most recent (videos 7, 6, 5, 4, 3)
+            expected_titles = ["Video 7", "Video 6", "Video 5", "Video 4", "Video 3"]
+            actual_titles = [item["title"] for item in data]
+            self.assertEqual(actual_titles, expected_titles)
+
+    def test_get_cached_summaries_with_invalid_limit(self):
+        """Test getting cached summaries with invalid limit parameter"""
+        mock_cache = {
+            "video1": {
+                "title": "Video 1",
+                "thumbnail_url": "http://example.com/thumb1.jpg",
+                "summary": "Summary 1",
+                "summarized_at": "2024-01-01T00:00:00.000000",
+                "video_url": "https://www.youtube.com/watch?v=video1",
+            }
+        }
+        with patch("app.summary_cache", mock_cache):
+            # Test with zero limit (should return empty)
+            response = self.client.get("/get_cached_summaries?limit=0")
+            self.assertEqual(response.status_code, 200)
+            data = json.loads(response.data)
+            self.assertEqual(len(data), 0)
+
+            # Test with negative limit (should return all, ignoring the limit)
+            response = self.client.get("/get_cached_summaries?limit=-1")
+            self.assertEqual(response.status_code, 200)
+            data = json.loads(response.data)
+            self.assertEqual(len(data), 1)
+
+            # Test with non-integer limit (should be ignored)
+            response = self.client.get("/get_cached_summaries?limit=abc")
+            self.assertEqual(response.status_code, 200)
+            data = json.loads(response.data)
+            self.assertEqual(len(data), 1)
+
+    def test_get_cached_summaries_without_limit(self):
+        """Test getting cached summaries without limit parameter (should return all)"""
+        mock_cache = {
+            "video1": {
+                "title": "Video 1",
+                "thumbnail_url": "http://example.com/thumb1.jpg",
+                "summary": "Summary 1",
+                "summarized_at": "2024-01-01T00:00:00.000000",
+                "video_url": "https://www.youtube.com/watch?v=video1",
+            },
+            "video2": {
+                "title": "Video 2",
+                "thumbnail_url": "http://example.com/thumb2.jpg",
+                "summary": "Summary 2",
+                "summarized_at": "2024-01-02T00:00:00.000000",
+                "video_url": "https://www.youtube.com/watch?v=video2",
+            },
+        }
+        with patch("app.summary_cache", mock_cache):
+            # Test without limit parameter (should return all)
+            response = self.client.get("/get_cached_summaries")
+            self.assertEqual(response.status_code, 200)
+            data = json.loads(response.data)
+            self.assertEqual(len(data), 2)
+
     def test_speak_endpoint_invalid_json(self):
         """Test speak endpoint with invalid JSON"""
         response = self.client.post("/speak", data="invalid json", content_type="application/json")
