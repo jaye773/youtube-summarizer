@@ -199,6 +199,210 @@ class TestYouTubeSummarizer(unittest.TestCase):
             self.assertEqual(data[0]["title"], "Test Video")
             self.assertIsNone(data[0]["video_url"])
 
+    def test_speak_endpoint_invalid_json(self):
+        """Test speak endpoint with invalid JSON"""
+        response = self.client.post("/speak", data="invalid json", content_type="application/json")
+        self.assertEqual(response.status_code, 400)
+
+    def test_speak_endpoint_no_text(self):
+        """Test speak endpoint with no text"""
+        response = self.client.post("/speak", data=json.dumps({}), content_type="application/json")
+        self.assertEqual(response.status_code, 400)
+
+    # --- SEARCH FUNCTIONALITY TESTS ---
+    def test_search_summaries_no_query(self):
+        """Test search endpoint with no query parameter"""
+        response = self.client.get("/search_summaries")
+        self.assertEqual(response.status_code, 400)
+        data = json.loads(response.data)
+        self.assertIn("error", data)
+
+    def test_search_summaries_empty_query(self):
+        """Test search endpoint with empty query"""
+        response = self.client.get("/search_summaries?q=")
+        self.assertEqual(response.status_code, 400)
+        data = json.loads(response.data)
+        self.assertIn("error", data)
+
+    def test_search_summaries_empty_cache(self):
+        """Test search when cache is empty"""
+        with patch("app.summary_cache", {}):
+            response = self.client.get("/search_summaries?q=test")
+            self.assertEqual(response.status_code, 200)
+            data = json.loads(response.data)
+            self.assertEqual(data, [])
+
+    def test_search_summaries_by_title(self):
+        """Test searching summaries by title"""
+        mock_cache = {
+            "video1": {
+                "title": "Python Programming Tutorial",
+                "summary": "Learn the basics of web development",
+                "thumbnail_url": "http://example.com/thumb1.jpg",
+                "summarized_at": "2024-01-01T00:00:00.000000",
+                "video_url": "https://www.youtube.com/watch?v=video1",
+            },
+            "video2": {
+                "title": "JavaScript Fundamentals",
+                "summary": "Master Python programming concepts",
+                "thumbnail_url": "http://example.com/thumb2.jpg",
+                "summarized_at": "2024-01-02T00:00:00.000000",
+                "video_url": "https://www.youtube.com/watch?v=video2",
+            },
+        }
+
+        with patch("app.summary_cache", mock_cache):
+            response = self.client.get("/search_summaries?q=python")
+            self.assertEqual(response.status_code, 200)
+            data = json.loads(response.data)
+            self.assertEqual(len(data), 2)  # Should match both title and summary
+            # Verify most recent first
+            self.assertEqual(data[0]["video_id"], "video2")
+            self.assertEqual(data[1]["video_id"], "video1")
+
+    def test_search_summaries_by_content(self):
+        """Test searching summaries by content"""
+        mock_cache = {
+            "video1": {
+                "title": "Tutorial Video",
+                "summary": "This video covers machine learning algorithms",
+                "thumbnail_url": "http://example.com/thumb1.jpg",
+                "summarized_at": "2024-01-01T00:00:00.000000",
+                "video_url": "https://www.youtube.com/watch?v=video1",
+            },
+            "video2": {
+                "title": "Another Video",
+                "summary": "Basic programming concepts explained",
+                "thumbnail_url": "http://example.com/thumb2.jpg",
+                "summarized_at": "2024-01-02T00:00:00.000000",
+                "video_url": "https://www.youtube.com/watch?v=video2",
+            },
+        }
+
+        with patch("app.summary_cache", mock_cache):
+            response = self.client.get("/search_summaries?q=machine%20learning")
+            self.assertEqual(response.status_code, 200)
+            data = json.loads(response.data)
+            self.assertEqual(len(data), 1)
+            self.assertEqual(data[0]["video_id"], "video1")
+
+    def test_search_summaries_case_insensitive(self):
+        """Test that search is case insensitive"""
+        mock_cache = {
+            "video1": {
+                "title": "Python PROGRAMMING Tutorial",
+                "summary": "Learn the basics of WEB development",
+                "thumbnail_url": "http://example.com/thumb1.jpg",
+                "summarized_at": "2024-01-01T00:00:00.000000",
+                "video_url": "https://www.youtube.com/watch?v=video1",
+            }
+        }
+
+        with patch("app.summary_cache", mock_cache):
+            # Test lowercase search on uppercase content
+            response = self.client.get("/search_summaries?q=python")
+            self.assertEqual(response.status_code, 200)
+            data = json.loads(response.data)
+            self.assertEqual(len(data), 1)
+
+            # Test uppercase search on mixed case content
+            response = self.client.get("/search_summaries?q=WEB")
+            self.assertEqual(response.status_code, 200)
+            data = json.loads(response.data)
+            self.assertEqual(len(data), 1)
+
+    def test_search_summaries_no_results(self):
+        """Test search with no matching results"""
+        mock_cache = {
+            "video1": {
+                "title": "Python Tutorial",
+                "summary": "Learn programming",
+                "thumbnail_url": "http://example.com/thumb1.jpg",
+                "summarized_at": "2024-01-01T00:00:00.000000",
+                "video_url": "https://www.youtube.com/watch?v=video1",
+            }
+        }
+
+        with patch("app.summary_cache", mock_cache):
+            response = self.client.get("/search_summaries?q=nonexistent")
+            self.assertEqual(response.status_code, 200)
+            data = json.loads(response.data)
+            self.assertEqual(len(data), 0)
+
+    def test_search_summaries_special_characters(self):
+        """Test search with special characters and spaces"""
+        mock_cache = {
+            "video1": {
+                "title": "React.js & Node.js",
+                "summary": "Full-stack development tutorial",
+                "thumbnail_url": "http://example.com/thumb1.jpg",
+                "summarized_at": "2024-01-01T00:00:00.000000",
+                "video_url": "https://www.youtube.com/watch?v=video1",
+            }
+        }
+
+        with patch("app.summary_cache", mock_cache):
+            response = self.client.get("/search_summaries?q=react.js")
+            self.assertEqual(response.status_code, 200)
+            data = json.loads(response.data)
+            self.assertEqual(len(data), 1)
+
+            response = self.client.get("/search_summaries?q=full-stack")
+            self.assertEqual(response.status_code, 200)
+            data = json.loads(response.data)
+            self.assertEqual(len(data), 1)
+
+    # --- NEW ENDPOINT TESTS ---
+    def test_api_status_endpoint(self):
+        """Test the API status endpoint"""
+        response = self.client.get("/api_status")
+        self.assertEqual(response.status_code, 200)
+        data = json.loads(response.data)
+
+        # Check that all expected keys are present
+        expected_keys = [
+            "google_api_key_set",
+            "youtube_client_initialized",
+            "tts_client_initialized",
+            "ai_model_initialized",
+            "testing_mode",
+        ]
+        for key in expected_keys:
+            self.assertIn(key, data)
+
+    def test_debug_transcript_no_url(self):
+        """Test debug transcript endpoint with no URL"""
+        response = self.client.get("/debug_transcript")
+        self.assertEqual(response.status_code, 400)
+        data = json.loads(response.data)
+        self.assertIn("error", data)
+
+    def test_debug_transcript_invalid_url(self):
+        """Test debug transcript endpoint with invalid URL"""
+        response = self.client.get("/debug_transcript?url=invalid_url")
+        self.assertEqual(response.status_code, 400)
+        data = json.loads(response.data)
+        self.assertIn("error", data)
+        self.assertIn("Invalid YouTube URL", data["error"])
+
+    @patch("app.get_video_details")
+    @patch("app.get_transcript")
+    def test_debug_transcript_valid_url(self, mock_get_transcript, mock_get_video_details):
+        """Test debug transcript endpoint with valid URL"""
+        mock_get_video_details.return_value = {
+            "dQw4w9WgXcQ": {"title": "Test Video", "thumbnail_url": "http://example.com/thumb.jpg"}
+        }
+        mock_get_transcript.return_value = ("Test transcript", None)
+
+        response = self.client.get("/debug_transcript?url=https://www.youtube.com/watch?v=dQw4w9WgXcQ")
+        self.assertEqual(response.status_code, 200)
+        data = json.loads(response.data)
+
+        self.assertEqual(data["video_id"], "dQw4w9WgXcQ")
+        self.assertEqual(data["video_title"], "Test Video")
+        self.assertTrue(data["transcript_success"])
+        self.assertEqual(data["transcript_length"], 15)  # Length of "Test transcript"
+
 
 class TestHelperFunctions(unittest.TestCase):
     """Test suite for helper functions"""

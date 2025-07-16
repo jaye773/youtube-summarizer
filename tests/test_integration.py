@@ -159,6 +159,81 @@ class TestIntegration(unittest.TestCase):
             self.assertEqual(call_args[1]["voice"].language_code, "en-US")
             self.assertEqual(call_args[1]["voice"].name, "en-US-Studio-O")
 
+    @patch("app.summary_cache")
+    def test_search_functionality_integration(self, mock_cache):
+        """Test search functionality with realistic cached data"""
+        # Set up realistic cached summaries
+        mock_cache_data = {
+            "abc123": {
+                "title": "Introduction to Python Programming",
+                "summary": (
+                    "This video covers the fundamentals of Python programming including variables, "
+                    "loops, and functions. Great for beginners who want to learn coding."
+                ),
+                "thumbnail_url": "http://example.com/thumb1.jpg",
+                "summarized_at": "2024-01-01T12:00:00.000000",
+                "video_url": "https://www.youtube.com/watch?v=abc123",
+            },
+            "def456": {
+                "title": "Advanced JavaScript Concepts",
+                "summary": (
+                    "Deep dive into JavaScript closures, async/await, and modern ES6+ features. "
+                    "Perfect for experienced developers."
+                ),
+                "thumbnail_url": "http://example.com/thumb2.jpg",
+                "summarized_at": "2024-01-02T15:30:00.000000",
+                "video_url": "https://www.youtube.com/watch?v=def456",
+            },
+            "ghi789": {
+                "title": "Machine Learning with Python",
+                "summary": (
+                    "Learn how to build machine learning models using Python libraries " "like scikit-learn and pandas."
+                ),
+                "thumbnail_url": "http://example.com/thumb3.jpg",
+                "summarized_at": "2024-01-03T10:15:00.000000",
+                "video_url": "https://www.youtube.com/watch?v=ghi789",
+            },
+        }
+
+        # Mock the items() method to return our test data
+        mock_cache.items.return_value = mock_cache_data.items()
+
+        # Test search by programming language
+        response = self.client.get("/search_summaries?q=python")
+        self.assertEqual(response.status_code, 200)
+        data = json.loads(response.data)
+        self.assertEqual(len(data), 2)  # Should find both Python videos
+
+        # Verify results are sorted by date (most recent first)
+        self.assertEqual(data[0]["video_id"], "ghi789")  # Machine Learning (Jan 3)
+        self.assertEqual(data[1]["video_id"], "abc123")  # Introduction (Jan 1)
+
+        # Test search by skill level
+        response = self.client.get("/search_summaries?q=beginners")
+        self.assertEqual(response.status_code, 200)
+        data = json.loads(response.data)
+        self.assertEqual(len(data), 1)
+        self.assertEqual(data[0]["title"], "Introduction to Python Programming")
+
+        # Test search by specific technology
+        response = self.client.get("/search_summaries?q=javascript")
+        self.assertEqual(response.status_code, 200)
+        data = json.loads(response.data)
+        self.assertEqual(len(data), 1)
+        self.assertEqual(data[0]["title"], "Advanced JavaScript Concepts")
+
+        # Test search with no results
+        response = self.client.get("/search_summaries?q=blockchain")
+        self.assertEqual(response.status_code, 200)
+        data = json.loads(response.data)
+        self.assertEqual(len(data), 0)
+
+        # Test partial word search
+        response = self.client.get("/search_summaries?q=learn")
+        self.assertEqual(response.status_code, 200)
+        data = json.loads(response.data)
+        self.assertEqual(len(data), 2)  # Should match "learn" in summaries
+
 
 if __name__ == "__main__":
     unittest.main()

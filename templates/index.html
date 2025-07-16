@@ -57,6 +57,53 @@
             color: #555;
             flex-shrink: 0;
         }
+
+        /* --- SEARCH SECTION STYLES --- */
+        .search-section {
+            margin: 30px 0;
+            padding: 20px;
+            background-color: #f8f9fa;
+            border-radius: 10px;
+            border: 1px solid #e1e5e9;
+        }
+        .search-section h2 {
+            margin-top: 0;
+            color: #2c3e50;
+            border-bottom: 2px solid #ecf0f1;
+            padding-bottom: 10px;
+        }
+        .search-container {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            align-items: center;
+        }
+        #search-input {
+            flex-grow: 1;
+            padding: 12px;
+            border-radius: 6px;
+            border: 1px solid #ccc;
+            font-size: 16px;
+            box-sizing: border-box;
+        }
+        #search-btn, #clear-search-btn {
+            width: auto;
+            padding: 12px 20px;
+            font-size: 16px;
+            font-weight: normal;
+        }
+        #clear-search-btn {
+            background-color: #95a5a6;
+        }
+        #clear-search-btn:hover {
+            background-color: #7f8c8d;
+        }
+        #search-results {
+            margin-top: 0;
+        }
+        #search-results:empty {
+            display: none;
+        }
     </style>
 </head>
 <body>
@@ -71,6 +118,17 @@
 
         <div id="loader"><p>Working my magic... this may take a while for large playlists. 🪄</p></div>
 
+        <!-- Search Section -->
+        <div class="search-section">
+            <h2>🔍 Search Previous Summaries</h2>
+            <div class="search-container">
+                <input type="text" id="search-input" placeholder="Search by title or content..." />
+                <button id="search-btn">Search</button>
+                <button id="clear-search-btn">Clear</button>
+            </div>
+            <div id="search-results" class="results-section"></div>
+        </div>
+
         <div id="results">
             <div id="new-results" class="results-section"></div>
             <div id="initial-results" class="results-section"></div>
@@ -81,6 +139,12 @@
         const summarizeBtn = document.getElementById('summarize-btn');
         const linksTextarea = document.getElementById('youtube-links');
         const loader = document.getElementById('loader');
+
+        // Search elements
+        const searchInput = document.getElementById('search-input');
+        const searchBtn = document.getElementById('search-btn');
+        const clearSearchBtn = document.getElementById('clear-search-btn');
+        const searchResults = document.getElementById('search-results');
 
         // --- UPDATED State Object ---
         let currentAudioPlayer = {
@@ -138,6 +202,68 @@
         
         // --- Page Load and Main Button Logic (No major changes) ---
         document.addEventListener('DOMContentLoaded', loadInitialSummaries);
+
+        // --- SEARCH FUNCTIONALITY ---
+        searchBtn.addEventListener('click', performSearch);
+        clearSearchBtn.addEventListener('click', clearSearch);
+        searchInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                performSearch();
+            }
+        });
+
+        async function performSearch() {
+            const query = searchInput.value.trim();
+            if (!query) {
+                alert('Please enter a search term.');
+                return;
+            }
+
+            searchBtn.disabled = true;
+            searchBtn.textContent = 'Searching...';
+            
+            try {
+                const response = await fetch(`/search_summaries?q=${encodeURIComponent(query)}`);
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.error || 'Search failed');
+                }
+                
+                const results = await response.json();
+                displaySearchResults(results, query);
+            } catch (error) {
+                console.error('Search error:', error);
+                alert(`Search failed: ${error.message}`);
+            } finally {
+                searchBtn.disabled = false;
+                searchBtn.textContent = 'Search';
+            }
+        }
+
+        function displaySearchResults(results, query) {
+            searchResults.innerHTML = '';
+            
+            if (results.length === 0) {
+                searchResults.innerHTML = `<p style="text-align: center; color: #7f8c8d; margin: 20px 0;">No summaries found for "${query}"</p>`;
+                return;
+            }
+
+            const headerEl = document.createElement('h3');
+            headerEl.textContent = `Search Results for "${query}" (${results.length} found)`;
+            headerEl.style.margin = '0 0 15px 0';
+            headerEl.style.color = '#2c3e50';
+            searchResults.appendChild(headerEl);
+
+            results.forEach(result => {
+                const card = createResultCard(result.title, result.summary, result.error, result.thumbnail_url, result.video_id);
+                searchResults.appendChild(card);
+            });
+        }
+
+        function clearSearch() {
+            searchInput.value = '';
+            searchResults.innerHTML = '';
+        }
 
         async function loadInitialSummaries() {
             loader.innerHTML = '<p>Loading previous summaries...</p>';
