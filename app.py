@@ -70,7 +70,7 @@ def clean_expired_attempts(attempts_data):
     """Remove expired lockout entries"""
     current_time = datetime.now(timezone.utc)
     cleaned_data = {}
-    
+
     for ip, data in attempts_data.items():
         if 'locked_until' in data:
             locked_until = datetime.fromisoformat(data['locked_until'])
@@ -81,7 +81,7 @@ def clean_expired_attempts(attempts_data):
         else:
             # Not locked, keep the attempt count
             cleaned_data[ip] = data
-    
+
     return cleaned_data
 
 
@@ -89,18 +89,18 @@ def is_ip_locked_out(ip_address):
     """Check if an IP address is currently locked out"""
     if not LOGIN_ENABLED or os.environ.get("TESTING"):
         return False, None
-    
+
     attempts_data = load_login_attempts()
     attempts_data = clean_expired_attempts(attempts_data)
-    
+
     if ip_address in attempts_data and 'locked_until' in attempts_data[ip_address]:
         locked_until = datetime.fromisoformat(attempts_data[ip_address]['locked_until'])
         current_time = datetime.now(timezone.utc)
-        
+
         if current_time < locked_until:
             remaining_minutes = int((locked_until - current_time).total_seconds() / 60)
             return True, remaining_minutes
-    
+
     return False, None
 
 
@@ -108,25 +108,25 @@ def record_failed_attempt(ip_address):
     """Record a failed login attempt and apply lockout if necessary"""
     if not LOGIN_ENABLED or os.environ.get("TESTING"):
         return False
-    
+
     attempts_data = load_login_attempts()
     attempts_data = clean_expired_attempts(attempts_data)
-    
+
     if ip_address not in attempts_data:
         attempts_data[ip_address] = {'count': 0, 'first_attempt': datetime.now(timezone.utc).isoformat()}
-    
+
     attempts_data[ip_address]['count'] += 1
     attempts_data[ip_address]['last_attempt'] = datetime.now(timezone.utc).isoformat()
-    
+
     # Check if we should lock out this IP
     if attempts_data[ip_address]['count'] >= MAX_LOGIN_ATTEMPTS:
         lockout_until = datetime.now(timezone.utc) + timedelta(minutes=LOCKOUT_DURATION)
         attempts_data[ip_address]['locked_until'] = lockout_until.isoformat()
         attempts_data[ip_address]['count'] = 0  # Reset counter
-        
+
         save_login_attempts(attempts_data)
         return True  # Locked out
-    
+
     save_login_attempts(attempts_data)
     return False  # Not locked out yet
 
@@ -135,7 +135,7 @@ def reset_failed_attempts(ip_address):
     """Clear failed attempt count for an IP after successful login"""
     if not LOGIN_ENABLED or os.environ.get("TESTING"):
         return
-    
+
     attempts_data = load_login_attempts()
     if ip_address in attempts_data:
         # Remove the IP's record entirely on successful login
@@ -161,7 +161,7 @@ if LOGIN_ENABLED:
         SESSION_SECRET_KEY = os.urandom(24).hex()
     if not LOGIN_CODE:
         print("Warning: LOGIN_CODE not set. Login functionality will not work properly.")
-    
+
 app.secret_key = SESSION_SECRET_KEY if SESSION_SECRET_KEY else os.urandom(24)
 
 print(f"✅ Login system {'enabled' if LOGIN_ENABLED else 'disabled'}")
@@ -393,27 +393,27 @@ def require_auth(f):
         # Skip authentication if login is disabled or in testing mode
         if not LOGIN_ENABLED or os.environ.get("TESTING"):
             return f(*args, **kwargs)
-        
+
         # Check if user is authenticated
         if not session.get("authenticated", False):
             # For API endpoints, return JSON error
             # Check for JSON content-type OR specific API endpoints
-            api_endpoints = ['/summarize', '/speak', '/get_cached_summaries', '/search_summaries', 
+            api_endpoints = ['/summarize', '/speak', '/get_cached_summaries', '/search_summaries',
                            '/debug_transcript', '/login_status', '/api_status']
-            
-            is_api_request = (request.content_type == 'application/json' or 
+
+            is_api_request = (request.content_type == 'application/json' or
                             any(request.path.startswith(endpoint) for endpoint in api_endpoints) or
                             request.headers.get('Accept', '').startswith('application/json'))
-            
+
             if is_api_request:
                 return jsonify({
                     "error": "Authentication required",
                     "message": "Please login to access this resource"
                 }), 401
-            
+
             # For web pages, redirect to login
             return redirect(url_for('login_page'))
-        
+
         return f(*args, **kwargs)
     return decorated_function
 
@@ -432,11 +432,11 @@ def login_page():
     """Serve the login page"""
     if not LOGIN_ENABLED:
         return redirect(url_for('home'))
-    
+
     # If already authenticated, redirect to home
     if session.get("authenticated", False):
         return redirect(url_for('home'))
-    
+
     return render_template("login.html")
 
 
@@ -446,12 +446,12 @@ def login():
     """Authenticate user with passcode"""
     if not LOGIN_ENABLED:
         return jsonify({"error": "Login system is disabled"}), 404
-    
+
     # Get client IP address
     client_ip = request.environ.get('HTTP_X_FORWARDED_FOR', request.environ.get('REMOTE_ADDR', '127.0.0.1'))
     if ',' in client_ip:
         client_ip = client_ip.split(',')[0].strip()
-    
+
     # Check if IP is locked out
     is_locked, remaining_minutes = is_ip_locked_out(client_ip)
     if is_locked:
@@ -460,16 +460,16 @@ def login():
             "error": f"Too many failed attempts. Please try again in {remaining_minutes} minutes.",
             "locked_until_minutes": remaining_minutes
         }), 429  # Too Many Requests
-    
+
     try:
         data = request.get_json()
         if not data:
             return jsonify({"error": "Invalid JSON in request body"}), 400
-        
+
         passcode = data.get("passcode", "").strip()
         if not passcode:
             return jsonify({"error": "Passcode is required"}), 400
-        
+
         # Simple authentication check
         if passcode == LOGIN_CODE:
             # Reset failed attempts on successful login
@@ -482,7 +482,7 @@ def login():
         else:
             # Record failed attempt
             was_locked_out = record_failed_attempt(client_ip)
-            
+
             if was_locked_out:
                 return jsonify({
                     "success": False,
@@ -494,13 +494,13 @@ def login():
                 attempts_data = load_login_attempts()
                 current_count = attempts_data.get(client_ip, {}).get('count', 0)
                 remaining_attempts = MAX_LOGIN_ATTEMPTS - current_count
-                
+
                 return jsonify({
                     "success": False,
                     "error": "Invalid passcode",
                     "remaining_attempts": remaining_attempts
                 }), 401
-            
+
     except Exception as e:
         return jsonify({"error": f"Login failed: {str(e)}"}), 500
 
@@ -510,7 +510,7 @@ def logout():
     """Clear session and logout"""
     if not LOGIN_ENABLED:
         return jsonify({"error": "Login system is disabled"}), 404
-    
+
     session.pop("authenticated", None)
     return jsonify({
         "success": True,
@@ -527,7 +527,7 @@ def login_status():
             "authenticated": True,  # Always authenticated when login is disabled
             "message": "Login system is disabled"
         })
-    
+
     is_authenticated = session.get("authenticated", False)
     return jsonify({
         "login_enabled": True,

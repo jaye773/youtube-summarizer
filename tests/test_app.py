@@ -40,7 +40,7 @@ class TestYouTubeSummarizer(unittest.TestCase):
         # Remove testing environment variable to enable authentication
         if "TESTING" in os.environ:
             del os.environ["TESTING"]
-        
+
         response = self.client.get("/")
         self.assertEqual(response.status_code, 302)  # Redirect
         self.assertIn("/login", response.location)
@@ -51,11 +51,11 @@ class TestYouTubeSummarizer(unittest.TestCase):
         # Remove testing environment variable to enable authentication
         if "TESTING" in os.environ:
             del os.environ["TESTING"]
-        
+
         # First login
         with self.client.session_transaction() as sess:
             sess["authenticated"] = True
-        
+
         response = self.client.get("/")
         self.assertEqual(response.status_code, 200)
 
