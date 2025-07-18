@@ -3,21 +3,17 @@ import json
 import os
 import re
 import traceback
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timedelta, timezone
+from functools import wraps
 from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
 
 import google.generativeai as genai
-from flask import Flask, Response, jsonify, render_template, request, session, redirect, url_for
-from functools import wraps
+from flask import Flask, Response, jsonify, redirect, render_template, request, session, url_for
 from google.api_core.client_options import ClientOptions
 from google.cloud import texttospeech
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
-from youtube_transcript_api import (
-    NoTranscriptFound,
-    TranscriptsDisabled,
-    YouTubeTranscriptApi,
-)
+from youtube_transcript_api import NoTranscriptFound, TranscriptsDisabled, YouTubeTranscriptApi
 
 # --- CONFIGURATION ---
 app = Flask(__name__)
@@ -72,8 +68,8 @@ def clean_expired_attempts(attempts_data):
     cleaned_data = {}
 
     for ip, data in attempts_data.items():
-        if 'locked_until' in data:
-            locked_until = datetime.fromisoformat(data['locked_until'])
+        if "locked_until" in data:
+            locked_until = datetime.fromisoformat(data["locked_until"])
             if current_time < locked_until:
                 # Still locked
                 cleaned_data[ip] = data
@@ -93,8 +89,8 @@ def is_ip_locked_out(ip_address):
     attempts_data = load_login_attempts()
     attempts_data = clean_expired_attempts(attempts_data)
 
-    if ip_address in attempts_data and 'locked_until' in attempts_data[ip_address]:
-        locked_until = datetime.fromisoformat(attempts_data[ip_address]['locked_until'])
+    if ip_address in attempts_data and "locked_until" in attempts_data[ip_address]:
+        locked_until = datetime.fromisoformat(attempts_data[ip_address]["locked_until"])
         current_time = datetime.now(timezone.utc)
 
         if current_time < locked_until:
@@ -113,16 +109,16 @@ def record_failed_attempt(ip_address):
     attempts_data = clean_expired_attempts(attempts_data)
 
     if ip_address not in attempts_data:
-        attempts_data[ip_address] = {'count': 0, 'first_attempt': datetime.now(timezone.utc).isoformat()}
+        attempts_data[ip_address] = {"count": 0, "first_attempt": datetime.now(timezone.utc).isoformat()}
 
-    attempts_data[ip_address]['count'] += 1
-    attempts_data[ip_address]['last_attempt'] = datetime.now(timezone.utc).isoformat()
+    attempts_data[ip_address]["count"] += 1
+    attempts_data[ip_address]["last_attempt"] = datetime.now(timezone.utc).isoformat()
 
     # Check if we should lock out this IP
-    if attempts_data[ip_address]['count'] >= MAX_LOGIN_ATTEMPTS:
+    if attempts_data[ip_address]["count"] >= MAX_LOGIN_ATTEMPTS:
         lockout_until = datetime.now(timezone.utc) + timedelta(minutes=LOCKOUT_DURATION)
-        attempts_data[ip_address]['locked_until'] = lockout_until.isoformat()
-        attempts_data[ip_address]['count'] = 0  # Reset counter
+        attempts_data[ip_address]["locked_until"] = lockout_until.isoformat()
+        attempts_data[ip_address]["count"] = 0  # Reset counter
 
         save_login_attempts(attempts_data)
         return True  # Locked out
@@ -179,18 +175,14 @@ model = None
 # Only initialize API clients if API key is available and we're not in test mode
 if api_key and not os.environ.get("TESTING"):
     try:
-        tts_client = texttospeech.TextToSpeechClient(
-            client_options=ClientOptions(api_key=api_key)
-        )
+        tts_client = texttospeech.TextToSpeechClient(client_options=ClientOptions(api_key=api_key))
         genai.configure(api_key=api_key)
         youtube = build("youtube", "v3", developerKey=api_key)
         model = genai.GenerativeModel(model_name="gemini-2.5-flash-preview-05-20")
     except Exception as e:
         print(f"Warning: Could not configure APIs. Error: {e}")
 elif not api_key and not os.environ.get("TESTING"):
-    print(
-        "Warning: GOOGLE_API_KEY environment variable is not set. Some features will be unavailable."
-    )
+    print("Warning: GOOGLE_API_KEY environment variable is not set. Some features will be unavailable.")
 
 # For testing, create the model even without API key
 if os.environ.get("TESTING") and not model:
@@ -247,9 +239,7 @@ def get_video_details(video_ids):
             snippet = item.get("snippet", {})
             details[item["id"]] = {
                 "title": snippet.get("title", "Unknown Title"),
-                "thumbnail_url": snippet.get("thumbnails", {})
-                .get("medium", {})
-                .get("url"),
+                "thumbnail_url": snippet.get("thumbnails", {}).get("medium", {}).get("url"),
             }
         return details
     except HttpError as e:
@@ -284,22 +274,12 @@ def get_transcript(video_id):
     if not video_id:
         return None, "No video ID provided"
     try:
-        transcript_list = YouTubeTranscriptApi.get_transcript(
-            video_id, languages=["en", "en-US"]
-        )
+        transcript_list = YouTubeTranscriptApi.get_transcript(video_id, languages=["en", "en-US"])
         transcript_text = " ".join([d["text"] for d in transcript_list])
-        return (
-            (transcript_text, None)
-            if transcript_text.strip()
-            else (None, "Transcript was found but it is empty.")
-        )
+        return (transcript_text, None) if transcript_text.strip() else (None, "Transcript was found but it is empty.")
     except NoTranscriptFound:
         try:
-            transcript_list = (
-                YouTubeTranscriptApi.list_transcripts(video_id)
-                .find_transcript(["en"])
-                .fetch()
-            )
+            transcript_list = YouTubeTranscriptApi.list_transcripts(video_id).find_transcript(["en"]).fetch()
             transcript_text = " ".join([d["text"] for d in transcript_list])
             return (
                 (transcript_text, None)
@@ -388,6 +368,7 @@ def generate_summary(transcript, title):
 # --- AUTHENTICATION DECORATOR ---
 def require_auth(f):
     """Decorator to require authentication for routes when login is enabled"""
+
     @wraps(f)
     def decorated_function(*args, **kwargs):
         # Skip authentication if login is disabled or in testing mode
@@ -398,23 +379,33 @@ def require_auth(f):
         if not session.get("authenticated", False):
             # For API endpoints, return JSON error
             # Check for JSON content-type OR specific API endpoints
-            api_endpoints = ['/summarize', '/speak', '/get_cached_summaries', '/search_summaries',
-                           '/debug_transcript', '/login_status', '/api_status']
+            api_endpoints = [
+                "/summarize",
+                "/speak",
+                "/get_cached_summaries",
+                "/search_summaries",
+                "/debug_transcript",
+                "/login_status",
+                "/api_status",
+            ]
 
-            is_api_request = (request.content_type == 'application/json' or
-                            any(request.path.startswith(endpoint) for endpoint in api_endpoints) or
-                            request.headers.get('Accept', '').startswith('application/json'))
+            is_api_request = (
+                request.content_type == "application/json"
+                or any(request.path.startswith(endpoint) for endpoint in api_endpoints)
+                or request.headers.get("Accept", "").startswith("application/json")
+            )
 
             if is_api_request:
-                return jsonify({
-                    "error": "Authentication required",
-                    "message": "Please login to access this resource"
-                }), 401
+                return (
+                    jsonify({"error": "Authentication required", "message": "Please login to access this resource"}),
+                    401,
+                )
 
             # For web pages, redirect to login
-            return redirect(url_for('login_page'))
+            return redirect(url_for("login_page"))
 
         return f(*args, **kwargs)
+
     return decorated_function
 
 
@@ -431,11 +422,11 @@ def home():
 def login_page():
     """Serve the login page"""
     if not LOGIN_ENABLED:
-        return redirect(url_for('home'))
+        return redirect(url_for("home"))
 
     # If already authenticated, redirect to home
     if session.get("authenticated", False):
-        return redirect(url_for('home'))
+        return redirect(url_for("home"))
 
     return render_template("login.html")
 
@@ -448,18 +439,23 @@ def login():
         return jsonify({"error": "Login system is disabled"}), 404
 
     # Get client IP address
-    client_ip = request.environ.get('HTTP_X_FORWARDED_FOR', request.environ.get('REMOTE_ADDR', '127.0.0.1'))
-    if ',' in client_ip:
-        client_ip = client_ip.split(',')[0].strip()
+    client_ip = request.environ.get("HTTP_X_FORWARDED_FOR", request.environ.get("REMOTE_ADDR", "127.0.0.1"))
+    if "," in client_ip:
+        client_ip = client_ip.split(",")[0].strip()
 
     # Check if IP is locked out
     is_locked, remaining_minutes = is_ip_locked_out(client_ip)
     if is_locked:
-        return jsonify({
-            "success": False,
-            "error": f"Too many failed attempts. Please try again in {remaining_minutes} minutes.",
-            "locked_until_minutes": remaining_minutes
-        }), 429  # Too Many Requests
+        return (
+            jsonify(
+                {
+                    "success": False,
+                    "error": f"Too many failed attempts. Please try again in {remaining_minutes} minutes.",
+                    "locked_until_minutes": remaining_minutes,
+                }
+            ),
+            429,
+        )  # Too Many Requests
 
     try:
         data = request.get_json()
@@ -475,31 +471,32 @@ def login():
             # Reset failed attempts on successful login
             reset_failed_attempts(client_ip)
             session["authenticated"] = True
-            return jsonify({
-                "success": True,
-                "message": "Successfully logged in"
-            })
+            return jsonify({"success": True, "message": "Successfully logged in"})
         else:
             # Record failed attempt
             was_locked_out = record_failed_attempt(client_ip)
 
             if was_locked_out:
-                return jsonify({
-                    "success": False,
-                    "error": f"Too many failed attempts. Account locked for {LOCKOUT_DURATION} minutes.",
-                    "locked_until_minutes": LOCKOUT_DURATION
-                }), 429  # Too Many Requests
+                return (
+                    jsonify(
+                        {
+                            "success": False,
+                            "error": f"Too many failed attempts. Account locked for {LOCKOUT_DURATION} minutes.",
+                            "locked_until_minutes": LOCKOUT_DURATION,
+                        }
+                    ),
+                    429,
+                )  # Too Many Requests
             else:
                 # Get current attempt count for feedback
                 attempts_data = load_login_attempts()
-                current_count = attempts_data.get(client_ip, {}).get('count', 0)
+                current_count = attempts_data.get(client_ip, {}).get("count", 0)
                 remaining_attempts = MAX_LOGIN_ATTEMPTS - current_count
 
-                return jsonify({
-                    "success": False,
-                    "error": "Invalid passcode",
-                    "remaining_attempts": remaining_attempts
-                }), 401
+                return (
+                    jsonify({"success": False, "error": "Invalid passcode", "remaining_attempts": remaining_attempts}),
+                    401,
+                )
 
     except Exception as e:
         return jsonify({"error": f"Login failed: {str(e)}"}), 500
@@ -512,27 +509,23 @@ def logout():
         return jsonify({"error": "Login system is disabled"}), 404
 
     session.pop("authenticated", None)
-    return jsonify({
-        "success": True,
-        "message": "Successfully logged out"
-    })
+    return jsonify({"success": True, "message": "Successfully logged out"})
 
 
 @app.route("/login_status", methods=["GET"])
 def login_status():
     """Check current authentication status"""
     if not LOGIN_ENABLED:
-        return jsonify({
-            "login_enabled": False,
-            "authenticated": True,  # Always authenticated when login is disabled
-            "message": "Login system is disabled"
-        })
+        return jsonify(
+            {
+                "login_enabled": False,
+                "authenticated": True,  # Always authenticated when login is disabled
+                "message": "Login system is disabled",
+            }
+        )
 
     is_authenticated = session.get("authenticated", False)
-    return jsonify({
-        "login_enabled": True,
-        "authenticated": is_authenticated
-    })
+    return jsonify({"login_enabled": True, "authenticated": is_authenticated})
 
 
 @app.route("/get_cached_summaries", methods=["GET"])
@@ -556,9 +549,7 @@ def get_cached_summaries():
         }
         for d in summary_cache.values()
     ]
-    cached_list.sort(
-        key=lambda x: x.get("summarized_at", "1970-01-01T00:00:00.000000"), reverse=True
-    )
+    cached_list.sort(key=lambda x: x.get("summarized_at", "1970-01-01T00:00:00.000000"), reverse=True)
 
     # Apply limit if specified
     if limit is not None:
@@ -604,9 +595,7 @@ def search_summaries():
             )
 
     # Sort by date (most recent first)
-    results.sort(
-        key=lambda x: x.get("summarized_at", "1970-01-01T00:00:00.000000"), reverse=True
-    )
+    results.sort(key=lambda x: x.get("summarized_at", "1970-01-01T00:00:00.000000"), reverse=True)
 
     return jsonify(results)
 
@@ -652,9 +641,7 @@ def debug_transcript():
     }
 
     if transcript:
-        result["transcript_preview"] = (
-            transcript[:200] + "..." if len(transcript) > 200 else transcript
-        )
+        result["transcript_preview"] = transcript[:200] + "..." if len(transcript) > 200 else transcript
 
     return jsonify(result)
 
@@ -686,9 +673,7 @@ def summarize_links():
                             }
                         )
                         continue
-                    pl_meta_request = youtube.playlists().list(
-                        part="snippet", id=playlist_id
-                    )
+                    pl_meta_request = youtube.playlists().list(part="snippet", id=playlist_id)
                     pl_meta_response = pl_meta_request.execute()
                     if not pl_meta_response.get("items"):
                         results.append(
@@ -716,9 +701,9 @@ def summarize_links():
                     for item in playlist_items:
                         snippet = item.get("snippet", {})
                         vid_id = snippet.get("resourceId", {}).get("videoId")
-                        vid_title, thumbnail_url = snippet.get(
-                            "title", "Unknown Title"
-                        ), snippet.get("thumbnails", {}).get("medium", {}).get("url")
+                        vid_title, thumbnail_url = snippet.get("title", "Unknown Title"), snippet.get(
+                            "thumbnails", {}
+                        ).get("medium", {}).get("url")
 
                         if vid_title in ["Private video", "Deleted video"]:
                             playlist_summaries.append(
@@ -750,14 +735,10 @@ def summarize_links():
                             continue
 
                         transcript, err = get_transcript(vid_id)
-                        summary, err = (
-                            (None, err) if err else generate_summary(transcript, vid_title)
-                        )
+                        summary, err = (None, err) if err else generate_summary(transcript, vid_title)
 
                         if summary and not err:
-                            audio_filename = (
-                                f"{hashlib.sha256(summary.encode('utf-8')).hexdigest()}.mp3"
-                            )
+                            audio_filename = f"{hashlib.sha256(summary.encode('utf-8')).hexdigest()}.mp3"
                             # --- MODIFICATION START ---
                             video_url = f"https://www.youtube.com/watch?v={vid_id}"
                             summary_cache[vid_id] = {
@@ -807,9 +788,7 @@ def summarize_links():
                             "title": cached_item["title"],
                             "thumbnail_url": cached_item["thumbnail_url"],
                             "summary": cached_item["summary"],
-                            "video_url": cached_item.get(
-                                "video_url", f"https://www.youtube.com/watch?v={video_id}"
-                            ),
+                            "video_url": cached_item.get("video_url", f"https://www.youtube.com/watch?v={video_id}"),
                             "error": None,
                         }
                     )
@@ -817,18 +796,12 @@ def summarize_links():
 
                 try:
                     details = get_video_details([video_id]).get(video_id, {})
-                    title, thumbnail_url = details.get(
-                        "title", "Unknown Video"
-                    ), details.get("thumbnail_url")
+                    title, thumbnail_url = details.get("title", "Unknown Video"), details.get("thumbnail_url")
                     transcript, err = get_transcript(video_id)
-                    summary, err = (
-                        (None, err) if err else generate_summary(transcript, title)
-                    )
+                    summary, err = (None, err) if err else generate_summary(transcript, title)
 
                     if summary and not err:
-                        audio_filename = (
-                            f"{hashlib.sha256(summary.encode('utf-8')).hexdigest()}.mp3"
-                        )
+                        audio_filename = f"{hashlib.sha256(summary.encode('utf-8')).hexdigest()}.mp3"
                         # --- MODIFICATION START ---
                         video_url = f"https://www.youtube.com/watch?v={video_id}"
                         summary_cache[video_id] = {
@@ -873,12 +846,17 @@ def summarize_links():
     except Exception as e:
         # Catch-all exception handler for the entire endpoint
         app.logger.error(f"Unhandled exception in /summarize: {str(e)}\n{traceback.format_exc()}")
-        return jsonify({
-            "error": "An unexpected error occurred while processing your request",
-            "message": str(e),
-            "type": type(e).__name__,
-            "stacktrace": traceback.format_exc()
-        }), 500
+        return (
+            jsonify(
+                {
+                    "error": "An unexpected error occurred while processing your request",
+                    "message": str(e),
+                    "type": type(e).__name__,
+                    "stacktrace": traceback.format_exc(),
+                }
+            ),
+            500,
+        )
 
 
 @app.route("/speak", methods=["POST"])
@@ -906,16 +884,10 @@ def speak():
     print(f"AUDIO CACHE MISS for file: {filename}. Generating...")
     try:
         synthesis_input = texttospeech.SynthesisInput(text=text_to_speak)
-        voice = texttospeech.VoiceSelectionParams(
-            language_code="en-US", name="en-US-Studio-O"
-        )
-        audio_config = texttospeech.AudioConfig(
-            audio_encoding=texttospeech.AudioEncoding.MP3
-        )
+        voice = texttospeech.VoiceSelectionParams(language_code="en-US", name="en-US-Studio-O")
+        audio_config = texttospeech.AudioConfig(audio_encoding=texttospeech.AudioEncoding.MP3)
 
-        response = tts_client.synthesize_speech(
-            input=synthesis_input, voice=voice, audio_config=audio_config
-        )
+        response = tts_client.synthesize_speech(input=synthesis_input, voice=voice, audio_config=audio_config)
 
         with open(filepath, "wb") as f:
             f.write(response.audio_content)
@@ -931,37 +903,55 @@ def speak():
 # Error handlers to ensure JSON responses for API endpoints
 @app.errorhandler(400)
 def bad_request(e):
-    api_paths = ["/summarize", "/speak", "/get_cached_summaries", "/search_summaries", "/debug_transcript", "/api_status", "/login", "/logout", "/login_status"]
+    api_paths = [
+        "/summarize",
+        "/speak",
+        "/get_cached_summaries",
+        "/search_summaries",
+        "/debug_transcript",
+        "/api_status",
+        "/login",
+        "/logout",
+        "/login_status",
+    ]
     if any(request.path.startswith(path) for path in api_paths):
-        return jsonify({
-            "error": "Bad request",
-            "message": str(e),
-            "stacktrace": traceback.format_exc()
-        }), 400
+        return jsonify({"error": "Bad request", "message": str(e), "stacktrace": traceback.format_exc()}), 400
     return e
 
 
 @app.errorhandler(404)
 def not_found(e):
-    api_paths = ["/summarize", "/speak", "/get_cached_summaries", "/search_summaries", "/debug_transcript", "/api_status", "/login", "/logout", "/login_status"]
+    api_paths = [
+        "/summarize",
+        "/speak",
+        "/get_cached_summaries",
+        "/search_summaries",
+        "/debug_transcript",
+        "/api_status",
+        "/login",
+        "/logout",
+        "/login_status",
+    ]
     if any(request.path.startswith(path) for path in api_paths):
-        return jsonify({
-            "error": "Endpoint not found",
-            "message": str(e),
-            "path": request.path
-        }), 404
+        return jsonify({"error": "Endpoint not found", "message": str(e), "path": request.path}), 404
     return e
 
 
 @app.errorhandler(500)
 def server_error(e):
-    api_paths = ["/summarize", "/speak", "/get_cached_summaries", "/search_summaries", "/debug_transcript", "/api_status", "/login", "/logout", "/login_status"]
+    api_paths = [
+        "/summarize",
+        "/speak",
+        "/get_cached_summaries",
+        "/search_summaries",
+        "/debug_transcript",
+        "/api_status",
+        "/login",
+        "/logout",
+        "/login_status",
+    ]
     if any(request.path.startswith(path) for path in api_paths):
-        return jsonify({
-            "error": "Internal server error",
-            "message": str(e),
-            "stacktrace": traceback.format_exc()
-        }), 500
+        return jsonify({"error": "Internal server error", "message": str(e), "stacktrace": traceback.format_exc()}), 500
     return e
 
 
@@ -969,17 +959,34 @@ def server_error(e):
 def handle_exception(e):
     # Log the error with full traceback
     app.logger.error(f"Unhandled exception: {str(e)}\n{traceback.format_exc()}")
-    api_paths = ["/summarize", "/speak", "/get_cached_summaries", "/search_summaries", "/debug_transcript", "/api_status", "/login", "/logout", "/login_status"]
+    api_paths = [
+        "/summarize",
+        "/speak",
+        "/get_cached_summaries",
+        "/search_summaries",
+        "/debug_transcript",
+        "/api_status",
+        "/login",
+        "/logout",
+        "/login_status",
+    ]
     if any(request.path.startswith(path) for path in api_paths):
-        return jsonify({
-            "error": "An unexpected error occurred",
-            "message": str(e),
-            "type": type(e).__name__,
-            "stacktrace": traceback.format_exc()
-        }), 500
+        return (
+            jsonify(
+                {
+                    "error": "An unexpected error occurred",
+                    "message": str(e),
+                    "type": type(e).__name__,
+                    "stacktrace": traceback.format_exc(),
+                }
+            ),
+            500,
+        )
     # For non-API routes, let Flask handle it normally
     return e
 
 
 if __name__ == "__main__":
-    app.run(debug=True, port=5001)
+    # Enable debug mode only in development (configurable via environment variable)
+    debug_mode = os.environ.get("FLASK_DEBUG", "true").lower() == "true"
+    app.run(debug=debug_mode, port=5001)

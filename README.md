@@ -60,6 +60,7 @@ LOGIN_CODE=your_secret_passcode      # The passcode users must enter
 SESSION_SECRET_KEY=your_random_key   # Secret key for session encryption
 MAX_LOGIN_ATTEMPTS=5                 # Failed attempts before lockout (default: 5)
 LOCKOUT_DURATION=15                  # Lockout time in minutes (default: 15)
+FLASK_DEBUG=false                    # Enable Flask debug mode (default: true, set false for production)
 ```
 
 ### Setup Examples
@@ -72,6 +73,7 @@ LOGIN_CODE=MySecurePasscode123
 SESSION_SECRET_KEY=a-long-random-string-for-session-encryption
 MAX_LOGIN_ATTEMPTS=3
 LOCKOUT_DURATION=30
+FLASK_DEBUG=false
 ```
 
 **Manual Setup** - Export environment variables:
@@ -81,6 +83,7 @@ export LOGIN_CODE="MySecurePasscode123"
 export SESSION_SECRET_KEY="a-long-random-string-for-session-encryption"
 export MAX_LOGIN_ATTEMPTS=3
 export LOCKOUT_DURATION=30
+export FLASK_DEBUG=false
 ```
 
 ### User Experience
