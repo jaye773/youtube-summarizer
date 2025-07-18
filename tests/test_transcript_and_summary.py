@@ -1,3 +1,4 @@
+import os
 import unittest
 from unittest.mock import MagicMock, patch
 
@@ -9,9 +10,17 @@ class TestTranscriptAndSummary(unittest.TestCase):
 
     def setUp(self):
         """Set up test data"""
+        # Set environment variable to bypass authentication during testing
+        os.environ["TESTING"] = "true"
         self.test_video_id = "dQw4w9WgXcQ"
         self.test_transcript = "This is a test transcript with some content about testing."
         self.test_title = "Test Video Title"
+
+    def tearDown(self):
+        """Clean up after each test"""
+        # Remove testing environment variable
+        if "TESTING" in os.environ:
+            del os.environ["TESTING"]
 
     @patch("app.YouTubeTranscriptApi")
     def test_get_transcript_success(self, mock_transcript_api):

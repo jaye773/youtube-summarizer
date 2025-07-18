@@ -1,4 +1,5 @@
 import json
+import os
 import unittest
 from unittest.mock import MagicMock, mock_open, patch
 
@@ -10,6 +11,8 @@ class TestCacheFunctions(unittest.TestCase):
 
     def setUp(self):
         """Set up test data"""
+        # Set environment variable to bypass authentication during testing
+        os.environ["TESTING"] = "true"
         self.test_cache_data = {
             "video1": {
                 "title": "Test Video 1",
@@ -24,6 +27,12 @@ class TestCacheFunctions(unittest.TestCase):
                 "summarized_at": "2024-01-02T00:00:00.000000",
             },
         }
+
+    def tearDown(self):
+        """Clean up after each test"""
+        # Remove testing environment variable
+        if "TESTING" in os.environ:
+            del os.environ["TESTING"]
 
     @patch("app.SUMMARY_CACHE_FILE", "summary_cache.json")
     @patch("os.path.exists")
@@ -109,8 +118,16 @@ class TestAudioCache(unittest.TestCase):
 
     def setUp(self):
         """Set up test data"""
+        # Set environment variable to bypass authentication during testing
+        os.environ["TESTING"] = "true"
         self.test_text = "This is test text for audio generation"
         self.expected_hash = "5f1e3c8e9b4e1c0f8e9f5e8c9b4e1c0f8e9f5e8c9b4e1c0f8e9f5e8c9b4e1c0f"
+
+    def tearDown(self):
+        """Clean up after each test"""
+        # Remove testing environment variable
+        if "TESTING" in os.environ:
+            del os.environ["TESTING"]
 
     @patch("app.DATA_DIR", ".")
     @patch("app.AUDIO_CACHE_DIR", "./audio_cache")

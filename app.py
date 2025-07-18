@@ -2,11 +2,13 @@ import hashlib  # For generating filenames
 import json
 import os
 import re
-from datetime import datetime, timezone
+import traceback
+from datetime import datetime, timezone, timedelta
 from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
 
 import google.generativeai as genai
-from flask import Flask, Response, jsonify, render_template, request
+from flask import Flask, Response, jsonify, render_template, request, session, redirect, url_for
+from functools import wraps
 from google.api_core.client_options import ClientOptions
 from google.cloud import texttospeech
 from googleapiclient.discovery import build
@@ -25,6 +27,7 @@ app = Flask(__name__)
 DATA_DIR = os.environ.get("DATA_DIR", "data" if os.path.exists("/.dockerenv") else ".")
 os.makedirs(DATA_DIR, exist_ok=True)
 SUMMARY_CACHE_FILE = os.path.join(DATA_DIR, "summary_cache.json")
+LOGIN_ATTEMPTS_FILE = os.path.join(DATA_DIR, "login_attempts.json")
 AUDIO_CACHE_DIR = os.path.join(DATA_DIR, "audio_cache")
 
 os.makedirs(AUDIO_CACHE_DIR, exist_ok=True)
@@ -46,8 +49,125 @@ def save_summary_cache(cache_data):
         json.dump(cache_data, f, indent=4)
 
 
+def load_login_attempts():
+    """Load login attempt tracking data"""
+    if os.path.exists(LOGIN_ATTEMPTS_FILE):
+        with open(LOGIN_ATTEMPTS_FILE, "r") as f:
+            try:
+                return json.load(f)
+            except json.JSONDecodeError:
+                return {}
+    return {}
+
+
+def save_login_attempts(attempts_data):
+    """Save login attempt tracking data"""
+    with open(LOGIN_ATTEMPTS_FILE, "w") as f:
+        json.dump(attempts_data, f, indent=4)
+
+
+def clean_expired_attempts(attempts_data):
+    """Remove expired lockout entries"""
+    current_time = datetime.now(timezone.utc)
+    cleaned_data = {}
+    
+    for ip, data in attempts_data.items():
+        if 'locked_until' in data:
+            locked_until = datetime.fromisoformat(data['locked_until'])
+            if current_time < locked_until:
+                # Still locked
+                cleaned_data[ip] = data
+            # If expired, don't include it (removes the lockout)
+        else:
+            # Not locked, keep the attempt count
+            cleaned_data[ip] = data
+    
+    return cleaned_data
+
+
+def is_ip_locked_out(ip_address):
+    """Check if an IP address is currently locked out"""
+    if not LOGIN_ENABLED or os.environ.get("TESTING"):
+        return False, None
+    
+    attempts_data = load_login_attempts()
+    attempts_data = clean_expired_attempts(attempts_data)
+    
+    if ip_address in attempts_data and 'locked_until' in attempts_data[ip_address]:
+        locked_until = datetime.fromisoformat(attempts_data[ip_address]['locked_until'])
+        current_time = datetime.now(timezone.utc)
+        
+        if current_time < locked_until:
+            remaining_minutes = int((locked_until - current_time).total_seconds() / 60)
+            return True, remaining_minutes
+    
+    return False, None
+
+
+def record_failed_attempt(ip_address):
+    """Record a failed login attempt and apply lockout if necessary"""
+    if not LOGIN_ENABLED or os.environ.get("TESTING"):
+        return False
+    
+    attempts_data = load_login_attempts()
+    attempts_data = clean_expired_attempts(attempts_data)
+    
+    if ip_address not in attempts_data:
+        attempts_data[ip_address] = {'count': 0, 'first_attempt': datetime.now(timezone.utc).isoformat()}
+    
+    attempts_data[ip_address]['count'] += 1
+    attempts_data[ip_address]['last_attempt'] = datetime.now(timezone.utc).isoformat()
+    
+    # Check if we should lock out this IP
+    if attempts_data[ip_address]['count'] >= MAX_LOGIN_ATTEMPTS:
+        lockout_until = datetime.now(timezone.utc) + timedelta(minutes=LOCKOUT_DURATION)
+        attempts_data[ip_address]['locked_until'] = lockout_until.isoformat()
+        attempts_data[ip_address]['count'] = 0  # Reset counter
+        
+        save_login_attempts(attempts_data)
+        return True  # Locked out
+    
+    save_login_attempts(attempts_data)
+    return False  # Not locked out yet
+
+
+def reset_failed_attempts(ip_address):
+    """Clear failed attempt count for an IP after successful login"""
+    if not LOGIN_ENABLED or os.environ.get("TESTING"):
+        return
+    
+    attempts_data = load_login_attempts()
+    if ip_address in attempts_data:
+        # Remove the IP's record entirely on successful login
+        del attempts_data[ip_address]
+        save_login_attempts(attempts_data)
+
+
 summary_cache = load_summary_cache()
 print(f"✅ Loaded {len(summary_cache)} summaries from cache.")
+
+
+# --- LOGIN CONFIGURATION ---
+LOGIN_ENABLED = os.environ.get("LOGIN_ENABLED", "false").lower() == "true"
+LOGIN_CODE = os.environ.get("LOGIN_CODE", "")
+SESSION_SECRET_KEY = os.environ.get("SESSION_SECRET_KEY", "")
+MAX_LOGIN_ATTEMPTS = int(os.environ.get("MAX_LOGIN_ATTEMPTS", "5"))
+LOCKOUT_DURATION = int(os.environ.get("LOCKOUT_DURATION", "15"))  # minutes
+
+# Configure Flask session
+if LOGIN_ENABLED:
+    if not SESSION_SECRET_KEY:
+        print("Warning: SESSION_SECRET_KEY not set. Using auto-generated key (not recommended for production)")
+        SESSION_SECRET_KEY = os.urandom(24).hex()
+    if not LOGIN_CODE:
+        print("Warning: LOGIN_CODE not set. Login functionality will not work properly.")
+    
+app.secret_key = SESSION_SECRET_KEY if SESSION_SECRET_KEY else os.urandom(24)
+
+print(f"✅ Login system {'enabled' if LOGIN_ENABLED else 'disabled'}")
+if LOGIN_ENABLED:
+    print(f"✅ Max login attempts: {MAX_LOGIN_ATTEMPTS}")
+    print(f"✅ Lockout duration: {LOCKOUT_DURATION} minutes")
 
 
 # --- API CLIENT INITIALIZATION ---
@@ -265,15 +385,158 @@ def generate_summary(transcript, title):
         return None, f"Error calling Gemini API: {e}"
 
 
+# --- AUTHENTICATION DECORATOR ---
+def require_auth(f):
+    """Decorator to require authentication for routes when login is enabled"""
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        # Skip authentication if login is disabled or in testing mode
+        if not LOGIN_ENABLED or os.environ.get("TESTING"):
+            return f(*args, **kwargs)
+        
+        # Check if user is authenticated
+        if not session.get("authenticated", False):
+            # For API endpoints, return JSON error
+            # Check for JSON content-type OR specific API endpoints
+            api_endpoints = ['/summarize', '/speak', '/get_cached_summaries', '/search_summaries', 
+                           '/debug_transcript', '/login_status', '/api_status']
+            
+            is_api_request = (request.content_type == 'application/json' or 
+                            any(request.path.startswith(endpoint) for endpoint in api_endpoints) or
+                            request.headers.get('Accept', '').startswith('application/json'))
+            
+            if is_api_request:
+                return jsonify({
+                    "error": "Authentication required",
+                    "message": "Please login to access this resource"
+                }), 401
+            
+            # For web pages, redirect to login
+            return redirect(url_for('login_page'))
+        
+        return f(*args, **kwargs)
+    return decorated_function
+
+
 # --- API ENDPOINTS ---
 
 
 @app.route("/")
+@require_auth
 def home():
     return render_template("index.html")
 
 
+@app.route("/login")
+def login_page():
+    """Serve the login page"""
+    if not LOGIN_ENABLED:
+        return redirect(url_for('home'))
+    
+    # If already authenticated, redirect to home
+    if session.get("authenticated", False):
+        return redirect(url_for('home'))
+    
+    return render_template("login.html")
+
+
+# --- AUTHENTICATION ENDPOINTS ---
+@app.route("/login", methods=["POST"])
+def login():
+    """Authenticate user with passcode"""
+    if not LOGIN_ENABLED:
+        return jsonify({"error": "Login system is disabled"}), 404
+    
+    # Get client IP address
+    client_ip = request.environ.get('HTTP_X_FORWARDED_FOR', request.environ.get('REMOTE_ADDR', '127.0.0.1'))
+    if ',' in client_ip:
+        client_ip = client_ip.split(',')[0].strip()
+    
+    # Check if IP is locked out
+    is_locked, remaining_minutes = is_ip_locked_out(client_ip)
+    if is_locked:
+        return jsonify({
+            "success": False,
+            "error": f"Too many failed attempts. Please try again in {remaining_minutes} minutes.",
+            "locked_until_minutes": remaining_minutes
+        }), 429  # Too Many Requests
+    
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({"error": "Invalid JSON in request body"}), 400
+        
+        passcode = data.get("passcode", "").strip()
+        if not passcode:
+            return jsonify({"error": "Passcode is required"}), 400
+        
+        # Simple authentication check
+        if passcode == LOGIN_CODE:
+            # Reset failed attempts on successful login
+            reset_failed_attempts(client_ip)
+            session["authenticated"] = True
+            return jsonify({
+                "success": True,
+                "message": "Successfully logged in"
+            })
+        else:
+            # Record failed attempt
+            was_locked_out = record_failed_attempt(client_ip)
+            
+            if was_locked_out:
+                return jsonify({
+                    "success": False,
+                    "error": f"Too many failed attempts. Account locked for {LOCKOUT_DURATION} minutes.",
+                    "locked_until_minutes": LOCKOUT_DURATION
+                }), 429  # Too Many Requests
+            else:
+                # Get current attempt count for feedback
+                attempts_data = load_login_attempts()
+                current_count = attempts_data.get(client_ip, {}).get('count', 0)
+                remaining_attempts = MAX_LOGIN_ATTEMPTS - current_count
+                
+                return jsonify({
+                    "success": False,
+                    "error": "Invalid passcode",
+                    "remaining_attempts": remaining_attempts
+                }), 401
+            
+    except Exception as e:
+        return jsonify({"error": f"Login failed: {str(e)}"}), 500
+
+
+@app.route("/logout", methods=["POST"])
+def logout():
+    """Clear session and logout"""
+    if not LOGIN_ENABLED:
+        return jsonify({"error": "Login system is disabled"}), 404
+    
+    session.pop("authenticated", None)
+    return jsonify({
+        "success": True,
+        "message": "Successfully logged out"
+    })
+
+
+@app.route("/login_status", methods=["GET"])
+def login_status():
+    """Check current authentication status"""
+    if not LOGIN_ENABLED:
+        return jsonify({
+            "login_enabled": False,
+            "authenticated": True,  # Always authenticated when login is disabled
+            "message": "Login system is disabled"
+        })
+    
+    is_authenticated = session.get("authenticated", False)
+    return jsonify({
+        "login_enabled": True,
+        "authenticated": is_authenticated
+    })
+
+
 @app.route("/get_cached_summaries", methods=["GET"])
+@require_auth
 def get_cached_summaries():
     if not summary_cache:
         return jsonify([])
@@ -309,6 +572,7 @@ def get_cached_summaries():
 
 
 @app.route("/search_summaries", methods=["GET"])
+@require_auth
 def search_summaries():
     query = request.args.get("q", "").strip()
     if not query:
@@ -361,6 +625,7 @@ def api_status():
 
 
 @app.route("/debug_transcript", methods=["GET"])
+@require_auth
 def debug_transcript():
     """Debug endpoint to check transcript retrieval for a specific video"""
     url = request.args.get("url", "").strip()
@@ -395,98 +660,169 @@ def debug_transcript():
 
 
 @app.route("/summarize", methods=["POST"])
+@require_auth
 def summarize_links():
     try:
+        # Parse request data
         data = request.get_json()
         if not data:
             return jsonify({"error": "Invalid JSON in request body"}), 400
         urls = data.get("urls", [])
         if not urls:
             return jsonify({"error": "No URLs provided"}), 400
-    except Exception as e:
-        return jsonify({"error": f"Failed to parse request: {str(e)}"}), 400
 
-    results = []
-    for url in urls:
-        playlist_id, video_id = get_playlist_id(url), get_video_id(url)
+        results = []
+        for url in urls:
+            playlist_id, video_id = get_playlist_id(url), get_video_id(url)
 
-        if playlist_id:
-            try:
-                if not youtube:
-                    results.append(
-                        {
-                            "type": "error",
-                            "url": url,
-                            "error": "YouTube API client not initialized",
-                        }
+            if playlist_id:
+                try:
+                    if not youtube:
+                        results.append(
+                            {
+                                "type": "error",
+                                "url": url,
+                                "error": "YouTube API client not initialized",
+                            }
+                        )
+                        continue
+                    pl_meta_request = youtube.playlists().list(
+                        part="snippet", id=playlist_id
                     )
-                    continue
-                pl_meta_request = youtube.playlists().list(
-                    part="snippet", id=playlist_id
-                )
-                pl_meta_response = pl_meta_request.execute()
-                if not pl_meta_response.get("items"):
-                    results.append(
-                        {
-                            "type": "error",
-                            "url": url,
-                            "error": "Could not find this playlist.",
-                        }
-                    )
-                    continue
-                playlist_title = pl_meta_response["items"][0]["snippet"]["title"]
-                playlist_items, error = get_videos_from_playlist(playlist_id)
-                if error:
-                    results.append(
-                        {
-                            "type": "playlist",
-                            "title": playlist_title,
-                            "error": error,
-                            "summaries": [],
-                        }
-                    )
-                    continue
+                    pl_meta_response = pl_meta_request.execute()
+                    if not pl_meta_response.get("items"):
+                        results.append(
+                            {
+                                "type": "error",
+                                "url": url,
+                                "error": "Could not find this playlist.",
+                            }
+                        )
+                        continue
+                    playlist_title = pl_meta_response["items"][0]["snippet"]["title"]
+                    playlist_items, error = get_videos_from_playlist(playlist_id)
+                    if error:
+                        results.append(
+                            {
+                                "type": "playlist",
+                                "title": playlist_title,
+                                "error": error,
+                                "summaries": [],
+                            }
+                        )
+                        continue
 
-                playlist_summaries = []
-                for item in playlist_items:
-                    snippet = item.get("snippet", {})
-                    vid_id = snippet.get("resourceId", {}).get("videoId")
-                    vid_title, thumbnail_url = snippet.get(
-                        "title", "Unknown Title"
-                    ), snippet.get("thumbnails", {}).get("medium", {}).get("url")
+                    playlist_summaries = []
+                    for item in playlist_items:
+                        snippet = item.get("snippet", {})
+                        vid_id = snippet.get("resourceId", {}).get("videoId")
+                        vid_title, thumbnail_url = snippet.get(
+                            "title", "Unknown Title"
+                        ), snippet.get("thumbnails", {}).get("medium", {}).get("url")
 
-                    if vid_title in ["Private video", "Deleted video"]:
+                        if vid_title in ["Private video", "Deleted video"]:
+                            playlist_summaries.append(
+                                {
+                                    "video_id": vid_id,
+                                    "title": vid_title,
+                                    "thumbnail_url": thumbnail_url,
+                                    "summary": None,
+                                    "error": "Video is private or deleted.",
+                                }
+                            )
+                            continue
+
+                        if vid_id in summary_cache:
+                            cached_item = summary_cache[vid_id]
+                            playlist_summaries.append(
+                                {
+                                    "video_id": vid_id,
+                                    "title": cached_item["title"],
+                                    "thumbnail_url": cached_item["thumbnail_url"],
+                                    "summary": cached_item["summary"],
+                                    "video_url": cached_item.get(
+                                        "video_url",
+                                        f"https://www.youtube.com/watch?v={vid_id}",
+                                    ),
+                                    "error": None,
+                                }
+                            )
+                            continue
+
+                        transcript, err = get_transcript(vid_id)
+                        summary, err = (
+                            (None, err) if err else generate_summary(transcript, vid_title)
+                        )
+
+                        if summary and not err:
+                            audio_filename = (
+                                f"{hashlib.sha256(summary.encode('utf-8')).hexdigest()}.mp3"
+                            )
+                            # --- MODIFICATION START ---
+                            video_url = f"https://www.youtube.com/watch?v={vid_id}"
+                            summary_cache[vid_id] = {
+                                "title": vid_title,
+                                "summary": summary,
+                                "thumbnail_url": thumbnail_url,
+                                "summarized_at": datetime.now(timezone.utc).isoformat(),
+                                "audio_filename": audio_filename,
+                                "video_url": video_url,  # Storing the canonical video URL
+                            }
+                            # --- MODIFICATION END ---
+                            save_summary_cache(summary_cache)
                         playlist_summaries.append(
                             {
                                 "video_id": vid_id,
                                 "title": vid_title,
                                 "thumbnail_url": thumbnail_url,
-                                "summary": None,
-                                "error": "Video is private or deleted.",
+                                "summary": summary,
+                                "video_url": f"https://www.youtube.com/watch?v={vid_id}",
+                                "error": err,
                             }
                         )
-                        continue
+                    results.append(
+                        {
+                            "type": "playlist",
+                            "title": playlist_title,
+                            "summaries": playlist_summaries,
+                        }
+                    )
+                except Exception as e:
+                    results.append(
+                        {
+                            "type": "playlist",
+                            "title": "Unknown Playlist",
+                            "error": f"An unexpected error occurred: {e}",
+                            "summaries": [],
+                        }
+                    )
 
-                    if vid_id in summary_cache:
-                        cached_item = summary_cache[vid_id]
-                        playlist_summaries.append(
-                            {
-                                "video_id": vid_id,
-                                "title": cached_item["title"],
-                                "thumbnail_url": cached_item["thumbnail_url"],
-                                "summary": cached_item["summary"],
-                                "video_url": cached_item.get(
-                                    "video_url",
-                                    f"https://www.youtube.com/watch?v={vid_id}",
-                                ),
-                                "error": None,
-                            }
-                        )
-                        continue
+            elif video_id:
+                if video_id in summary_cache:
+                    cached_item = summary_cache[video_id]
+                    results.append(
+                        {
+                            "type": "video",
+                            "video_id": video_id,
+                            "title": cached_item["title"],
+                            "thumbnail_url": cached_item["thumbnail_url"],
+                            "summary": cached_item["summary"],
+                            "video_url": cached_item.get(
+                                "video_url", f"https://www.youtube.com/watch?v={video_id}"
+                            ),
+                            "error": None,
+                        }
+                    )
+                    continue
 
-                    transcript, err = get_transcript(vid_id)
+                try:
+                    details = get_video_details([video_id]).get(video_id, {})
+                    title, thumbnail_url = details.get(
+                        "title", "Unknown Video"
+                    ), details.get("thumbnail_url")
+                    transcript, err = get_transcript(video_id)
                     summary, err = (
-                        (None, err) if err else generate_summary(transcript, vid_title)
+                        (None, err) if err else generate_summary(transcript, title)
                     )
 
                     if summary and not err:
@@ -494,9 +830,9 @@ def summarize_links():
                             f"{hashlib.sha256(summary.encode('utf-8')).hexdigest()}.mp3"
                         )
                         # --- MODIFICATION START ---
-                        video_url = f"https://www.youtube.com/watch?v={vid_id}"
-                        summary_cache[vid_id] = {
-                            "title": vid_title,
+                        video_url = f"https://www.youtube.com/watch?v={video_id}"
+                        summary_cache[video_id] = {
+                            "title": title,
                             "summary": summary,
                             "thumbnail_url": thumbnail_url,
                             "summarized_at": datetime.now(timezone.utc).isoformat(),
@@ -505,109 +841,48 @@ def summarize_links():
                         }
                         # --- MODIFICATION END ---
                         save_summary_cache(summary_cache)
-                    playlist_summaries.append(
+                    results.append(
                         {
-                            "video_id": vid_id,
-                            "title": vid_title,
+                            "type": "video",
+                            "video_id": video_id,
+                            "title": title,
                             "thumbnail_url": thumbnail_url,
                             "summary": summary,
-                            "video_url": f"https://www.youtube.com/watch?v={vid_id}",
+                            "video_url": f"https://www.youtube.com/watch?v={video_id}",
                             "error": err,
                         }
                     )
-                results.append(
-                    {
-                        "type": "playlist",
-                        "title": playlist_title,
-                        "summaries": playlist_summaries,
-                    }
-                )
-            except Exception as e:
-                results.append(
-                    {
-                        "type": "playlist",
-                        "title": "Unknown Playlist",
-                        "error": f"An unexpected error occurred: {e}",
-                        "summaries": [],
-                    }
-                )
-
-        elif video_id:
-            if video_id in summary_cache:
-                cached_item = summary_cache[video_id]
-                results.append(
-                    {
-                        "type": "video",
-                        "video_id": video_id,
-                        "title": cached_item["title"],
-                        "thumbnail_url": cached_item["thumbnail_url"],
-                        "summary": cached_item["summary"],
-                        "video_url": cached_item.get(
-                            "video_url", f"https://www.youtube.com/watch?v={video_id}"
-                        ),
-                        "error": None,
-                    }
-                )
-                continue
-
-            try:
-                details = get_video_details([video_id]).get(video_id, {})
-                title, thumbnail_url = details.get(
-                    "title", "Unknown Video"
-                ), details.get("thumbnail_url")
-                transcript, err = get_transcript(video_id)
-                summary, err = (
-                    (None, err) if err else generate_summary(transcript, title)
-                )
-
-                if summary and not err:
-                    audio_filename = (
-                        f"{hashlib.sha256(summary.encode('utf-8')).hexdigest()}.mp3"
+                except Exception as e:
+                    results.append(
+                        {
+                            "type": "video",
+                            "video_id": video_id,
+                            "title": "Unknown Video",
+                            "error": f"Failed to process video: {e}",
+                        }
                     )
-                    # --- MODIFICATION START ---
-                    video_url = f"https://www.youtube.com/watch?v={video_id}"
-                    summary_cache[video_id] = {
-                        "title": title,
-                        "summary": summary,
-                        "thumbnail_url": thumbnail_url,
-                        "summarized_at": datetime.now(timezone.utc).isoformat(),
-                        "audio_filename": audio_filename,
-                        "video_url": video_url,  # Storing the canonical video URL
-                    }
-                    # --- MODIFICATION END ---
-                    save_summary_cache(summary_cache)
+            else:
                 results.append(
                     {
-                        "type": "video",
-                        "video_id": video_id,
-                        "title": title,
-                        "thumbnail_url": thumbnail_url,
-                        "summary": summary,
-                        "video_url": f"https://www.youtube.com/watch?v={video_id}",
-                        "error": err,
+                        "type": "error",
+                        "url": url,
+                        "error": "Invalid or unsupported YouTube URL.",
                     }
                 )
-            except Exception as e:
-                results.append(
-                    {
-                        "type": "video",
-                        "video_id": video_id,
-                        "title": "Unknown Video",
-                        "error": f"Failed to process video: {e}",
-                    }
-                )
-        else:
-            results.append(
-                {
-                    "type": "error",
-                    "url": url,
-                    "error": "Invalid or unsupported YouTube URL.",
-                }
-            )
-    return jsonify(results)
+        return jsonify(results)
+    except Exception as e:
+        # Catch-all exception handler for the entire endpoint
+        app.logger.error(f"Unhandled exception in /summarize: {str(e)}\n{traceback.format_exc()}")
+        return jsonify({
+            "error": "An unexpected error occurred while processing your request",
+            "message": str(e),
+            "type": type(e).__name__,
+            "stacktrace": traceback.format_exc()
+        }), 500
 
 
 @app.route("/speak", methods=["POST"])
+@require_auth
 def speak():
     try:
         data = request.get_json()
@@ -656,35 +931,52 @@ def speak():
 # Error handlers to ensure JSON responses for API endpoints
 @app.errorhandler(400)
 def bad_request(e):
-    api_paths = ["/summarize", "/speak", "/get_cached_summaries"]
+    api_paths = ["/summarize", "/speak", "/get_cached_summaries", "/search_summaries", "/debug_transcript", "/api_status", "/login", "/logout", "/login_status"]
     if any(request.path.startswith(path) for path in api_paths):
-        return jsonify({"error": "Bad request: " + str(e)}), 400
+        return jsonify({
+            "error": "Bad request",
+            "message": str(e),
+            "stacktrace": traceback.format_exc()
+        }), 400
     return e
 
 
 @app.errorhandler(404)
 def not_found(e):
-    api_paths = ["/summarize", "/speak", "/get_cached_summaries"]
+    api_paths = ["/summarize", "/speak", "/get_cached_summaries", "/search_summaries", "/debug_transcript", "/api_status", "/login", "/logout", "/login_status"]
     if any(request.path.startswith(path) for path in api_paths):
-        return jsonify({"error": "Endpoint not found"}), 404
+        return jsonify({
+            "error": "Endpoint not found",
+            "message": str(e),
+            "path": request.path
+        }), 404
     return e
 
 
 @app.errorhandler(500)
 def server_error(e):
-    api_paths = ["/summarize", "/speak", "/get_cached_summaries"]
+    api_paths = ["/summarize", "/speak", "/get_cached_summaries", "/search_summaries", "/debug_transcript", "/api_status", "/login", "/logout", "/login_status"]
     if any(request.path.startswith(path) for path in api_paths):
-        return jsonify({"error": "Internal server error: " + str(e)}), 500
+        return jsonify({
+            "error": "Internal server error",
+            "message": str(e),
+            "stacktrace": traceback.format_exc()
+        }), 500
     return e
 
 
 @app.errorhandler(Exception)
 def handle_exception(e):
-    # Log the error
-    app.logger.error(f"Unhandled exception: {str(e)}")
-    api_paths = ["/summarize", "/speak", "/get_cached_summaries"]
+    # Log the error with full traceback
+    app.logger.error(f"Unhandled exception: {str(e)}\n{traceback.format_exc()}")
+    api_paths = ["/summarize", "/speak", "/get_cached_summaries", "/search_summaries", "/debug_transcript", "/api_status", "/login", "/logout", "/login_status"]
     if any(request.path.startswith(path) for path in api_paths):
-        return jsonify({"error": "An unexpected error occurred: " + str(e)}), 500
+        return jsonify({
+            "error": "An unexpected error occurred",
+            "message": str(e),
+            "type": type(e).__name__,
+            "stacktrace": traceback.format_exc()
+        }), 500
     # For non-API routes, let Flask handle it normally
     return e
 

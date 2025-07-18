@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login - YouTube Summarizer</title>
+    <style>
+        body { 
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; 
+            line-height: 1.6; 
+            background-color: #f4f7f6; 
+            color: #333; 
+            margin: 0; 
+            padding: 20px; 
+            display: flex; 
+            align-items: center; 
+            justify-content: center; 
+            min-height: 100vh; 
+        }
+        .container { 
+            max-width: 400px; 
+            width: 100%; 
+            background-color: #fff; 
+            padding: 40px; 
+            border-radius: 10px; 
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1); 
+            text-align: center;
+        }
+        h1 { 
+            color: #2c3e50; 
+            margin-bottom: 10px; 
+            font-size: 28px;
+        }
+        .subtitle { 
+            color: #7f8c8d; 
+            margin-bottom: 30px; 
+            font-size: 16px;
+        }
+        .form-group { 
+            margin-bottom: 20px; 
+            text-align: left;
+        }
+        label { 
+            display: block; 
+            margin-bottom: 8px; 
+            color: #2c3e50; 
+            font-weight: 500;
+        }
+        input[type="password"] { 
+            width: 100%; 
+            padding: 12px; 
+            border-radius: 6px; 
+            border: 1px solid #ccc; 
+            font-size: 16px; 
+            box-sizing: border-box; 
+            transition: border-color 0.3s;
+        }
+        input[type="password"]:focus { 
+            outline: none; 
+            border-color: #8e44ad; 
+            box-shadow: 0 0 0 2px rgba(142, 68, 173, 0.2);
+        }
+        button { 
+            width: 100%; 
+            padding: 15px; 
+            background-color: #8e44ad; 
+            color: white; 
+            border: none; 
+            border-radius: 6px; 
+            font-size: 18px; 
+            font-weight: bold; 
+            cursor: pointer; 
+            transition: background-color 0.3s; 
+            margin-top: 10px;
+        }
+        button:hover { 
+            background-color: #732d91; 
+        }
+        button:disabled { 
+            background-color: #bdc3c7; 
+            cursor: not-allowed; 
+        }
+        .error-message { 
+            background-color: #fbeeee; 
+            color: #c0392b; 
+            padding: 12px; 
+            border-radius: 6px; 
+            margin-bottom: 20px; 
+            border-left: 4px solid #e74c3c;
+            text-align: left;
+        }
+        .info-message { 
+            background-color: #eef7ff; 
+            color: #2980b9; 
+            padding: 12px; 
+            border-radius: 6px; 
+            margin-bottom: 20px; 
+            border-left: 4px solid #3498db;
+            text-align: left;
+        }
+        .footer-link { 
+            margin-top: 20px; 
+            color: #7f8c8d; 
+            font-size: 14px;
+        }
+        .footer-link a { 
+            color: #8e44ad; 
+            text-decoration: none;
+        }
+        .footer-link a:hover { 
+            text-decoration: underline;
+        }
+        .loading { 
+            display: none; 
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔐 Login Required</h1>
+        <p class="subtitle">Please enter your passcode to access the YouTube Summarizer</p>
+        
+        <div id="error-container"></div>
+        <div id="info-container"></div>
+        
+        <form id="login-form">
+            <div class="form-group">
+                <label for="passcode">Passcode:</label>
+                <input type="password" id="passcode" name="passcode" required autofocus 
+                       placeholder="Enter your passcode">
+            </div>
+            
+            <button type="submit" id="login-btn">
+                <span class="button-text">Login</span>
+                <span class="loading">Logging in...</span>
+            </button>
+        </form>
+        
+        <div class="footer-link">
+            Need help? Check your environment configuration.
+        </div>
+    </div>
+
+    <script>
+        const loginForm = document.getElementById('login-form');
+        const passcodeInput = document.getElementById('passcode');
+        const loginBtn = document.getElementById('login-btn');
+        const buttonText = loginBtn.querySelector('.button-text');
+        const loadingText = loginBtn.querySelector('.loading');
+        const errorContainer = document.getElementById('error-container');
+        const infoContainer = document.getElementById('info-container');
+
+        // Check URL params for messages
+        const urlParams = new URLSearchParams(window.location.search);
+        const error = urlParams.get('error');
+        const message = urlParams.get('message');
+        
+        if (error) {
+            showError(decodeURIComponent(error));
+        }
+        
+        if (message) {
+            showInfo(decodeURIComponent(message));
+        }
+
+        function showError(message) {
+            errorContainer.innerHTML = `<div class="error-message">${message}</div>`;
+            infoContainer.innerHTML = '';
+        }
+
+        function showInfo(message) {
+            infoContainer.innerHTML = `<div class="info-message">${message}</div>`;
+            errorContainer.innerHTML = '';
+        }
+
+        function clearMessages() {
+            errorContainer.innerHTML = '';
+            infoContainer.innerHTML = '';
+        }
+
+        function setLoading(loading) {
+            loginBtn.disabled = loading;
+            buttonText.style.display = loading ? 'none' : 'inline';
+            loadingText.style.display = loading ? 'inline' : 'none';
+        }
+
+        loginForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const passcode = passcodeInput.value.trim();
+            if (!passcode) {
+                showError('Please enter your passcode.');
+                return;
+            }
+
+            setLoading(true);
+            clearMessages();
+
+            try {
+                const response = await fetch('/login', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ passcode: passcode }),
+                });
+
+                const data = await response.json();
+
+                if (response.ok && data.success) {
+                    showInfo('Login successful! Redirecting...');
+                    // Redirect to home page after successful login
+                    setTimeout(() => {
+                        window.location.href = '/';
+                    }, 1000);
+                } else {
+                    showError(data.error || 'Login failed. Please try again.');
+                    passcodeInput.focus();
+                }
+            } catch (error) {
+                console.error('Login error:', error);
+                showError('Connection error. Please check if the server is running.');
+            } finally {
+                setLoading(false);
+            }
+        });
+
+        // Focus on passcode input when page loads
+        document.addEventListener('DOMContentLoaded', () => {
+            passcodeInput.focus();
+        });
+
+        // Clear messages when user starts typing
+        passcodeInput.addEventListener('input', () => {
+            if (errorContainer.innerHTML || infoContainer.innerHTML) {
+                clearMessages();
+            }
+        });
+    </script>
+</body>
+</html> 

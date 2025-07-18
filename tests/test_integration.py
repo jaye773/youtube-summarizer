@@ -1,4 +1,5 @@
 import json
+import os
 import unittest
 from unittest.mock import MagicMock, patch
 
@@ -13,6 +14,14 @@ class TestIntegration(unittest.TestCase):
         self.app = app
         self.client = self.app.test_client()
         self.app.config["TESTING"] = True
+        # Set environment variable to bypass authentication during testing
+        os.environ["TESTING"] = "true"
+
+    def tearDown(self):
+        """Clean up after each test"""
+        # Remove testing environment variable
+        if "TESTING" in os.environ:
+            del os.environ["TESTING"]
 
     @patch("app.youtube")
     @patch("app.YouTubeTranscriptApi")

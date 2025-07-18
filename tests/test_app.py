@@ -1,4 +1,5 @@
 import json
+import os
 import unittest
 from unittest.mock import MagicMock, mock_open, patch
 
@@ -13,6 +14,8 @@ class TestYouTubeSummarizer(unittest.TestCase):
         self.app = app
         self.client = self.app.test_client()
         self.app.config["TESTING"] = True
+        # Set environment variable to bypass authentication during testing
+        os.environ["TESTING"] = "true"
 
         # Sample test data
         self.test_video_url = "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
@@ -20,8 +23,39 @@ class TestYouTubeSummarizer(unittest.TestCase):
         self.test_video_id = "dQw4w9WgXcQ"
         self.test_playlist_id = "PLrAXtmErZgOeiKm4sgNOknGvNjby9efdf"
 
+    def tearDown(self):
+        """Clean up after each test"""
+        # Remove testing environment variable
+        if "TESTING" in os.environ:
+            del os.environ["TESTING"]
+
     def test_home_page(self):
         """Test that home page loads successfully"""
+        response = self.client.get("/")
+        self.assertEqual(response.status_code, 200)
+
+    @patch("app.LOGIN_ENABLED", True)
+    def test_home_page_requires_auth_when_enabled(self):
+        """Test that home page redirects to login when authentication is enabled and user not logged in"""
+        # Remove testing environment variable to enable authentication
+        if "TESTING" in os.environ:
+            del os.environ["TESTING"]
+        
+        response = self.client.get("/")
+        self.assertEqual(response.status_code, 302)  # Redirect
+        self.assertIn("/login", response.location)
+
+    @patch("app.LOGIN_ENABLED", True)
+    def test_home_page_accessible_when_authenticated(self):
+        """Test that home page is accessible when user is authenticated"""
+        # Remove testing environment variable to enable authentication
+        if "TESTING" in os.environ:
+            del os.environ["TESTING"]
+        
+        # First login
+        with self.client.session_transaction() as sess:
+            sess["authenticated"] = True
+        
         response = self.client.get("/")
         self.assertEqual(response.status_code, 200)
 
