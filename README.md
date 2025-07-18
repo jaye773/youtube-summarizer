@@ -17,6 +17,7 @@
 ## 📋 Table of Contents
 
 - [Features](#-features)
+- [Login Authentication (Optional)](#-login-authentication-optional)
 - [Prerequisites](#-prerequisites)
 - [Usage with Docker](#-usage-with-docker-recommended)
 - [Usage without Docker](#-usage-without-docker)
@@ -36,6 +37,72 @@
 - 💾 **Smart Caching** - Store summaries and audio files to minimize API calls
 - 🎨 **Clean Interface** - Simple, responsive web UI for easy interaction
 - ⚡ **Batch Processing** - Handle multiple videos or playlists simultaneously
+- 🔐 **Optional Authentication** - Secure your application with passcode-based login
+
+## 🔒 Login Authentication (Optional)
+
+YouTube Summarizer includes an optional login system to secure access to your application. This is particularly useful when deploying the application publicly or sharing it with a limited group of users.
+
+### Security Features
+
+- **Simple passcode authentication** - Single user access with a configurable passcode
+- **Brute force protection** - Automatic IP-based lockout after failed attempts
+- **Session management** - Secure session handling with configurable session keys
+- **Rate limiting** - Configurable maximum attempts and lockout duration
+
+### Environment Variables
+
+Configure login functionality using these environment variables:
+
+```bash
+LOGIN_ENABLED=true                    # Enable/disable login (default: false)
+LOGIN_CODE=your_secret_passcode      # The passcode users must enter
+SESSION_SECRET_KEY=your_random_key   # Secret key for session encryption
+MAX_LOGIN_ATTEMPTS=5                 # Failed attempts before lockout (default: 5)
+LOCKOUT_DURATION=15                  # Lockout time in minutes (default: 15)
+```
+
+### Setup Examples
+
+**Docker Compose** - Add to your `.env` file:
+```bash
+GOOGLE_API_KEY=your_google_api_key_here
+LOGIN_ENABLED=true
+LOGIN_CODE=MySecurePasscode123
+SESSION_SECRET_KEY=a-long-random-string-for-session-encryption
+MAX_LOGIN_ATTEMPTS=3
+LOCKOUT_DURATION=30
+```
+
+**Manual Setup** - Export environment variables:
+```bash
+export LOGIN_ENABLED=true
+export LOGIN_CODE="MySecurePasscode123"
+export SESSION_SECRET_KEY="a-long-random-string-for-session-encryption"
+export MAX_LOGIN_ATTEMPTS=3
+export LOCKOUT_DURATION=30
+```
+
+### User Experience
+
+When login is enabled:
+- Users are redirected to `/login` when accessing the application
+- After successful authentication, users can access all features normally
+- Failed login attempts are tracked per IP address
+- After exceeding max attempts, users are temporarily locked out
+- Sessions persist until logout or browser closure
+
+### Security Recommendations
+
+- **Use a strong passcode** - Combine letters, numbers, and symbols
+- **Generate a random session key** - Use a cryptographically secure random string
+- **Configure appropriate lockout settings** - Balance security with user experience
+- **Use HTTPS in production** - Encrypt all communication with SSL/TLS
+- **Regularly rotate credentials** - Change passcode and session key periodically
+
+### Testing Override
+
+During development and testing, authentication is automatically bypassed when the `TESTING` environment variable is set to `true`. This ensures all existing tests continue to work without modification.
 
 ## 🔧 Prerequisites
 
@@ -131,14 +198,19 @@ The application will be available at `http://localhost:5001`
 
 1. **Open the Web Interface**: Navigate to `http://localhost:5001` in your browser
 
-2. **Enter YouTube URLs**: 
+2. **Login (if enabled)**: 
+   - If authentication is enabled, you'll be redirected to the login page
+   - Enter the configured passcode to access the application
+   - You'll be automatically redirected to the main interface
+
+3. **Enter YouTube URLs**: 
    - Paste one or more YouTube video URLs
    - Playlist URLs are also supported
    - Multiple URLs can be entered on separate lines
 
-3. **Generate Summaries**: Click the "Summarize" button to process the videos
+4. **Generate Summaries**: Click the "Summarize" button to process the videos
 
-4. **View Results**: 
+5. **View Results**: 
    - Summaries appear below each video
    - Cached summaries are displayed in the sidebar
    - Click the speaker icon to generate and play audio
@@ -190,6 +262,27 @@ To set up:
 4. **Port Already in Use**
    - Change the port in `docker-compose.yml` or when running the app
    - Example: `python app.py --port 5002`
+
+### Login-Related Issues
+
+5. **Stuck on login page / Invalid passcode**
+   - Verify `LOGIN_CODE` environment variable is set correctly
+   - Ensure `LOGIN_ENABLED=true` is set
+   - Check for typos in the passcode (case-sensitive)
+
+6. **"Too many failed attempts" / Account locked**
+   - Wait for the lockout duration to expire (default: 15 minutes)
+   - Or restart the application to clear the lockout
+   - Reduce `MAX_LOGIN_ATTEMPTS` or increase `LOCKOUT_DURATION` if needed
+
+7. **Session expires immediately**
+   - Ensure `SESSION_SECRET_KEY` is set and consistent
+   - Check that cookies are enabled in your browser
+   - Verify the session key doesn't contain special characters that might cause issues
+
+8. **Login not working in tests**
+   - Tests automatically bypass authentication when `TESTING=true`
+   - This is expected behavior - tests should always pass regardless of login settings
 
 ## 🧪 Testing
 
