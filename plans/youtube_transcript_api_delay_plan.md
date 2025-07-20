@@ -28,10 +28,9 @@ Implement configurable delays between YouTube transcript API calls while maintai
 ### Core Requirements
 1. **Backward Compatibility**: Existing functionality must continue working
 2. **Configurable Delays**: Allow customization of delay intervals
-3. **Smart Rate Limiting**: Implement progressive delays for failures
-4. **Retry Logic**: Add retry mechanism for rate-limited requests
-5. **Performance Optimization**: Minimize impact on single video requests
-6. **Monitoring**: Add logging for rate limiting events
+3. **Smart Rate Limiting**: Implement progressive delays for bulk operations
+4. **Performance Optimization**: Minimize impact on single video requests
+5. **Monitoring**: Add logging for rate limiting events
 
 ## Implementation Phases
 
@@ -48,19 +47,17 @@ Implement configurable delays between YouTube transcript API calls while maintai
 #### Tasks
 1. **Add Configuration Variables**
    - `TRANSCRIPT_API_DELAY_SECONDS` (default: 0.0)
-   - `TRANSCRIPT_API_MAX_RETRIES` (default: 3)
-   - `TRANSCRIPT_API_RETRY_DELAY_SECONDS` (default: 1.0)
-   - `TRANSCRIPT_API_BACKOFF_MULTIPLIER` (default: 2.0)
+   - `TRANSCRIPT_API_ADAPTIVE_DELAY` (default: false)
 
 2. **Create Rate Limiting Helper Functions**
    - `apply_transcript_api_delay()`: Simple delay function
-   - `get_transcript_with_retry()`: Wrapper with retry logic
+   - `get_transcript_with_delay()`: Wrapper with delay logic
    - Update imports to include `time` module
 
 3. **Add Logging Infrastructure**
    - Log API call attempts
    - Log delay applications
-   - Log retry attempts and failures
+   - Log processing timing
 
 #### Files Modified
 - `app.py`: Add configuration variables and helper functions
@@ -77,24 +74,24 @@ Implement configurable delays between YouTube transcript API calls while maintai
 **Rollback**: Restore original function
 
 #### Objectives
-- Replace direct API calls with rate-limited versions
+- Replace direct API calls with delay-aware versions
 - Maintain exact same function signature and behavior
-- Add retry logic for robustness
+- Add timing controls for robustness
 
 #### Tasks
 1. **Modify get_transcript Function**
-   - Replace `YouTubeTranscriptApi.get_transcript()` calls with `get_transcript_with_retry()`
-   - Replace `YouTubeTranscriptApi.list_transcripts()` calls with rate-limited versions
+   - Apply delays before `YouTubeTranscriptApi.get_transcript()` calls
+   - Apply delays before `YouTubeTranscriptApi.list_transcripts()` calls
    - Maintain exact same return format and error handling
 
-2. **Implement Smart Retry Logic**
-   - Catch rate limiting exceptions
-   - Implement exponential backoff
-   - Respect maximum retry limits
+2. **Implement Smart Delay Logic**
+   - Track consecutive API calls
+   - Apply configurable delays between calls
+   - Skip delays for first call in sequence
 
 3. **Add Performance Monitoring**
    - Track API call duration
-   - Monitor retry frequency
+   - Monitor delay frequency
    - Log successful vs failed attempts
 
 #### Files Modified
@@ -105,6 +102,7 @@ Implement configurable delays between YouTube transcript API calls while maintai
 - Test error cases (no transcript, disabled transcripts)
 - Verify return values match exactly
 - Test with various delay configurations
+- Verify delays are applied correctly
 
 ### Phase 3: Playlist Processing Optimization (Medium Risk)
 **Duration**: 2-3 hours
@@ -208,14 +206,12 @@ Implement configurable delays between YouTube transcript API calls while maintai
 ```bash
 # Basic delay configuration
 TRANSCRIPT_API_DELAY_SECONDS=1.0          # Delay between API calls
-TRANSCRIPT_API_MAX_RETRIES=3              # Maximum retry attempts
-TRANSCRIPT_API_RETRY_DELAY_SECONDS=2.0    # Initial retry delay
-TRANSCRIPT_API_BACKOFF_MULTIPLIER=2.0     # Backoff multiplier for retries
+TRANSCRIPT_API_ADAPTIVE_DELAY=false       # Enable adaptive delays
 
 # Advanced configuration
-TRANSCRIPT_API_ADAPTIVE_DELAY=true        # Enable adaptive delays
 TRANSCRIPT_API_GLOBAL_RATE_LIMIT=true     # Enable global rate limiting
 TRANSCRIPT_API_LOG_LEVEL=INFO             # Logging level for API calls
+TRANSCRIPT_API_MAX_DELAY_SECONDS=10.0     # Maximum delay for adaptive mode
 ```
 
 ### Default Values
@@ -234,7 +230,7 @@ TRANSCRIPT_API_LOG_LEVEL=INFO             # Logging level for API calls
 ### Medium Risk Components
 - Modifying `get_transcript()` function
 - Playlist processing changes
-- Retry logic implementation
+- Delay timing implementation
 
 ### High Risk Components
 - None (all changes designed to be low-risk)
@@ -255,14 +251,14 @@ TRANSCRIPT_API_LOG_LEVEL=INFO             # Logging level for API calls
 ## Success Metrics
 
 ### Performance Metrics
-- API call success rate: >95%
-- Average response time: <10% increase
-- Retry frequency: <5% of total calls
+- API call success rate: Maintain existing levels
+- Average response time: <20% increase (due to delays)
+- Delay application frequency: 100% for consecutive calls
 
 ### Functional Metrics
 - Zero functionality regressions
-- Improved error handling for rate-limited scenarios
 - Configurable delay ranges from 0-10 seconds
+- Consistent delay application for bulk operations
 
 ### User Experience Metrics
 - Playlist processing completion rate: >98%
@@ -273,7 +269,7 @@ TRANSCRIPT_API_LOG_LEVEL=INFO             # Logging level for API calls
 
 ### Unit Tests
 - Test delay functions in isolation
-- Test retry logic with mocked failures
+- Test delay timing accuracy
 - Test configuration loading
 
 ### Integration Tests
@@ -291,13 +287,13 @@ TRANSCRIPT_API_LOG_LEVEL=INFO             # Logging level for API calls
 ### Key Metrics to Monitor
 - YouTube transcript API call frequency
 - API error rates and types
-- Retry attempt frequency
-- Average delay application times
+- Delay application frequency
+- Average delay duration
 - Queue processing times
 
 ### Alerts
 - High API error rates (>10%)
-- Excessive retry attempts (>20% of calls)
+- Excessive processing delays (>expected timeframes)
 - Processing timeouts
 - Configuration issues
 
