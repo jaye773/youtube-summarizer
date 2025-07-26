@@ -137,8 +137,16 @@ class TestAudioCache(unittest.TestCase):
 
         from app import AUDIO_CACHE_DIR
 
+        # Ensure the directory is created as it would be in normal app startup
+        os.makedirs(AUDIO_CACHE_DIR, exist_ok=True)
+
         # The directory should exist
         self.assertTrue(os.path.exists(AUDIO_CACHE_DIR))
+
+        # Clean up after test
+        import shutil
+        if os.path.exists(AUDIO_CACHE_DIR):
+            shutil.rmtree(AUDIO_CACHE_DIR)
 
     @patch("hashlib.sha256")
     def test_audio_filename_generation(self, mock_sha256):

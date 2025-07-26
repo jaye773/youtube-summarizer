@@ -107,6 +107,67 @@ When login is enabled:
 
 During development and testing, authentication is automatically bypassed when the `TESTING` environment variable is set to `true`. This ensures all existing tests continue to work without modification.
 
+## 🌐 Webshare Proxy Support
+
+YouTube Summarizer supports using webshare proxies for fetching YouTube transcripts. This can help bypass IP restrictions, rate limiting, or geographic blocks that may prevent transcript retrieval from certain server environments.
+
+### Proxy Configuration
+
+Configure webshare proxy support using these environment variables:
+
+```bash
+WEBSHARE_PROXY_ENABLED=true                    # Enable/disable proxy (default: false)
+WEBSHARE_PROXY_HOST=proxy.webshare.io         # Proxy server hostname
+WEBSHARE_PROXY_PORT=8080                      # Proxy server port
+WEBSHARE_PROXY_USERNAME=your_username         # Webshare proxy username
+WEBSHARE_PROXY_PASSWORD=your_password         # Webshare proxy password
+```
+
+### Setup Examples
+
+**Docker Compose** - Add to your `.env` file:
+```bash
+GOOGLE_API_KEY=your_google_api_key_here
+WEBSHARE_PROXY_ENABLED=true
+WEBSHARE_PROXY_HOST=proxy.webshare.io
+WEBSHARE_PROXY_PORT=8080
+WEBSHARE_PROXY_USERNAME=myusername
+WEBSHARE_PROXY_PASSWORD=mypassword
+```
+
+**Manual Setup** - Export environment variables:
+```bash
+export WEBSHARE_PROXY_ENABLED=true
+export WEBSHARE_PROXY_HOST="proxy.webshare.io"
+export WEBSHARE_PROXY_PORT="8080"
+export WEBSHARE_PROXY_USERNAME="myusername"
+export WEBSHARE_PROXY_PASSWORD="mypassword"
+```
+
+### When to Use Proxies
+
+Consider enabling proxy support when:
+- Transcript fetching fails with "YouTube is temporarily blocking requests" errors
+- Running the application on cloud servers (AWS EC2, Google Cloud, etc.)
+- Experiencing rate limiting from YouTube's transcript API
+- Working with videos that may have geographic restrictions
+
+### Security Recommendations
+
+- **Keep proxy credentials secure** - Store them in environment variables, not in code
+- **Use reputable proxy providers** - Choose trusted services like Webshare.io
+- **Monitor proxy usage** - Track bandwidth and request costs
+- **Test thoroughly** - Verify transcript fetching works both with and without proxies
+
+### Troubleshooting
+
+If you experience issues with proxy configuration:
+1. Verify all proxy environment variables are set correctly
+2. Check proxy credentials with your webshare provider
+3. Ensure the proxy service is active and has available bandwidth
+4. Test without proxy first to isolate issues
+5. Check application logs for proxy-related error messages
+
 ## 🔧 Prerequisites
 
 - Google API Key with access to:
