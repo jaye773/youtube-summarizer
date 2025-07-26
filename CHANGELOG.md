@@ -8,10 +8,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Webshare Proxy Support**: Added support for using webshare proxies for YouTube transcript fetching
+  - New environment variables: `WEBSHARE_PROXY_ENABLED`, `WEBSHARE_PROXY_HOST`, `WEBSHARE_PROXY_PORT`, `WEBSHARE_PROXY_USERNAME`, `WEBSHARE_PROXY_PASSWORD`
+  - Helps bypass IP restrictions, rate limiting, and geographic blocks when fetching transcripts
+  - Comprehensive test suite for proxy configuration and functionality
+  - Documentation added to README.md with setup examples and troubleshooting guide
+
 ### Changed
 ### Deprecated
 ### Removed
 ### Fixed
+- Fixed audio cache directory creation test that was failing in test environment
 ### Security
 
 ## [1.0.0] - 2025-06-21
