@@ -29,16 +29,18 @@ def demonstrate_proxy_configuration():
     print("YouTube Summarizer - Webshare Proxy Demo")
     print("=" * 60)
     print()
-    
+
     # Check current proxy configuration
     print("Current proxy configuration:")
     print(f"  WEBSHARE_PROXY_ENABLED: {app.WEBSHARE_PROXY_ENABLED}")
     print(f"  WEBSHARE_PROXY_HOST: {app.WEBSHARE_PROXY_HOST or 'Not set'}")
     print(f"  WEBSHARE_PROXY_PORT: {app.WEBSHARE_PROXY_PORT or 'Not set'}")
     print(f"  WEBSHARE_PROXY_USERNAME: {app.WEBSHARE_PROXY_USERNAME or 'Not set'}")
-    print(f"  WEBSHARE_PROXY_PASSWORD: {'*' * len(app.WEBSHARE_PROXY_PASSWORD) if app.WEBSHARE_PROXY_PASSWORD else 'Not set'}")
+    print(
+        f"  WEBSHARE_PROXY_PASSWORD: {'*' * len(app.WEBSHARE_PROXY_PASSWORD) if app.WEBSHARE_PROXY_PASSWORD else 'Not set'}"
+    )
     print()
-    
+
     # Test proxy configuration
     proxy_config = app.get_proxy_config()
     if proxy_config:
@@ -62,15 +64,15 @@ def test_transcript_fetching():
     """Test transcript fetching with current configuration"""
     print("Testing transcript fetching...")
     print("-" * 40)
-    
+
     # Test with a well-known video that should have transcripts
     test_video_id = "dQw4w9WgXcQ"  # Rick Astley - Never Gonna Give You Up
-    
+
     print(f"Attempting to fetch transcript for video: {test_video_id}")
-    
+
     try:
         transcript, error = app.get_transcript(test_video_id)
-        
+
         if transcript:
             print("✅ Transcript fetched successfully!")
             print(f"   Length: {len(transcript)} characters")
@@ -78,11 +80,11 @@ def test_transcript_fetching():
         else:
             print("❌ Failed to fetch transcript")
             print(f"   Error: {error}")
-            
+
     except Exception as e:
         print("❌ Exception occurred while fetching transcript")
         print(f"   Error: {e}")
-    
+
     print()
 
 
@@ -91,7 +93,7 @@ def show_configuration_examples():
     print("Configuration Examples:")
     print("-" * 40)
     print()
-    
+
     print("1. Environment Variables (.env file):")
     print("   WEBSHARE_PROXY_ENABLED=true")
     print("   WEBSHARE_PROXY_HOST=proxy.webshare.io")
@@ -99,7 +101,7 @@ def show_configuration_examples():
     print("   WEBSHARE_PROXY_USERNAME=your_username")
     print("   WEBSHARE_PROXY_PASSWORD=your_password")
     print()
-    
+
     print("2. Command Line Export:")
     print("   export WEBSHARE_PROXY_ENABLED=true")
     print("   export WEBSHARE_PROXY_HOST=proxy.webshare.io")
@@ -107,7 +109,7 @@ def show_configuration_examples():
     print("   export WEBSHARE_PROXY_USERNAME=your_username")
     print("   export WEBSHARE_PROXY_PASSWORD=your_password")
     print()
-    
+
     print("3. Docker Compose (.env file):")
     print("   GOOGLE_API_KEY=your_google_api_key")
     print("   WEBSHARE_PROXY_ENABLED=true")
@@ -123,7 +125,7 @@ def main():
     demonstrate_proxy_configuration()
     test_transcript_fetching()
     show_configuration_examples()
-    
+
     print("For more information, see the README.md file:")
     print("https://github.com/your-repo/youtube-summarizer#webshare-proxy-support")
 

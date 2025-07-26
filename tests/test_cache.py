@@ -145,6 +145,7 @@ class TestAudioCache(unittest.TestCase):
 
         # Clean up after test
         import shutil
+
         if os.path.exists(AUDIO_CACHE_DIR):
             shutil.rmtree(AUDIO_CACHE_DIR)
 
