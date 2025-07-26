@@ -18,6 +18,30 @@ from youtube_transcript_api import NoTranscriptFound, TranscriptsDisabled, YouTu
 # --- CONFIGURATION ---
 app = Flask(__name__)
 
+# --- WEBSHARE PROXY CONFIGURATION ---
+WEBSHARE_PROXY_ENABLED = os.environ.get("WEBSHARE_PROXY_ENABLED", "false").lower() == "true"
+WEBSHARE_PROXY_HOST = os.environ.get("WEBSHARE_PROXY_HOST")
+WEBSHARE_PROXY_PORT = os.environ.get("WEBSHARE_PROXY_PORT")
+WEBSHARE_PROXY_USERNAME = os.environ.get("WEBSHARE_PROXY_USERNAME")
+WEBSHARE_PROXY_PASSWORD = os.environ.get("WEBSHARE_PROXY_PASSWORD")
+
+def get_proxy_config():
+    """Get proxy configuration if webshare proxy is enabled and properly configured"""
+    if not WEBSHARE_PROXY_ENABLED:
+        return None
+    
+    if not all([WEBSHARE_PROXY_HOST, WEBSHARE_PROXY_PORT, WEBSHARE_PROXY_USERNAME, WEBSHARE_PROXY_PASSWORD]):
+        print("⚠️ Webshare proxy is enabled but missing required configuration. Required: WEBSHARE_PROXY_HOST, WEBSHARE_PROXY_PORT, WEBSHARE_PROXY_USERNAME, WEBSHARE_PROXY_PASSWORD")
+        return None
+    
+    proxy_url = f"http://{WEBSHARE_PROXY_USERNAME}:{WEBSHARE_PROXY_PASSWORD}@{WEBSHARE_PROXY_HOST}:{WEBSHARE_PROXY_PORT}"
+    proxies = {
+        "http": proxy_url,
+        "https": proxy_url
+    }
+    print(f"✅ Using webshare proxy: {WEBSHARE_PROXY_USERNAME}@{WEBSHARE_PROXY_HOST}:{WEBSHARE_PROXY_PORT}")
+    return proxies
+
 # --- CACHE CONFIGURATION ---
 # Use data directory if running in Docker/Podman, otherwise use current directory
 DATA_DIR = os.environ.get("DATA_DIR", "data" if os.path.exists("/.dockerenv") else ".")
@@ -273,13 +297,17 @@ def get_videos_from_playlist(playlist_id):
 def get_transcript(video_id):
     if not video_id:
         return None, "No video ID provided"
+    
+    # Get proxy configuration if available
+    proxies = get_proxy_config()
+    
     try:
-        transcript_list = YouTubeTranscriptApi.get_transcript(video_id, languages=["en", "en-US"])
+        transcript_list = YouTubeTranscriptApi.get_transcript(video_id, languages=["en", "en-US"], proxies=proxies)
         transcript_text = " ".join([d["text"] for d in transcript_list])
         return (transcript_text, None) if transcript_text.strip() else (None, "Transcript was found but it is empty.")
     except NoTranscriptFound:
         try:
-            transcript_list = YouTubeTranscriptApi.list_transcripts(video_id).find_transcript(["en"]).fetch()
+            transcript_list = YouTubeTranscriptApi.list_transcripts(video_id, proxies=proxies).find_transcript(["en"]).fetch()
             transcript_text = " ".join([d["text"] for d in transcript_list])
             return (
                 (transcript_text, None)
