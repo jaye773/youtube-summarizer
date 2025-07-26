@@ -15,12 +15,28 @@ from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 from youtube_transcript_api import NoTranscriptFound, TranscriptsDisabled, YouTubeTranscriptApi
 
+# Import the new settings system
+from settings_config import get_setting, load_settings, save_settings
+
 # --- CONFIGURATION ---
 app = Flask(__name__)
 
 # --- CACHE CONFIGURATION ---
-# Use data directory if running in Docker/Podman, otherwise use current directory
-DATA_DIR = os.environ.get("DATA_DIR", "data" if os.path.exists("/.dockerenv") else ".")
+# Initialize settings and perform migration if needed
+app_settings = load_settings()
+
+# Check if we need to perform initial migration
+default_data_dir = "data" if os.path.exists("/.dockerenv") else "."
+settings_file_path = os.path.join(default_data_dir, "settings.json")
+
+if not os.path.exists(settings_file_path):
+    print("🔄 Performing initial settings migration...")
+    current_settings = load_settings()
+    save_settings(current_settings)
+    print("✅ Settings migration completed")
+
+# Use settings for configuration
+DATA_DIR = get_setting("data_dir", default_data_dir)
 os.makedirs(DATA_DIR, exist_ok=True)
 SUMMARY_CACHE_FILE = os.path.join(DATA_DIR, "summary_cache.json")
 LOGIN_ATTEMPTS_FILE = os.path.join(DATA_DIR, "login_attempts.json")
@@ -144,11 +160,11 @@ print(f"✅ Loaded {len(summary_cache)} summaries from cache.")
 
 
 # --- LOGIN CONFIGURATION ---
-LOGIN_ENABLED = os.environ.get("LOGIN_ENABLED", "false").lower() == "true"
-LOGIN_CODE = os.environ.get("LOGIN_CODE", "")
-SESSION_SECRET_KEY = os.environ.get("SESSION_SECRET_KEY", "")
-MAX_LOGIN_ATTEMPTS = int(os.environ.get("MAX_LOGIN_ATTEMPTS", "5"))
-LOCKOUT_DURATION = int(os.environ.get("LOCKOUT_DURATION", "15"))  # minutes
+LOGIN_ENABLED = get_setting("login_enabled", False)
+LOGIN_CODE = get_setting("login_code", "")
+SESSION_SECRET_KEY = get_setting("session_secret_key", "")
+MAX_LOGIN_ATTEMPTS = get_setting("max_login_attempts", 5)
+LOCKOUT_DURATION = get_setting("lockout_duration", 15)  # minutes
 
 # Configure Flask session
 if LOGIN_ENABLED:
@@ -167,13 +183,13 @@ if LOGIN_ENABLED:
 
 
 # --- API CLIENT INITIALIZATION ---
-api_key = os.environ.get("GOOGLE_API_KEY")
+api_key = get_setting("google_api_key", "")
 tts_client = None
 youtube = None
 model = None
 
 # Only initialize API clients if API key is available and we're not in test mode
-if api_key and not os.environ.get("TESTING"):
+if api_key and api_key.strip() and not os.environ.get("TESTING"):
     try:
         tts_client = texttospeech.TextToSpeechClient(client_options=ClientOptions(api_key=api_key))
         genai.configure(api_key=api_key)
@@ -181,8 +197,8 @@ if api_key and not os.environ.get("TESTING"):
         model = genai.GenerativeModel(model_name="gemini-2.5-flash-preview-05-20")
     except Exception as e:
         print(f"Warning: Could not configure APIs. Error: {e}")
-elif not api_key and not os.environ.get("TESTING"):
-    print("Warning: GOOGLE_API_KEY environment variable is not set. Some features will be unavailable.")
+elif (not api_key or not api_key.strip()) and not os.environ.get("TESTING"):
+    print("Warning: Google API Key is not set in settings. Some features will be unavailable.")
 
 # For testing, create the model even without API key
 if os.environ.get("TESTING") and not model:
@@ -604,11 +620,13 @@ def search_summaries():
 def api_status():
     """Return the status of various API components"""
     status = {
-        "google_api_key_set": bool(api_key),
+        "google_api_key_set": bool(api_key and api_key.strip()),
         "youtube_client_initialized": youtube is not None,
         "tts_client_initialized": tts_client is not None,
         "ai_model_initialized": model is not None,
         "testing_mode": bool(os.environ.get("TESTING")),
+        "settings_system_enabled": True,
+        "settings_file_exists": os.path.exists(settings_file_path),
     }
     return jsonify(status)
 
