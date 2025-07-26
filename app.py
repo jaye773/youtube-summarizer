@@ -333,6 +333,11 @@ def get_transcript(video_id):
 def generate_summary(transcript, title):
     if not transcript:
         return None, "Cannot generate summary from empty transcript."
+    
+    # Check if AI model is available
+    if not model:
+        return None, "AI model not available. Please set the GOOGLE_API_KEY environment variable."
+    
     prompt_update = f"""
     **Your Role:** You are an expert content summarizer, specializing in transforming detailed video transcripts
     into a single, cohesive, and engaging audio-friendly summary. Your goal is to create a narrative that is not
@@ -910,6 +915,11 @@ def speak():
         return Response(audio_content, mimetype="audio/mpeg")
 
     print(f"AUDIO CACHE MISS for file: {filename}. Generating...")
+    
+    # Check if TTS client is available
+    if not tts_client:
+        return Response("Text-to-speech service not available. Please set the GOOGLE_API_KEY environment variable.", status=503)
+    
     try:
         synthesis_input = texttospeech.SynthesisInput(text=text_to_speak)
         voice = texttospeech.VoiceSelectionParams(language_code="en-US", name="en-US-Studio-O")
