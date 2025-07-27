@@ -13,7 +13,9 @@ from settings_config import (
     validate_settings,
     reset_settings,
     export_settings,
-    import_settings
+    import_settings,
+    needs_migration,
+    migrate_from_environment
 )
 
 
@@ -235,6 +237,64 @@ class TestSettingsConfig(unittest.TestCase):
         success, errors = self.settings_manager.import_settings(invalid_data)
         self.assertFalse(success)
         self.assertGreater(len(errors), 0)
+    
+    def test_migration_functionality(self):
+        """Test environment variable migration functionality"""
+        # Test with environment variables set
+        with patch.dict(os.environ, {
+            "GOOGLE_API_KEY": "env_api_key",
+            "LOGIN_ENABLED": "true",
+            "MAX_LOGIN_ATTEMPTS": "10",
+            "THEME": "dark"  # This doesn't have an env_var mapping, should be ignored
+        }):
+            # Test needs_migration when no file exists
+            self.assertTrue(self.settings_manager.needs_migration())
+            
+            # Perform migration
+            success = self.settings_manager.migrate_from_environment()
+            self.assertTrue(success)
+            
+            # Verify migrated values
+            settings = self.settings_manager.load_settings()
+            self.assertEqual(settings["google_api_key"], "env_api_key")
+            self.assertEqual(settings["login_enabled"], True)
+            self.assertEqual(settings["max_login_attempts"], 10)
+            self.assertEqual(settings["theme"], "light")  # Default value since THEME env var doesn't map
+            
+            # Test needs_migration when file exists and env vars are same as file
+            # Clear the cache first to ensure fresh load
+            self.settings_manager._settings_cache = None
+            self.assertFalse(self.settings_manager.needs_migration())
+        
+        # Test migration with changed env var
+        with patch.dict(os.environ, {
+            "GOOGLE_API_KEY": "env_api_key",  # Same as before
+            "LOGIN_ENABLED": "true",  # Same as before
+            "MAX_LOGIN_ATTEMPTS": "15",  # Changed value
+        }):
+            self.assertTrue(self.settings_manager.needs_migration())
+            success = self.settings_manager.migrate_from_environment()
+            self.assertTrue(success)
+            
+            updated_settings = self.settings_manager.load_settings()
+            self.assertEqual(updated_settings["max_login_attempts"], 15)
+    
+    @patch.dict(os.environ, {}, clear=True)
+    def test_no_migration_needed(self):
+        """Test that no migration is performed when no env vars are set"""
+        # Create a settings file with some data
+        initial_settings = {}
+        for key, schema in SETTINGS_SCHEMA.items():
+            initial_settings[key] = schema["default"]
+        
+        self.settings_manager.save_settings(initial_settings)
+        
+        # Should not need migration
+        self.assertFalse(self.settings_manager.needs_migration())
+        
+        # Migration should still succeed (no-op)
+        success = self.settings_manager.migrate_from_environment()
+        self.assertTrue(success)
 
 
 class TestConvenienceFunctions(unittest.TestCase):
@@ -279,6 +339,8 @@ class TestConvenienceFunctions(unittest.TestCase):
         self.assertTrue(callable(reset_settings))
         self.assertTrue(callable(export_settings))
         self.assertTrue(callable(import_settings))
+        self.assertTrue(callable(needs_migration))
+        self.assertTrue(callable(migrate_from_environment))
 
 
 if __name__ == "__main__":

@@ -350,6 +350,84 @@ class SettingsManager:
             Settings schema dictionary
         """
         return SETTINGS_SCHEMA.copy()
+    
+    def needs_migration(self) -> bool:
+        """Check if environment variables need to be migrated to settings file
+        
+        Returns:
+            True if migration is needed, False otherwise
+        """
+        if not os.path.exists(self.settings_file):
+            # File doesn't exist, check if any env vars are set
+            for key, schema_item in SETTINGS_SCHEMA.items():
+                env_var = schema_item.get("env_var")
+                if env_var and os.environ.get(env_var) is not None:
+                    return True
+            return False
+        
+        # File exists, check if any env vars are set but not in file
+        file_settings = self._load_settings_from_file()
+        for key, schema_item in SETTINGS_SCHEMA.items():
+            env_var = schema_item.get("env_var")
+            if env_var and os.environ.get(env_var) is not None:
+                # Env var is set, check if it's different from file setting
+                if key not in file_settings:
+                    # Setting not in file but env var exists
+                    return True
+                # Also check if env var value differs from file value
+                env_value = self._get_env_value(key, schema_item)
+                if env_value != file_settings[key]:
+                    return True
+        
+        return False
+    
+    def migrate_from_environment(self) -> bool:
+        """Migrate environment variables to settings file
+        
+        Returns:
+            True if migration was successful, False otherwise
+        """
+        # If file doesn't exist, check if any env vars are set and create file
+        if not os.path.exists(self.settings_file):
+            has_env_vars = False
+            for key, schema_item in SETTINGS_SCHEMA.items():
+                env_var = schema_item.get("env_var")
+                if env_var and os.environ.get(env_var) is not None:
+                    has_env_vars = True
+                    print(f"🔄 Migrated {key} from environment variable {env_var}")
+            
+            if has_env_vars:
+                current_settings = self.load_settings()  # This will merge env vars with defaults
+                success = self.save_settings(current_settings)
+                if success:
+                    print("✅ Environment variable migration completed")
+                return success
+            return True  # No env vars set, no migration needed
+        
+        # File exists, check if any env vars differ from file settings
+        file_settings = self._load_settings_from_file()
+        current_settings = self.load_settings()  # This includes env var merging
+        migration_occurred = False
+        
+        for key, schema_item in SETTINGS_SCHEMA.items():
+            env_var = schema_item.get("env_var")
+            if env_var and os.environ.get(env_var) is not None:
+                env_value = self._get_env_value(key, schema_item)
+                file_value = file_settings.get(key)
+                
+                # If env var differs from what's in file, update it
+                if file_value != env_value:
+                    current_settings[key] = env_value
+                    migration_occurred = True
+                    print(f"🔄 Migrated {key} from environment variable {env_var}")
+        
+        if migration_occurred:
+            success = self.save_settings(current_settings)
+            if success:
+                print("✅ Environment variable migration completed")
+            return success
+        
+        return True  # No migration needed is also success
 
 
 # Global settings manager instance
@@ -403,3 +481,13 @@ def export_settings(include_sensitive: bool = False) -> Dict[str, Any]:
 def import_settings(settings_dict: Dict[str, Any]) -> tuple[bool, List[str]]:
     """Import settings with validation"""
     return get_settings_manager().import_settings(settings_dict)
+
+
+def needs_migration() -> bool:
+    """Check if environment variables need to be migrated to settings file"""
+    return get_settings_manager().needs_migration()
+
+
+def migrate_from_environment() -> bool:
+    """Migrate environment variables to settings file"""
+    return get_settings_manager().migrate_from_environment()

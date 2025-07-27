@@ -16,7 +16,7 @@ from googleapiclient.errors import HttpError
 from youtube_transcript_api import NoTranscriptFound, TranscriptsDisabled, YouTubeTranscriptApi
 
 # Import the new settings system
-from settings_config import get_setting, load_settings, save_settings
+from settings_config import get_setting, load_settings, save_settings, needs_migration, migrate_from_environment
 
 # --- CONFIGURATION ---
 app = Flask(__name__)
@@ -25,15 +25,14 @@ app = Flask(__name__)
 # Initialize settings and perform migration if needed
 app_settings = load_settings()
 
-# Check if we need to perform initial migration
+# Check if we need to perform environment variable migration
+if needs_migration():
+    print("🔄 Performing environment variable migration...")
+    migrate_from_environment()
+
+# Set up settings file path for other parts of the app
 default_data_dir = "data" if os.path.exists("/.dockerenv") else "."
 settings_file_path = os.path.join(default_data_dir, "settings.json")
-
-if not os.path.exists(settings_file_path):
-    print("🔄 Performing initial settings migration...")
-    current_settings = load_settings()
-    save_settings(current_settings)
-    print("✅ Settings migration completed")
 
 # Use settings for configuration
 DATA_DIR = get_setting("data_dir", default_data_dir)
