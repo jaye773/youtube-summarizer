@@ -578,6 +578,7 @@ def get_cached_summaries():
     cached_list = [
         {
             "type": "video",
+            "video_id": video_id,
             "title": d["title"],
             "thumbnail_url": d["thumbnail_url"],
             "summary": d["summary"],
@@ -585,7 +586,7 @@ def get_cached_summaries():
             "video_url": d.get("video_url"),
             "error": None,
         }
-        for d in summary_cache.values()
+        for video_id, d in summary_cache.items()
     ]
     cached_list.sort(key=lambda x: x.get("summarized_at", "1970-01-01T00:00:00.000000"), reverse=True)
 
@@ -945,6 +946,54 @@ def speak():
         return Response(f"Failed to generate audio: {e}", status=500)
 
 
+@app.route("/delete_summary", methods=["DELETE"])
+@require_auth
+def delete_summary():
+    """Delete a summary from the cache by video_id"""
+    try:
+        # Try to get JSON data
+        try:
+            data = request.get_json(force=True)
+        except Exception:
+            return jsonify({"error": "Invalid JSON in request body"}), 400
+
+        if data is None:
+            return jsonify({"error": "Invalid JSON in request body"}), 400
+
+        video_id = data.get("video_id")
+        if not video_id:
+            return jsonify({"error": "video_id is required"}), 400
+
+        if video_id not in summary_cache:
+            return jsonify({"error": "Summary not found"}), 404
+
+        # Get the audio filename before deleting from cache
+        cached_item = summary_cache[video_id]
+        audio_filename = cached_item.get("audio_filename")
+
+        # Remove from cache
+        del summary_cache[video_id]
+
+        # Save the updated cache
+        save_summary_cache(summary_cache)
+
+        # Try to delete the associated audio file if it exists
+        if audio_filename:
+            audio_filepath = os.path.join(AUDIO_CACHE_DIR, audio_filename)
+            if os.path.exists(audio_filepath):
+                try:
+                    os.remove(audio_filepath)
+                    print(f"Deleted audio file: {audio_filepath}")
+                except Exception as e:
+                    print(f"Warning: Could not delete audio file {audio_filepath}: {e}")
+
+        return jsonify({"success": True, "message": f"Summary for video {video_id} deleted successfully"})
+
+    except Exception as e:
+        print(f"Error in delete_summary endpoint: {e}")
+        return jsonify({"error": "Failed to delete summary", "message": str(e)}), 500
+
+
 # Error handlers to ensure JSON responses for API endpoints
 @app.errorhandler(400)
 def bad_request(e):
@@ -958,6 +1007,7 @@ def bad_request(e):
         "/login",
         "/logout",
         "/login_status",
+        "/delete_summary",
     ]
     if any(request.path.startswith(path) for path in api_paths):
         return jsonify({"error": "Bad request", "message": str(e), "stacktrace": traceback.format_exc()}), 400
@@ -976,6 +1026,7 @@ def not_found(e):
         "/login",
         "/logout",
         "/login_status",
+        "/delete_summary",
     ]
     if any(request.path.startswith(path) for path in api_paths):
         return jsonify({"error": "Endpoint not found", "message": str(e), "path": request.path}), 404
@@ -994,6 +1045,7 @@ def server_error(e):
         "/login",
         "/logout",
         "/login_status",
+        "/delete_summary",
     ]
     if any(request.path.startswith(path) for path in api_paths):
         return jsonify({"error": "Internal server error", "message": str(e), "stacktrace": traceback.format_exc()}), 500
@@ -1014,6 +1066,7 @@ def handle_exception(e):
         "/login",
         "/logout",
         "/login_status",
+        "/delete_summary",
     ]
     if any(request.path.startswith(path) for path in api_paths):
         return (

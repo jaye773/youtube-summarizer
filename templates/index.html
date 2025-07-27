@@ -394,6 +394,55 @@
             }
         }
 
+        // --- Delete Summary Handler ---
+        async function handleDeleteClick(button, videoId, card) {
+            if (!confirm('Are you sure you want to delete this summary? This action cannot be undone.')) {
+                return;
+            }
+            
+            // Disable the button and show loading state
+            button.disabled = true;
+            const originalText = button.textContent;
+            button.textContent = '⏳';
+            
+            try {
+                const response = await fetch('/delete_summary', {
+                    method: 'DELETE',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ video_id: videoId }),
+                });
+                
+                const contentType = response.headers.get('content-type');
+                if (!contentType || !contentType.includes('application/json')) {
+                    throw new Error('Server returned an error page. The server might be experiencing issues.');
+                }
+                
+                const data = await response.json();
+                
+                if (!response.ok) {
+                    throw new Error(data.error || 'Failed to delete summary');
+                }
+                
+                // Remove the card from the DOM with a fade effect
+                card.style.transition = 'opacity 0.3s ease-out';
+                card.style.opacity = '0';
+                setTimeout(() => {
+                    if (card.parentNode) {
+                        card.parentNode.removeChild(card);
+                    }
+                }, 300);
+                
+                console.log('Summary deleted successfully:', data.message);
+                
+            } catch (error) {
+                console.error('Error deleting summary:', error);
+                alert(`Failed to delete summary: ${error.message}`);
+                // Restore button state on error
+                button.textContent = originalText;
+                button.disabled = false;
+            }
+        }
+
         // --- HTML Creation and Display Logic ---
         function displayResults(data, container, prepend = false) {
             if (data.length === 0) return;
@@ -471,6 +520,17 @@
                 speakBtn.title = 'Read summary aloud';
                 speakBtn.onclick = () => handleSpeakClick(speakBtn, summary);
                 headerDiv.appendChild(speakBtn);
+                
+                // Add delete button if we have a video ID
+                if (videoId) {
+                    const deleteBtn = document.createElement('button');
+                    deleteBtn.className = 'speak-btn'; // Reuse the same styling
+                    deleteBtn.textContent = '🗑️';
+                    deleteBtn.title = 'Delete this summary';
+                    deleteBtn.style.color = '#e74c3c';
+                    deleteBtn.onclick = () => handleDeleteClick(deleteBtn, videoId, card);
+                    headerDiv.appendChild(deleteBtn);
+                }
                 
                 // Create progress bar elements
                 const progressContainer = document.createElement('div');

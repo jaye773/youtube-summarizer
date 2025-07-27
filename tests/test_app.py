@@ -84,6 +84,7 @@ class TestYouTubeSummarizer(unittest.TestCase):
             self.assertEqual(len(data), 1)
             self.assertEqual(data[0]["title"], "Test Video")
             self.assertEqual(data[0]["video_url"], "https://www.youtube.com/watch?v=video1")
+            self.assertEqual(data[0]["video_id"], "video1")  # Verify video_id is included
 
     def test_summarize_no_urls(self):
         """Test summarize endpoint with no URLs provided"""
@@ -550,6 +551,222 @@ class TestYouTubeSummarizer(unittest.TestCase):
         self.assertEqual(data["video_title"], "Test Video")
         self.assertTrue(data["transcript_success"])
         self.assertEqual(data["transcript_length"], 15)  # Length of "Test transcript"
+
+    # --- DELETE SUMMARY TESTS ---
+    @patch("app.summary_cache", {})
+    @patch("app.save_summary_cache")
+    @patch("os.path.exists")
+    @patch("os.remove")
+    def test_delete_summary_success(self, mock_remove, mock_exists, mock_save_cache):
+        """Test successful deletion of a summary"""
+        # Set up test data
+        test_video_id = "test_video_123"
+        test_cache = {
+            test_video_id: {
+                "title": "Test Video",
+                "summary": "Test summary",
+                "thumbnail_url": "http://example.com/thumb.jpg",
+                "audio_filename": "test_audio.mp3",
+                "summarized_at": "2023-01-01T00:00:00.000000",
+                "video_url": f"https://www.youtube.com/watch?v={test_video_id}",
+            }
+        }
+
+        with patch("app.summary_cache", test_cache):
+            # Mock audio file exists and removal
+            mock_exists.return_value = True
+
+            response = self.client.delete(
+                "/delete_summary", json={"video_id": test_video_id}, content_type="application/json"
+            )
+
+            # Check response
+            self.assertEqual(response.status_code, 200)
+            data = json.loads(response.data)
+            self.assertTrue(data["success"])
+            self.assertIn("deleted successfully", data["message"])
+
+            # Verify cache was updated
+            mock_save_cache.assert_called_once()
+
+            # Verify audio file removal was attempted
+            mock_remove.assert_called_once()
+
+    @patch("app.summary_cache", {})
+    def test_delete_summary_not_found(self):
+        """Test deletion of non-existent summary"""
+        response = self.client.delete(
+            "/delete_summary", json={"video_id": "nonexistent_video"}, content_type="application/json"
+        )
+
+        self.assertEqual(response.status_code, 404)
+        data = json.loads(response.data)
+        self.assertEqual(data["error"], "Summary not found")
+
+    def test_delete_summary_missing_video_id(self):
+        """Test deletion without video_id parameter"""
+        response = self.client.delete("/delete_summary", json={}, content_type="application/json")
+
+        self.assertEqual(response.status_code, 400)
+        data = json.loads(response.data)
+        self.assertEqual(data["error"], "video_id is required")
+
+    def test_delete_summary_invalid_json(self):
+        """Test deletion with invalid JSON"""
+        response = self.client.delete("/delete_summary", data="invalid json", content_type="application/json")
+
+        self.assertEqual(response.status_code, 400)
+        data = json.loads(response.data)
+        self.assertEqual(data["error"], "Invalid JSON in request body")
+
+    @patch("app.summary_cache", {})
+    @patch("app.save_summary_cache")
+    @patch("os.path.exists")
+    @patch("os.remove")
+    def test_delete_summary_without_audio_file(self, mock_remove, mock_exists, mock_save_cache):
+        """Test deletion of summary without audio filename"""
+        test_video_id = "test_video_no_audio"
+        test_cache = {
+            test_video_id: {
+                "title": "Test Video",
+                "summary": "Test summary",
+                "thumbnail_url": "http://example.com/thumb.jpg",
+                "summarized_at": "2023-01-01T00:00:00.000000",
+                "video_url": f"https://www.youtube.com/watch?v={test_video_id}",
+                # No audio_filename
+            }
+        }
+
+        with patch("app.summary_cache", test_cache):
+            response = self.client.delete(
+                "/delete_summary", json={"video_id": test_video_id}, content_type="application/json"
+            )
+
+            # Should still succeed
+            self.assertEqual(response.status_code, 200)
+            data = json.loads(response.data)
+            self.assertTrue(data["success"])
+
+            # Audio file operations should not be called
+            mock_exists.assert_not_called()
+            mock_remove.assert_not_called()
+
+            # Cache should still be saved
+            mock_save_cache.assert_called_once()
+
+    @patch("app.summary_cache", {})
+    @patch("app.save_summary_cache")
+    @patch("os.path.exists")
+    @patch("os.remove")
+    def test_delete_summary_audio_file_not_exists(self, mock_remove, mock_exists, mock_save_cache):
+        """Test deletion when audio file doesn't exist"""
+        test_video_id = "test_video_missing_audio"
+        test_cache = {
+            test_video_id: {
+                "title": "Test Video",
+                "summary": "Test summary",
+                "thumbnail_url": "http://example.com/thumb.jpg",
+                "audio_filename": "missing_audio.mp3",
+                "summarized_at": "2023-01-01T00:00:00.000000",
+                "video_url": f"https://www.youtube.com/watch?v={test_video_id}",
+            }
+        }
+
+        with patch("app.summary_cache", test_cache):
+            # Mock audio file doesn't exist
+            mock_exists.return_value = False
+
+            response = self.client.delete(
+                "/delete_summary", json={"video_id": test_video_id}, content_type="application/json"
+            )
+
+            # Should still succeed
+            self.assertEqual(response.status_code, 200)
+            data = json.loads(response.data)
+            self.assertTrue(data["success"])
+
+            # File removal should not be attempted
+            mock_remove.assert_not_called()
+
+            # Cache should be saved
+            mock_save_cache.assert_called_once()
+
+    @patch("app.summary_cache", {})
+    @patch("app.save_summary_cache")
+    @patch("os.path.exists")
+    @patch("os.remove")
+    def test_delete_summary_audio_removal_fails(self, mock_remove, mock_exists, mock_save_cache):
+        """Test deletion when audio file removal fails"""
+        test_video_id = "test_video_audio_fail"
+        test_cache = {
+            test_video_id: {
+                "title": "Test Video",
+                "summary": "Test summary",
+                "thumbnail_url": "http://example.com/thumb.jpg",
+                "audio_filename": "error_audio.mp3",
+                "summarized_at": "2023-01-01T00:00:00.000000",
+                "video_url": f"https://www.youtube.com/watch?v={test_video_id}",
+            }
+        }
+
+        with patch("app.summary_cache", test_cache):
+            # Mock audio file exists but removal fails
+            mock_exists.return_value = True
+            mock_remove.side_effect = OSError("Permission denied")
+
+            response = self.client.delete(
+                "/delete_summary", json={"video_id": test_video_id}, content_type="application/json"
+            )
+
+            # Should still succeed (audio removal failure is non-fatal)
+            self.assertEqual(response.status_code, 200)
+            data = json.loads(response.data)
+            self.assertTrue(data["success"])
+
+            # Cache should still be saved
+            mock_save_cache.assert_called_once()
+
+    @patch("app.summary_cache", {})
+    @patch("app.save_summary_cache")
+    def test_delete_summary_save_cache_error(self, mock_save_cache):
+        """Test deletion when saving cache fails"""
+        test_video_id = "test_video_save_fail"
+        test_cache = {
+            test_video_id: {
+                "title": "Test Video",
+                "summary": "Test summary",
+                "thumbnail_url": "http://example.com/thumb.jpg",
+                "summarized_at": "2023-01-01T00:00:00.000000",
+                "video_url": f"https://www.youtube.com/watch?v={test_video_id}",
+            }
+        }
+
+        with patch("app.summary_cache", test_cache):
+            # Mock save cache failure
+            mock_save_cache.side_effect = Exception("Disk full")
+
+            response = self.client.delete(
+                "/delete_summary", json={"video_id": test_video_id}, content_type="application/json"
+            )
+
+            # Should return error
+            self.assertEqual(response.status_code, 500)
+            data = json.loads(response.data)
+            self.assertEqual(data["error"], "Failed to delete summary")
+
+    @patch("app.LOGIN_ENABLED", True)
+    def test_delete_summary_requires_auth(self):
+        """Test that delete endpoint requires authentication when enabled"""
+        # Remove testing environment variable to enable authentication
+        if "TESTING" in os.environ:
+            del os.environ["TESTING"]
+
+        response = self.client.delete(
+            "/delete_summary", json={"video_id": "test_video"}, content_type="application/json"
+        )
+
+        # Should redirect or return unauthorized
+        self.assertIn(response.status_code, [302, 401])
 
 
 class TestHelperFunctions(unittest.TestCase):
