@@ -571,10 +571,26 @@ def login_status():
 @require_auth
 def get_cached_summaries():
     if not summary_cache:
-        return jsonify([])
+        return jsonify({
+            "summaries": [],
+            "total": 0,
+            "page": 1,
+            "per_page": 10,
+            "total_pages": 0
+        })
 
-    # Get limit parameter from query string, default to None (no limit)
-    limit = request.args.get("limit", type=int)
+    # Get pagination parameters from query string
+    page = request.args.get("page", 1, type=int)
+    per_page = request.args.get("per_page", 10, type=int)
+    limit = request.args.get("limit", type=int)  # Backward compatibility
+
+    # Validate pagination parameters
+    if page < 1:
+        page = 1
+    if per_page < 1:
+        per_page = 10
+    elif per_page > 100:  # Cap at 100 to prevent performance issues
+        per_page = 100
 
     cached_list = [
         {
@@ -591,15 +607,31 @@ def get_cached_summaries():
     ]
     cached_list.sort(key=lambda x: x.get("summarized_at", "1970-01-01T00:00:00.000000"), reverse=True)
 
-    # Apply limit if specified
+    total = len(cached_list)
+
+    # Handle backward compatibility with limit parameter
     if limit is not None:
         if limit == 0:
             cached_list = []
         elif limit > 0:
             cached_list = cached_list[:limit]
-        # If limit < 0 or invalid, ignore it and return all results
+        # Return old format for backward compatibility
+        return jsonify(cached_list)
 
-    return jsonify(cached_list)
+    # Calculate pagination
+    total_pages = (total + per_page - 1) // per_page if total > 0 else 0
+    start_index = (page - 1) * per_page
+    end_index = start_index + per_page
+
+    paginated_list = cached_list[start_index:end_index]
+
+    return jsonify({
+        "summaries": paginated_list,
+        "total": total,
+        "page": page,
+        "per_page": per_page,
+        "total_pages": total_pages
+    })
 
 
 @app.route("/search_summaries", methods=["GET"])
