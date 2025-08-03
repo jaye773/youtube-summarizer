@@ -17,10 +17,10 @@ Usage:
 import os
 import sys
 
+import app
+
 # Add the parent directory to the path so we can import the app
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
-import app
 
 
 def demonstrate_proxy_configuration():
@@ -37,7 +37,8 @@ def demonstrate_proxy_configuration():
     print(f"  WEBSHARE_PROXY_PORT: {app.WEBSHARE_PROXY_PORT or 'Not set'}")
     print(f"  WEBSHARE_PROXY_USERNAME: {app.WEBSHARE_PROXY_USERNAME or 'Not set'}")
     print(
-        f"  WEBSHARE_PROXY_PASSWORD: {'*' * len(app.WEBSHARE_PROXY_PASSWORD) if app.WEBSHARE_PROXY_PASSWORD else 'Not set'}"
+        f"  WEBSHARE_PROXY_PASSWORD: "
+        f"{'*' * len(app.WEBSHARE_PROXY_PASSWORD) if app.WEBSHARE_PROXY_PASSWORD else 'Not set'}"
     )
     print()
 

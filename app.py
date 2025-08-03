@@ -33,7 +33,8 @@ def get_proxy_config():
 
     if not all([WEBSHARE_PROXY_HOST, WEBSHARE_PROXY_PORT, WEBSHARE_PROXY_USERNAME, WEBSHARE_PROXY_PASSWORD]):
         print(
-            "⚠️ Webshare proxy is enabled but missing required configuration. Required: WEBSHARE_PROXY_HOST, WEBSHARE_PROXY_PORT, WEBSHARE_PROXY_USERNAME, WEBSHARE_PROXY_PASSWORD"
+            "⚠️ Webshare proxy is enabled but missing required configuration. "
+            "Required: WEBSHARE_PROXY_HOST, WEBSHARE_PROXY_PORT, WEBSHARE_PROXY_USERNAME, WEBSHARE_PROXY_PASSWORD"
         )
         return None
 

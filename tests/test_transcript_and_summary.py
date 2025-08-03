@@ -1,16 +1,13 @@
-import hashlib
-import json
 import os
 import sys
-import tempfile
 import unittest
 from unittest.mock import MagicMock, Mock, patch
 
+import app
+from app import generate_summary, get_transcript
+
 # Add the parent directory to the path so we can import the app
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
-import app
-from app import generate_summary, get_proxy_config, get_transcript, load_summary_cache, save_summary_cache
 
 
 class TestWebshareProxyConfiguration(unittest.TestCase):
@@ -64,7 +61,8 @@ class TestWebshareProxyConfiguration(unittest.TestCase):
             proxy_config = app.get_proxy_config()
             self.assertIsNone(proxy_config)
             mock_print.assert_called_with(
-                "⚠️ Webshare proxy is enabled but missing required configuration. Required: WEBSHARE_PROXY_HOST, WEBSHARE_PROXY_PORT, WEBSHARE_PROXY_USERNAME, WEBSHARE_PROXY_PASSWORD"
+                "⚠️ Webshare proxy is enabled but missing required configuration. "
+                "Required: WEBSHARE_PROXY_HOST, WEBSHARE_PROXY_PORT, WEBSHARE_PROXY_USERNAME, WEBSHARE_PROXY_PASSWORD"
             )
 
     def test_proxy_fully_configured(self):
