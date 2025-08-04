@@ -64,7 +64,18 @@ class TestYouTubeSummarizer(unittest.TestCase):
         with patch("app.summary_cache", {}):
             response = self.client.get("/get_cached_summaries")
             self.assertEqual(response.status_code, 200)
-            self.assertEqual(json.loads(response.data), [])
+            # With new pagination format, empty cache returns pagination structure
+            data = json.loads(response.data)
+            if isinstance(data, dict):
+                # New pagination format
+                self.assertEqual(data["summaries"], [])
+                self.assertEqual(data["total"], 0)
+                self.assertEqual(data["page"], 1)
+                self.assertEqual(data["per_page"], 10)
+                self.assertEqual(data["total_pages"], 0)
+            else:
+                # Old format (backward compatibility)
+                self.assertEqual(data, [])
 
     def test_get_cached_summaries_with_data(self):
         """Test getting cached summaries with data"""

@@ -104,6 +104,68 @@
         #search-results:empty {
             display: none;
         }
+
+        /* Pagination Styles */
+        .pagination-section {
+            margin: 20px 0;
+            padding: 20px;
+            background-color: #f8f9fa;
+            border-radius: 8px;
+            border: 1px solid #e9ecef;
+        }
+        .pagination-controls {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 15px;
+        }
+        .pagination-info {
+            color: #6c757d;
+            font-size: 14px;
+        }
+        .pagination-size {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .pagination-size label {
+            font-weight: 500;
+            color: #495057;
+        }
+        .pagination-size select {
+            padding: 8px 12px;
+            border: 1px solid #ced4da;
+            border-radius: 4px;
+            background-color: white;
+            font-size: 14px;
+        }
+        .pagination-nav {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .pagination-nav button {
+            padding: 8px 16px;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        .pagination-nav button:hover:not(:disabled) {
+            background-color: #0056b3;
+        }
+        .pagination-nav button:disabled {
+            background-color: #6c757d;
+            cursor: not-allowed;
+        }
+        .pagination-nav .page-info {
+            margin: 0 10px;
+            font-weight: 500;
+            color: #495057;
+        }
     </style>
 </head>
 <body>
@@ -132,6 +194,33 @@
         <div id="results">
             <div id="new-results" class="results-section"></div>
             <div id="initial-results" class="results-section"></div>
+
+            <!-- Pagination Controls -->
+            <div id="pagination-section" class="pagination-section" style="display: none;">
+                <div class="pagination-controls">
+                    <div class="pagination-info">
+                        <span id="pagination-info-text">Showing 0 of 0 summaries</span>
+                    </div>
+
+                    <div class="pagination-size">
+                        <label for="page-size-select">Show:</label>
+                        <select id="page-size-select">
+                            <option value="10">10 per page</option>
+                            <option value="20">20 per page</option>
+                            <option value="50">50 per page</option>
+                            <option value="100">100 per page</option>
+                        </select>
+                    </div>
+
+                    <div class="pagination-nav">
+                        <button id="prev-page-btn" disabled>Previous</button>
+                        <span class="page-info">
+                            Page <span id="current-page">1</span> of <span id="total-pages">1</span>
+                        </span>
+                        <button id="next-page-btn" disabled>Next</button>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -145,6 +234,21 @@
         const searchBtn = document.getElementById('search-btn');
         const clearSearchBtn = document.getElementById('clear-search-btn');
         const searchResults = document.getElementById('search-results');
+
+        // Pagination elements
+        const paginationSection = document.getElementById('pagination-section');
+        const paginationInfoText = document.getElementById('pagination-info-text');
+        const pageSizeSelect = document.getElementById('page-size-select');
+        const prevPageBtn = document.getElementById('prev-page-btn');
+        const nextPageBtn = document.getElementById('next-page-btn');
+        const currentPageSpan = document.getElementById('current-page');
+        const totalPagesSpan = document.getElementById('total-pages');
+
+        // Pagination state
+        let currentPage = 1;
+        let currentPageSize = 10;
+        let totalSummaries = 0;
+        let totalPages = 0;
 
         // --- UPDATED State Object ---
         let currentAudioPlayer = {
@@ -212,6 +316,27 @@
             }
         });
 
+        // --- PAGINATION EVENT LISTENERS ---
+        pageSizeSelect.addEventListener('change', async (e) => {
+            currentPageSize = parseInt(e.target.value, 10);
+            currentPage = 1; // Reset to first page when changing page size
+            await loadPaginatedSummaries(currentPage, currentPageSize);
+        });
+
+        prevPageBtn.addEventListener('click', async () => {
+            if (currentPage > 1) {
+                currentPage--;
+                await loadPaginatedSummaries(currentPage, currentPageSize);
+            }
+        });
+
+        nextPageBtn.addEventListener('click', async () => {
+            if (currentPage < totalPages) {
+                currentPage++;
+                await loadPaginatedSummaries(currentPage, currentPageSize);
+            }
+        });
+
         async function performSearch() {
             const query = searchInput.value.trim();
             if (!query) {
@@ -265,25 +390,76 @@
             searchResults.innerHTML = '';
         }
 
-        async function loadInitialSummaries() {
-            loader.innerHTML = '<p>Loading previous summaries...</p>';
+        // --- PAGINATION FUNCTIONALITY ---
+        function loadPaginationState() {
+            const savedPage = localStorage.getItem('summaries_current_page');
+            const savedPageSize = localStorage.getItem('summaries_page_size');
+
+            if (savedPage) currentPage = parseInt(savedPage, 10) || 1;
+            if (savedPageSize) currentPageSize = parseInt(savedPageSize, 10) || 10;
+
+            pageSizeSelect.value = currentPageSize.toString();
+        }
+
+        function savePaginationState() {
+            localStorage.setItem('summaries_current_page', currentPage.toString());
+            localStorage.setItem('summaries_page_size', currentPageSize.toString());
+        }
+
+        function updatePaginationUI(paginationData) {
+            totalSummaries = paginationData.total;
+            totalPages = paginationData.total_pages;
+            currentPage = paginationData.page;
+
+            // Update pagination info
+            const startItem = totalSummaries === 0 ? 0 : (currentPage - 1) * currentPageSize + 1;
+            const endItem = Math.min(currentPage * currentPageSize, totalSummaries);
+            paginationInfoText.textContent = `Showing ${startItem}-${endItem} of ${totalSummaries} summaries`;
+
+            // Update page info
+            currentPageSpan.textContent = currentPage;
+            totalPagesSpan.textContent = totalPages;
+
+            // Update button states
+            prevPageBtn.disabled = currentPage <= 1;
+            nextPageBtn.disabled = currentPage >= totalPages;
+
+            // Show/hide pagination section
+            paginationSection.style.display = totalSummaries > 0 ? 'block' : 'none';
+        }
+
+        async function loadPaginatedSummaries(page = currentPage, pageSize = currentPageSize) {
+            loader.innerHTML = '<p>Loading summaries...</p>';
             loader.style.display = 'block';
             const initialResultsContainer = document.getElementById('initial-results');
             initialResultsContainer.innerHTML = '';
+
             try {
-                const response = await fetch('/get_cached_summaries?limit=5');
+                const response = await fetch(`/get_cached_summaries?page=${page}&per_page=${pageSize}`);
                 if (!response.ok) throw new Error('Could not fetch cached summaries.');
                 const data = await response.json();
-                if (data && data.length > 0) {
-                    initialResultsContainer.innerHTML = '<h2>Previously Summarized (Latest 5)</h2>';
-                    displayResults(data, initialResultsContainer, false);
+
+                if (data.summaries && data.summaries.length > 0) {
+                    initialResultsContainer.innerHTML = '<h2>Previously Summarized</h2>';
+                    displayResults(data.summaries, initialResultsContainer, false);
                 }
+
+                updatePaginationUI(data);
+                currentPage = data.page;
+                savePaginationState();
+
             } catch (error) {
-                console.error("Error loading initial summaries:", error);
+                console.error("Error loading paginated summaries:", error);
+                paginationSection.style.display = 'none';
             } finally {
                 loader.style.display = 'none';
                 loader.innerHTML = '<p>Working my magic... this may take a while for large playlists. 🪄</p>';
             }
+        }
+
+        async function loadInitialSummaries() {
+            loadPaginationState();
+            await loadPaginatedSummaries(currentPage, currentPageSize);
         }
 
         summarizeBtn.addEventListener('click', async () => {
@@ -320,6 +496,9 @@
                 const newResultsContainer = document.getElementById('new-results');
                 displayResults(data, newResultsContainer, true);
                 linksTextarea.value = '';
+
+                // Refresh pagination to show updated summaries
+                await loadPaginatedSummaries(currentPage, currentPageSize);
             } catch (error) {
                 console.error('Error during summarization:', error);
                 alert(`An Error Occurred: ${error.message}`);
@@ -426,12 +605,14 @@
                 // Remove the card from the DOM with a fade effect
                 card.style.transition = 'opacity 0.3s ease-out';
                 card.style.opacity = '0';
-                setTimeout(() => {
+                setTimeout(async () => {
                     if (card.parentNode) {
                         card.parentNode.removeChild(card);
                     }
+                    // Refresh pagination after deletion
+                    await loadPaginatedSummaries(currentPage, currentPageSize);
                 }, 300);
-                
+
                 console.log('Summary deleted successfully:', data.message);
                 
             } catch (error) {

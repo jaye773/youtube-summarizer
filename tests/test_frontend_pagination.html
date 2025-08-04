@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Frontend Pagination Tests</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .test-result { margin: 10px 0; padding: 10px; border-radius: 4px; }
+        .test-pass { background-color: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+        .test-fail { background-color: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
+        .test-summary { margin: 20px 0; padding: 15px; background-color: #e9ecef; border-radius: 4px; }
+        #test-container { display: none; }
+    </style>
+</head>
+<body>
+    <h1>Frontend Pagination Tests</h1>
+    <div id="test-results"></div>
+    <div id="test-summary"></div>
+
+    <!-- Mock HTML elements needed for pagination -->
+    <div id="test-container">
+        <div id="pagination-section" class="pagination-section" style="display: none;">
+            <div class="pagination-controls">
+                <div class="pagination-info">
+                    <span id="pagination-info-text">Showing 0 of 0 summaries</span>
+                </div>
+                
+                <div class="pagination-size">
+                    <label for="page-size-select">Show:</label>
+                    <select id="page-size-select">
+                        <option value="10">10 per page</option>
+                        <option value="20">20 per page</option>
+                        <option value="50">50 per page</option>
+                        <option value="100">100 per page</option>
+                    </select>
+                </div>
+                
+                <div class="pagination-nav">
+                    <button id="prev-page-btn" disabled>Previous</button>
+                    <span class="page-info">
+                        Page <span id="current-page">1</span> of <span id="total-pages">1</span>
+                    </span>
+                    <button id="next-page-btn" disabled>Next</button>
+                </div>
+            </div>
+        </div>
+        <div id="initial-results" class="results-section"></div>
+        <div id="loader" style="display: none;"><p>Loading...</p></div>
+    </div>
+
+    <script>
+        // Mock pagination variables and functions (extracted from main app)
+        const paginationSection = document.getElementById('pagination-section');
+        const paginationInfoText = document.getElementById('pagination-info-text');
+        const pageSizeSelect = document.getElementById('page-size-select');
+        const prevPageBtn = document.getElementById('prev-page-btn');
+        const nextPageBtn = document.getElementById('next-page-btn');
+        const currentPageSpan = document.getElementById('current-page');
+        const totalPagesSpan = document.getElementById('total-pages');
+        const loader = document.getElementById('loader');
+
+        let currentPage = 1;
+        let currentPageSize = 10;
+        let totalSummaries = 0;
+        let totalPages = 0;
+
+        // Mock localStorage for testing
+        const mockLocalStorage = {
+            data: {},
+            getItem: function(key) { return this.data[key] || null; },
+            setItem: function(key, value) { this.data[key] = value; },
+            clear: function() { this.data = {}; }
+        };
+
+        // Pagination functions (copied from main app)
+        function loadPaginationState() {
+            const savedPage = mockLocalStorage.getItem('summaries_current_page');
+            const savedPageSize = mockLocalStorage.getItem('summaries_page_size');
+            
+            if (savedPage) currentPage = parseInt(savedPage, 10) || 1;
+            if (savedPageSize) currentPageSize = parseInt(savedPageSize, 10) || 10;
+            
+            pageSizeSelect.value = currentPageSize.toString();
+        }
+
+        function savePaginationState() {
+            mockLocalStorage.setItem('summaries_current_page', currentPage.toString());
+            mockLocalStorage.setItem('summaries_page_size', currentPageSize.toString());
+        }
+
+        function updatePaginationUI(paginationData) {
+            totalSummaries = paginationData.total;
+            totalPages = paginationData.total_pages;
+            currentPage = paginationData.page;
+            
+            // Update pagination info
+            const startItem = totalSummaries === 0 ? 0 : (currentPage - 1) * currentPageSize + 1;
+            const endItem = Math.min(currentPage * currentPageSize, totalSummaries);
+            paginationInfoText.textContent = `Showing ${startItem}-${endItem} of ${totalSummaries} summaries`;
+            
+            // Update page info
+            currentPageSpan.textContent = currentPage;
+            totalPagesSpan.textContent = totalPages;
+            
+            // Update button states
+            prevPageBtn.disabled = currentPage <= 1;
+            nextPageBtn.disabled = currentPage >= totalPages;
+            
+            // Show/hide pagination section
+            paginationSection.style.display = totalSummaries > 0 ? 'block' : 'none';
+        }
+
+        // Test framework
+        class TestRunner {
+            constructor() {
+                this.tests = [];
+                this.results = [];
+            }
+
+            addTest(name, testFunction) {
+                this.tests.push({ name, testFunction });
+            }
+
+            async runTests() {
+                this.results = [];
+                
+                for (const test of this.tests) {
+                    try {
+                        await test.testFunction();
+                        this.results.push({ name: test.name, passed: true, error: null });
+                        this.logResult(test.name, true);
+                    } catch (error) {
+                        this.results.push({ name: test.name, passed: false, error: error.message });
+                        this.logResult(test.name, false, error.message);
+                    }
+                }
+
+                this.displaySummary();
+            }
+
+            logResult(testName, passed, error = null) {
+                const resultsDiv = document.getElementById('test-results');
+                const resultDiv = document.createElement('div');
+                resultDiv.className = `test-result ${passed ? 'test-pass' : 'test-fail'}`;
+                resultDiv.innerHTML = `
+                    <strong>${passed ? '✓' : '✗'} ${testName}</strong>
+                    ${error ? `<br><small>Error: ${error}</small>` : ''}
+                `;
+                resultsDiv.appendChild(resultDiv);
+            }
+
+            displaySummary() {
+                const passed = this.results.filter(r => r.passed).length;
+                const total = this.results.length;
+                const summaryDiv = document.getElementById('test-summary');
+                summaryDiv.innerHTML = `
+                    <h2>Test Summary</h2>
+                    <p><strong>${passed}/${total} tests passed</strong></p>
+                    ${passed === total ? '<p style="color: green;">All tests passed! ✓</p>' : '<p style="color: red;">Some tests failed ✗</p>'}
+                `;
+            }
+
+            assertEqual(actual, expected, message = '') {
+                if (actual !== expected) {
+                    throw new Error(`${message} Expected: ${expected}, Actual: ${actual}`);
+                }
+            }
+
+            assertTrue(condition, message = '') {
+                if (!condition) {
+                    throw new Error(`${message} Expected condition to be true`);
+                }
+            }
+
+            assertFalse(condition, message = '') {
+                if (condition) {
+                    throw new Error(`${message} Expected condition to be false`);
+                }
+            }
+        }
+
+        // Test cases
+        const runner = new TestRunner();
+
+        runner.addTest('Test loadPaginationState with default values', () => {
+            mockLocalStorage.clear();
+            currentPage = 1;
+            currentPageSize = 10;
+            
+            loadPaginationState();
+            
+            runner.assertEqual(currentPage, 1, 'Default page should be 1');
+            runner.assertEqual(currentPageSize, 10, 'Default page size should be 10');
+            runner.assertEqual(pageSizeSelect.value, '10', 'Page size select should be set to 10');
+        });
+
+        runner.addTest('Test loadPaginationState with saved values', () => {
+            mockLocalStorage.setItem('summaries_current_page', '3');
+            mockLocalStorage.setItem('summaries_page_size', '20');
+            
+            loadPaginationState();
+            
+            runner.assertEqual(currentPage, 3, 'Should load saved page');
+            runner.assertEqual(currentPageSize, 20, 'Should load saved page size');
+            runner.assertEqual(pageSizeSelect.value, '20', 'Page size select should be set to saved value');
+        });
+
+        runner.addTest('Test savePaginationState', () => {
+            currentPage = 5;
+            currentPageSize = 50;
+            
+            savePaginationState();
+            
+            runner.assertEqual(mockLocalStorage.getItem('summaries_current_page'), '5', 'Should save current page');
+            runner.assertEqual(mockLocalStorage.getItem('summaries_page_size'), '50', 'Should save current page size');
+        });
+
+        runner.addTest('Test updatePaginationUI with data', () => {
+            const mockData = {
+                total: 25,
+                page: 2,
+                per_page: 10,
+                total_pages: 3
+            };
+            currentPageSize = 10;
+            
+            updatePaginationUI(mockData);
+            
+            runner.assertEqual(totalSummaries, 25, 'Should set total summaries');
+            runner.assertEqual(totalPages, 3, 'Should set total pages');
+            runner.assertEqual(currentPage, 2, 'Should set current page');
+            runner.assertEqual(paginationInfoText.textContent, 'Showing 11-20 of 25 summaries', 'Should display correct info text');
+            runner.assertEqual(currentPageSpan.textContent, '2', 'Should display current page');
+            runner.assertEqual(totalPagesSpan.textContent, '3', 'Should display total pages');
+            runner.assertFalse(prevPageBtn.disabled, 'Previous button should be enabled on page 2');
+            runner.assertFalse(nextPageBtn.disabled, 'Next button should be enabled when not on last page');
+            runner.assertEqual(paginationSection.style.display, 'block', 'Pagination section should be visible');
+        });
+
+        runner.addTest('Test updatePaginationUI with first page', () => {
+            const mockData = {
+                total: 25,
+                page: 1,
+                per_page: 10,
+                total_pages: 3
+            };
+            currentPageSize = 10;
+            
+            updatePaginationUI(mockData);
+            
+            runner.assertTrue(prevPageBtn.disabled, 'Previous button should be disabled on first page');
+            runner.assertFalse(nextPageBtn.disabled, 'Next button should be enabled when not on last page');
+        });
+
+        runner.addTest('Test updatePaginationUI with last page', () => {
+            const mockData = {
+                total: 25,
+                page: 3,
+                per_page: 10,
+                total_pages: 3
+            };
+            currentPageSize = 10;
+            
+            updatePaginationUI(mockData);
+            
+            runner.assertFalse(prevPageBtn.disabled, 'Previous button should be enabled when not on first page');
+            runner.assertTrue(nextPageBtn.disabled, 'Next button should be disabled on last page');
+            runner.assertEqual(paginationInfoText.textContent, 'Showing 21-25 of 25 summaries', 'Should show correct range for last page');
+        });
+
+        runner.addTest('Test updatePaginationUI with empty data', () => {
+            const mockData = {
+                total: 0,
+                page: 1,
+                per_page: 10,
+                total_pages: 0
+            };
+            
+            updatePaginationUI(mockData);
+            
+            runner.assertEqual(paginationInfoText.textContent, 'Showing 0-0 of 0 summaries', 'Should show zero range for empty data');
+            runner.assertTrue(prevPageBtn.disabled, 'Previous button should be disabled');
+            runner.assertTrue(nextPageBtn.disabled, 'Next button should be disabled');
+            runner.assertEqual(paginationSection.style.display, 'none', 'Pagination section should be hidden for empty data');
+        });
+
+        // Run tests when page loads
+        window.addEventListener('load', () => {
+            runner.runTests();
+        });
+    </script>
+</body>
+</html>
