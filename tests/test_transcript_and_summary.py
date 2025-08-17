@@ -361,18 +361,32 @@ class TestTranscriptAndSummary(unittest.TestCase):
         self.assertIsNone(transcript)
         self.assertEqual(error, "Transcript was found but it is empty.")
 
-    @patch("app.model")
-    def test_generate_summary_success(self, mock_model):
-        """Test successful summary generation"""
+    @patch("app.gemini_model")
+    def test_generate_summary_gemini_success(self, mock_gemini_model):
+        """Test successful summary generation with Gemini"""
         mock_response = MagicMock()
-        mock_response.text = "This is a generated summary of the video."
-        mock_model.generate_content.return_value = mock_response
+        mock_response.text = "This is a generated summary of the video using Gemini."
+        mock_gemini_model.generate_content.return_value = mock_response
 
-        summary, error = generate_summary(self.test_transcript, self.test_title)
+        summary, error = generate_summary(self.test_transcript, self.test_title, "gemini-2.5-flash")
 
         self.assertIsNotNone(summary)
         self.assertIsNone(error)
-        self.assertEqual(summary, "This is a generated summary of the video.")
+        self.assertEqual(summary, "This is a generated summary of the video using Gemini.")
+
+    @patch("app.openai_client")
+    def test_generate_summary_openai_success(self, mock_openai_client):
+        """Test successful summary generation with OpenAI"""
+        mock_response = MagicMock()
+        mock_response.choices = [MagicMock()]
+        mock_response.choices[0].message.content = "This is a generated summary of the video using OpenAI."
+        mock_openai_client.chat.completions.create.return_value = mock_response
+
+        summary, error = generate_summary(self.test_transcript, self.test_title, "gpt-4o")
+
+        self.assertIsNotNone(summary)
+        self.assertIsNone(error)
+        self.assertEqual(summary, "This is a generated summary of the video using OpenAI.")
 
     def test_generate_summary_no_transcript(self):
         """Test summary generation with no transcript"""
@@ -381,15 +395,46 @@ class TestTranscriptAndSummary(unittest.TestCase):
         self.assertIsNone(summary)
         self.assertEqual(error, "Cannot generate summary from empty transcript.")
 
-    @patch("app.model")
-    def test_generate_summary_api_error(self, mock_model):
-        """Test summary generation when API fails"""
-        mock_model.generate_content.side_effect = Exception("API Error")
+    def test_generate_summary_invalid_model(self):
+        """Test summary generation with invalid model"""
+        summary, error = generate_summary(self.test_transcript, self.test_title, "invalid-model")
 
-        summary, error = generate_summary(self.test_transcript, self.test_title)
+        self.assertIsNone(summary)
+        self.assertIn("Unsupported model: invalid-model", error)
+
+    @patch("app.gemini_model")
+    def test_generate_summary_gemini_api_error(self, mock_gemini_model):
+        """Test summary generation when Gemini API fails"""
+        mock_gemini_model.generate_content.side_effect = Exception("Gemini API Error")
+
+        summary, error = generate_summary(self.test_transcript, self.test_title, "gemini-2.5-flash")
 
         self.assertIsNone(summary)
         self.assertIn("Error calling Gemini API", error)
+
+    @patch("app.openai_client")
+    def test_generate_summary_openai_api_error(self, mock_openai_client):
+        """Test summary generation when OpenAI API fails"""
+        mock_openai_client.chat.completions.create.side_effect = Exception("OpenAI API Error")
+
+        summary, error = generate_summary(self.test_transcript, self.test_title, "gpt-4o")
+
+        self.assertIsNone(summary)
+        self.assertIn("Error calling OpenAI API", error)
+
+    def test_generate_summary_default_model(self):
+        """Test that default model is used when none specified"""
+        with patch("app.openai_client") as mock_openai_client:
+            mock_response = MagicMock()
+            mock_response.choices = [MagicMock()]
+            mock_response.choices[0].message.content = "Default model summary"
+            mock_openai_client.chat.completions.create.return_value = mock_response
+
+            summary, error = generate_summary(self.test_transcript, self.test_title)
+
+            self.assertIsNotNone(summary)
+            self.assertIsNone(error)
+            self.assertEqual(summary, "Default model summary")
 
 
 class TestVideoDetails(unittest.TestCase):

@@ -16,6 +16,14 @@
         button { display: block; width: 100%; padding: 15px; background-color: #8e44ad; color: white; border: none; border-radius: 6px; font-size: 18px; font-weight: bold; cursor: pointer; transition: background-color 0.3s; }
         button:hover { background-color: #732d91; }
         button:disabled { background-color: #bdc3c7; cursor: not-allowed; }
+
+        /* Summarize Controls Styling */
+        .summarize-controls { display: flex; gap: 15px; align-items: flex-end; margin-bottom: 20px; }
+        .model-selection { flex: 1; }
+        .model-selection label { display: block; margin-bottom: 5px; font-weight: bold; color: #2c3e50; font-size: 14px; }
+        .model-selection select { width: 100%; padding: 12px; border-radius: 6px; border: 1px solid #ccc; font-size: 14px; background-color: white; cursor: pointer; }
+        .model-selection select:focus { outline: none; border-color: #8e44ad; box-shadow: 0 0 0 2px rgba(142, 68, 173, 0.2); }
+        .summarize-controls button { flex: 0 0 200px; margin: 0; }
         #loader { text-align: center; display: none; margin-top: 20px; font-size: 18px; color: #7f8c8d; }
         #results { margin-top: 30px; }
         .results-section h2 { color: #2c3e50; border-bottom: 2px solid #ecf0f1; padding-bottom: 10px; }
@@ -182,8 +190,16 @@
         <p>Paste any mix of YouTube video or playlist links below (one per line) to get a summary.</p>
         
         <textarea id="youtube-links" placeholder="e.g., https://www.youtube.com/watch?v=...\nhttps://www.youtube.com/playlist?list=..."></textarea>
-        
-        <button id="summarize-btn">Summarize Links</button>
+
+        <div class="summarize-controls">
+            <div class="model-selection">
+                <label for="model-select">AI Model:</label>
+                <select id="model-select">
+                    <!-- Options will be populated dynamically based on available API keys -->
+                </select>
+            </div>
+            <button id="summarize-btn">Summarize Links</button>
+        </div>
 
         <div id="loader"><p>Working my magic... this may take a while for large playlists. 🪄</p></div>
 
@@ -344,6 +360,121 @@
             }
         });
 
+        // --- MODEL SELECTION FUNCTIONALITY ---
+        const modelSelect = document.getElementById('model-select');
+
+        // Load saved model preference
+        function loadModelPreference() {
+            const savedModel = localStorage.getItem('selectedModel');
+            if (savedModel && modelSelect.querySelector(`option[value="${savedModel}"]`)) {
+                modelSelect.value = savedModel;
+            } else if (modelSelect.children.length > 0) {
+                // If saved model is not available, select the first available option
+                const firstOption = modelSelect.querySelector('option:not(:disabled)');
+                if (firstOption) {
+                    modelSelect.value = firstOption.value;
+                    localStorage.setItem('selectedModel', firstOption.value);
+                }
+            }
+        }
+
+        // Save model preference when changed
+        modelSelect.addEventListener('change', () => {
+            localStorage.setItem('selectedModel', modelSelect.value);
+        });
+
+        // Populate model options and check availability
+        async function populateModelOptions() {
+            try {
+                const response = await fetch('/api_status');
+                const status = await response.json();
+
+                // Clear existing options
+                modelSelect.innerHTML = '';
+
+                // Model definitions with display information
+                const modelDefinitions = {
+                    'gemini-2.5-flash': { provider: 'Google Gemini', name: 'Gemini 2.5 Flash (Fast)', requiresGoogle: true },
+                    'gemini-1.5-pro': { provider: 'Google Gemini', name: 'Gemini 1.5 Pro (Advanced)', requiresGoogle: true },
+                    'gpt-5': { provider: 'OpenAI', name: 'GPT-5 (Latest)', requiresOpenAI: true },
+                    'gpt-5-chat': { provider: 'OpenAI', name: 'GPT-5 Chat (Optimized)', requiresOpenAI: true },
+                    'gpt-5-mini': { provider: 'OpenAI', name: 'GPT-5 Mini (Fast)', requiresOpenAI: true },
+                    'gpt-4o': { provider: 'OpenAI', name: 'GPT-4o (Multimodal)', requiresOpenAI: true },
+                    'gpt-4o-mini': { provider: 'OpenAI', name: 'GPT-4o Mini (Efficient)', requiresOpenAI: true }
+                };
+
+                // Group models by provider
+                const providers = {};
+
+                status.available_models.forEach(modelKey => {
+                    const modelDef = modelDefinitions[modelKey];
+                    if (!modelDef) return;
+
+                    // Check if model is available based on API keys
+                    const isAvailable = (
+                        (modelDef.requiresGoogle && status.google_api_key_set) ||
+                        (modelDef.requiresOpenAI && status.openai_api_key_set)
+                    );
+
+                    if (isAvailable) {
+                        if (!providers[modelDef.provider]) {
+                            providers[modelDef.provider] = [];
+                        }
+                        providers[modelDef.provider].push({
+                            key: modelKey,
+                            name: modelDef.name
+                        });
+                    }
+                });
+
+                // Create optgroups and options
+                Object.keys(providers).forEach(providerName => {
+                    const optgroup = document.createElement('optgroup');
+                    optgroup.label = providerName;
+
+                    providers[providerName].forEach(model => {
+                        const option = document.createElement('option');
+                        option.value = model.key;
+                        option.textContent = model.name;
+                        optgroup.appendChild(option);
+                    });
+
+                    modelSelect.appendChild(optgroup);
+                });
+
+                // Set default selection (prefer GPT-5 if available, then Gemini 2.5 Flash, otherwise first available)
+                let defaultModel;
+                if (status.available_models.includes('gpt-5') && status.openai_api_key_set) {
+                    defaultModel = 'gpt-5';
+                } else if (status.available_models.includes('gemini-2.5-flash') && status.google_api_key_set) {
+                    defaultModel = 'gemini-2.5-flash';
+                } else {
+                    defaultModel = modelSelect.querySelector('option')?.value;
+                }
+
+                if (defaultModel) {
+                    modelSelect.value = defaultModel;
+                }
+
+                // If no models are available, show a message
+                if (modelSelect.children.length === 0) {
+                    const option = document.createElement('option');
+                    option.value = '';
+                    option.textContent = 'No AI models available - Please configure API keys';
+                    option.disabled = true;
+                    modelSelect.appendChild(option);
+                }
+
+            } catch (error) {
+                console.warn('Could not populate model options:', error);
+                // Fallback: add a basic option
+                const option = document.createElement('option');
+                option.value = 'gemini-2.5-flash';
+                option.textContent = 'Gemini 2.5 Flash (Default)';
+                modelSelect.appendChild(option);
+            }
+        }
+
         async function performSearch() {
             const query = searchInput.value.trim();
             if (!query) {
@@ -466,6 +597,8 @@
 
         async function loadInitialSummaries() {
             loadPaginationState();
+            await populateModelOptions();
+            loadModelPreference();
             await loadPaginatedSummaries(currentPage, currentPageSize);
         }
 
@@ -483,10 +616,14 @@
             summarizeBtn.textContent = 'Processing...';
             loader.style.display = 'block';
             try {
+                const selectedModel = document.getElementById('model-select').value;
                 const response = await fetch('/summarize', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ urls: urls }),
+                    body: JSON.stringify({
+                        urls: urls,
+                        model: selectedModel
+                    }),
                 });
                 
                 // Check if the response is JSON before trying to parse it

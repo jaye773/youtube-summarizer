@@ -104,6 +104,18 @@ class TestYouTubeSummarizer(unittest.TestCase):
         data = json.loads(response.data)
         self.assertIn("error", data)
 
+    def test_summarize_invalid_model(self):
+        """Test summarize endpoint with invalid model parameter"""
+        response = self.client.post(
+            "/summarize",
+            data=json.dumps({"urls": [self.test_video_url], "model": "invalid-model"}),
+            content_type="application/json"
+        )
+        self.assertEqual(response.status_code, 400)
+        data = json.loads(response.data)
+        self.assertIn("error", data)
+        self.assertIn("Unsupported model", data["error"])
+
     @patch("app.summary_cache", {})  # Clear the cache for this test
     @patch("app.generate_summary")
     @patch("app.get_transcript")
@@ -134,6 +146,43 @@ class TestYouTubeSummarizer(unittest.TestCase):
         self.assertEqual(data[0]["title"], "Test Video Title")
         self.assertEqual(data[0]["summary"], "This is a test summary")
         self.assertEqual(data[0]["video_url"], f"https://www.youtube.com/watch?v={self.test_video_id}")
+
+        # Verify that generate_summary was called with default model
+        mock_generate_summary.assert_called_with("This is a test transcript", "Test Video Title", "gpt-5")
+
+    @patch("app.summary_cache", {})  # Clear the cache for this test
+    @patch("app.generate_summary")
+    @patch("app.get_transcript")
+    @patch("app.get_video_details")
+    @patch("app.youtube")
+    def test_summarize_with_custom_model(
+        self, mock_youtube, mock_get_video_details, mock_get_transcript, mock_generate_summary
+    ):
+        """Test summarizing a single video with custom model"""
+        # Mock the functions
+        mock_get_video_details.return_value = {
+            self.test_video_id: {"title": "Test Video Title", "thumbnail_url": "http://example.com/thumb.jpg"}
+        }
+        mock_get_transcript.return_value = ("This is a test transcript", None)
+        mock_generate_summary.return_value = ("This is a test summary from GPT-4o", None)
+
+        # Make youtube non-None for the check
+        mock_youtube.return_value = MagicMock()
+
+        response = self.client.post(
+            "/summarize",
+            data=json.dumps({"urls": [self.test_video_url], "model": "gpt-4o"}),
+            content_type="application/json"
+        )
+
+        self.assertEqual(response.status_code, 200)
+        data = json.loads(response.data)
+        self.assertEqual(len(data), 1)
+        self.assertEqual(data[0]["type"], "video")
+        self.assertEqual(data[0]["summary"], "This is a test summary from GPT-4o")
+
+        # Verify that generate_summary was called with the specified model
+        mock_generate_summary.assert_called_with("This is a test transcript", "Test Video Title", "gpt-4o")
 
     @patch("app.summary_cache", {})  # Clear the cache for this test
     @patch("app.get_transcript")
@@ -552,13 +601,20 @@ class TestYouTubeSummarizer(unittest.TestCase):
         # Check that all expected keys are present
         expected_keys = [
             "google_api_key_set",
+            "openai_api_key_set",
             "youtube_client_initialized",
             "tts_client_initialized",
-            "ai_model_initialized",
+            "gemini_model_initialized",
+            "openai_client_initialized",
+            "available_models",
             "testing_mode",
         ]
         for key in expected_keys:
             self.assertIn(key, data)
+
+        # Check that available_models is a list
+        self.assertIsInstance(data["available_models"], list)
+        self.assertGreater(len(data["available_models"]), 0)
 
     def test_debug_transcript_no_url(self):
         """Test debug transcript endpoint with no URL"""

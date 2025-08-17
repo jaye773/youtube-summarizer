@@ -9,6 +9,7 @@ from functools import wraps
 from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
 
 import google.generativeai as genai
+import openai
 from flask import Flask, Response, jsonify, redirect, render_template, request, session, url_for
 from google.api_core.client_options import ClientOptions
 from google.cloud import texttospeech
@@ -232,30 +233,98 @@ if LOGIN_ENABLED:
     print(f"✅ Lockout duration: {LOCKOUT_DURATION} minutes")
 
 
+# --- AI MODEL CONFIGURATION ---
+AVAILABLE_MODELS = {
+    'gemini-2.5-flash': {
+        'provider': 'google',
+        'model': 'gemini-2.5-flash-preview-05-20',
+        'display_name': 'Gemini 2.5 Flash (Fast)',
+        'description': 'Fast and efficient for most content'
+    },
+    'gemini-1.5-pro': {
+        'provider': 'google',
+        'model': 'gemini-1.5-pro',
+        'display_name': 'Gemini 1.5 Pro (Advanced)',
+        'description': 'More capable for complex content'
+    },
+    'gpt-5': {
+        'provider': 'openai',
+        'model': 'gpt-5-2025-08-07',
+        'display_name': 'GPT-5 (Latest)',
+        'description': 'OpenAI\'s most advanced model'
+    },
+    'gpt-5-chat': {
+        'provider': 'openai',
+        'model': 'gpt-5-chat-latest',
+        'display_name': 'GPT-5 Chat (Optimized)',
+        'description': 'GPT-5 optimized for conversations'
+    },
+    'gpt-5-mini': {
+        'provider': 'openai',
+        'model': 'gpt-5-mini-2025-08-07',
+        'display_name': 'GPT-5 Mini (Fast)',
+        'description': 'Faster GPT-5 variant'
+    },
+    'gpt-4o': {
+        'provider': 'openai',
+        'model': 'gpt-4o-2024-11-20',
+        'display_name': 'GPT-4o (Multimodal)',
+        'description': 'Advanced multimodal capabilities'
+    },
+    'gpt-4o-mini': {
+        'provider': 'openai',
+        'model': 'gpt-4o-mini-2024-07-18',
+        'display_name': 'GPT-4o Mini (Efficient)',
+        'description': 'Fast and cost-effective'
+    }
+}
+
+DEFAULT_MODEL = 'gpt-5'
+
+
 # --- API CLIENT INITIALIZATION ---
-api_key = os.environ.get("GOOGLE_API_KEY")
+google_api_key = os.environ.get("GOOGLE_API_KEY")
+openai_api_key = os.environ.get("OPENAI_API_KEY")
 tts_client = None
 youtube = None
-model = None
+gemini_model = None
+openai_client = None
 
-# Only initialize API clients if API key is available and we're not in test mode
-if api_key and not os.environ.get("TESTING"):
+# Initialize Google APIs
+if google_api_key and not os.environ.get("TESTING"):
     try:
-        tts_client = texttospeech.TextToSpeechClient(client_options=ClientOptions(api_key=api_key))
-        genai.configure(api_key=api_key)
-        youtube = build("youtube", "v3", developerKey=api_key)
-        model = genai.GenerativeModel(model_name="gemini-2.5-flash-preview-05-20")
+        tts_client = texttospeech.TextToSpeechClient(client_options=ClientOptions(api_key=google_api_key))
+        genai.configure(api_key=google_api_key)
+        youtube = build("youtube", "v3", developerKey=google_api_key)
+        gemini_model = genai.GenerativeModel(model_name="gemini-2.5-flash-preview-05-20")
+        print("✅ Google APIs initialized successfully")
     except Exception as e:
-        print(f"Warning: Could not configure APIs. Error: {e}")
-elif not api_key and not os.environ.get("TESTING"):
-    print("Warning: GOOGLE_API_KEY environment variable is not set. Some features will be unavailable.")
+        print(f"Warning: Could not configure Google APIs. Error: {e}")
+elif not google_api_key and not os.environ.get("TESTING"):
+    print("Warning: GOOGLE_API_KEY environment variable is not set. Google services will be unavailable.")
 
-# For testing, create the model even without API key
-if os.environ.get("TESTING") and not model:
+# Initialize OpenAI API
+if openai_api_key and not os.environ.get("TESTING"):
     try:
-        model = genai.GenerativeModel(model_name="gemini-2.5-flash-preview-05-20")
+        openai_client = openai.OpenAI(api_key=openai_api_key)
+        print("✅ OpenAI API initialized successfully")
+    except Exception as e:
+        print(f"Warning: Could not configure OpenAI API. Error: {e}")
+elif not openai_api_key and not os.environ.get("TESTING"):
+    print("Warning: OPENAI_API_KEY environment variable is not set. OpenAI models will be unavailable.")
+
+# For testing, create clients even without API keys
+if os.environ.get("TESTING"):
+    try:
+        if not gemini_model:
+            gemini_model = genai.GenerativeModel(model_name="gemini-2.5-flash-preview-05-20")
+        if not openai_client:
+            openai_client = openai.OpenAI(api_key="test-key")
     except Exception:
         pass
+
+# Backward compatibility - keep 'model' variable for existing code
+model = gemini_model
 
 
 # --- HELPER FUNCTIONS ---
@@ -469,20 +538,14 @@ def get_transcript(video_id):
         )
 
 
-def generate_summary(transcript, title):
-    if not transcript:
-        return None, "Cannot generate summary from empty transcript."
-
-    # Check if AI model is available
-    if not model:
-        return None, "AI model not available. Please set the GOOGLE_API_KEY environment variable."
-
-    prompt_update = f"""
+def get_summary_prompt(transcript, title):
+    """Get the standardized prompt for summary generation"""
+    return f"""
     **Your Role:** You are an expert content summarizer, specializing in transforming detailed video transcripts
     into a single, cohesive, and engaging audio-friendly summary. Your goal is to create a narrative that is not
     only informative but also easy for a listener to understand and retain when read aloud.
 
-    **Your Task:** I will provide you with a transcript from a YouTube video. Your task is to synthesize this
+    **Your Task:** I will provide you with a transcript from a YouTube video titled "{title}". Your task is to synthesize this
     transcript into one continuous, audio-friendly summary.
 
     Within this summary, you must identify the 3-10 most critical points or actionable insights and seamlessly
@@ -529,12 +592,84 @@ def generate_summary(transcript, title):
     ---
 
     **{transcript}**"""
+
+
+def generate_summary_gemini(transcript, title, model_name):
+    """Generate summary using Google Gemini"""
+    if not gemini_model:
+        return None, "Gemini model not available. Please set the GOOGLE_API_KEY environment variable."
+
     try:
-        response = model.generate_content(prompt_update)
+        # Create model instance for the specific model if different from default
+        if model_name != "gemini-2.5-flash-preview-05-20":
+            current_model = genai.GenerativeModel(model_name=model_name)
+        else:
+            current_model = gemini_model
+
+        prompt = get_summary_prompt(transcript, title)
+        response = current_model.generate_content(prompt)
         return response.text, None
     except Exception as e:
-        print(f"Error calling Gemini API: {e}")
+        print(f"Error calling Gemini API ({model_name}): {e}")
         return None, f"Error calling Gemini API: {e}"
+
+
+def generate_summary_openai(transcript, title, model_name):
+    """Generate summary using OpenAI"""
+    if not openai_client:
+        return None, "OpenAI client not available. Please set the OPENAI_API_KEY environment variable."
+
+    try:
+        prompt = get_summary_prompt(transcript, title)
+
+        # Prepare the base parameters
+        api_params = {
+            "model": model_name,
+            "messages": [
+                {"role": "system", "content": "You are an expert content summarizer specializing in creating engaging, audio-friendly summaries of YouTube videos."},
+                {"role": "user", "content": prompt}
+            ],
+            "max_completion_tokens": 2000
+        }
+
+        # Some models (like GPT-5 Mini) only support default temperature (1)
+        # Only add temperature parameter for models that support it
+        models_with_default_temp_only = ['gpt-5-mini-2025-08-07', 'gpt-5-nano-2025-08-07']
+        if model_name not in models_with_default_temp_only:
+            api_params["temperature"] = 0.7
+
+        response = openai_client.chat.completions.create(**api_params)
+
+        return response.choices[0].message.content, None
+    except Exception as e:
+        print(f"Error calling OpenAI API ({model_name}): {e}")
+        return None, f"Error calling OpenAI API: {e}"
+
+
+def generate_summary(transcript, title, model_key=None):
+    """Generate summary using specified model or default"""
+    if not transcript:
+        return None, "Cannot generate summary from empty transcript."
+
+    # Use default model if none specified
+    if not model_key:
+        model_key = DEFAULT_MODEL
+
+    # Validate model key
+    if model_key not in AVAILABLE_MODELS:
+        return None, f"Unsupported model: {model_key}. Available models: {list(AVAILABLE_MODELS.keys())}"
+
+    model_config = AVAILABLE_MODELS[model_key]
+    provider = model_config['provider']
+    model_name = model_config['model']
+
+    # Route to appropriate provider
+    if provider == 'google':
+        return generate_summary_gemini(transcript, title, model_name)
+    elif provider == 'openai':
+        return generate_summary_openai(transcript, title, model_name)
+    else:
+        return None, f"Unknown provider: {provider}"
 
 
 # --- AUTHENTICATION DECORATOR ---
@@ -835,10 +970,13 @@ def search_summaries():
 def api_status():
     """Return the status of various API components"""
     status = {
-        "google_api_key_set": bool(api_key),
+        "google_api_key_set": bool(google_api_key),
+        "openai_api_key_set": bool(openai_api_key),
         "youtube_client_initialized": youtube is not None,
         "tts_client_initialized": tts_client is not None,
-        "ai_model_initialized": model is not None,
+        "gemini_model_initialized": gemini_model is not None,
+        "openai_client_initialized": openai_client is not None,
+        "available_models": list(AVAILABLE_MODELS.keys()),
         "testing_mode": bool(os.environ.get("TESTING")),
     }
     return jsonify(status)
@@ -891,6 +1029,13 @@ def summarize_links():
         urls = data.get("urls", [])
         if not urls:
             return jsonify({"error": "No URLs provided"}), 400
+
+        # Get model parameter (optional, defaults to DEFAULT_MODEL)
+        model_key = data.get("model", DEFAULT_MODEL)
+
+        # Validate model key
+        if model_key not in AVAILABLE_MODELS:
+            return jsonify({"error": f"Unsupported model: {model_key}. Available models: {list(AVAILABLE_MODELS.keys())}"}), 400
 
         results = []
         for url in urls:
@@ -969,7 +1114,7 @@ def summarize_links():
                             continue
 
                         transcript, err = get_transcript(vid_id)
-                        summary, err = (None, err) if err else generate_summary(transcript, vid_title)
+                        summary, err = (None, err) if err else generate_summary(transcript, vid_title, model_key)
 
                         if summary and not err:
                             audio_filename = f"{hashlib.sha256(summary.encode('utf-8')).hexdigest()}.mp3"
@@ -982,6 +1127,7 @@ def summarize_links():
                                 "summarized_at": datetime.now(timezone.utc).isoformat(),
                                 "audio_filename": audio_filename,
                                 "video_url": video_url,  # Storing the canonical video URL
+                                "model_used": model_key,  # Store which model was used
                             }
                             # --- MODIFICATION END ---
                             save_summary_cache(summary_cache)
@@ -1032,7 +1178,7 @@ def summarize_links():
                     details = get_video_details([video_id]).get(video_id, {})
                     title, thumbnail_url = details.get("title", "Unknown Video"), details.get("thumbnail_url")
                     transcript, err = get_transcript(video_id)
-                    summary, err = (None, err) if err else generate_summary(transcript, title)
+                    summary, err = (None, err) if err else generate_summary(transcript, title, model_key)
 
                     if summary and not err:
                         audio_filename = f"{hashlib.sha256(summary.encode('utf-8')).hexdigest()}.mp3"
@@ -1045,6 +1191,7 @@ def summarize_links():
                             "summarized_at": datetime.now(timezone.utc).isoformat(),
                             "audio_filename": audio_filename,
                             "video_url": video_url,  # Storing the canonical video URL
+                            "model_used": model_key,  # Store which model was used
                         }
                         # --- MODIFICATION END ---
                         save_summary_cache(summary_cache)
@@ -1205,6 +1352,7 @@ def settings_page():
     # Collect current environment variables
     env_vars = {
         "GOOGLE_API_KEY": os.environ.get("GOOGLE_API_KEY", ""),
+        "OPENAI_API_KEY": os.environ.get("OPENAI_API_KEY", ""),
         "LOGIN_ENABLED": os.environ.get("LOGIN_ENABLED", "false"),
         "LOGIN_CODE": os.environ.get("LOGIN_CODE", ""),
         "SESSION_SECRET_KEY": os.environ.get("SESSION_SECRET_KEY", ""),
@@ -1237,6 +1385,7 @@ def update_settings():
         # Define which environment variables we allow to be updated
         allowed_vars = {
             "google_api_key": "GOOGLE_API_KEY",
+            "openai_api_key": "OPENAI_API_KEY",
             "login_enabled": "LOGIN_ENABLED",
             "login_code": "LOGIN_CODE",
             "session_secret_key": "SESSION_SECRET_KEY",
@@ -1273,6 +1422,7 @@ def update_settings():
         global LOGIN_ENABLED, LOGIN_CODE, SESSION_SECRET_KEY, MAX_LOGIN_ATTEMPTS, LOCKOUT_DURATION
         global WEBSHARE_PROXY_ENABLED, WEBSHARE_PROXY_HOST, WEBSHARE_PROXY_PORT
         global WEBSHARE_PROXY_USERNAME, WEBSHARE_PROXY_PASSWORD, DATA_DIR
+        global google_api_key, openai_api_key, gemini_model, openai_client, tts_client, youtube
 
         LOGIN_ENABLED = os.environ.get("LOGIN_ENABLED", "false").lower() == "true"
         LOGIN_CODE = os.environ.get("LOGIN_CODE", "")
@@ -1291,6 +1441,30 @@ def update_settings():
         # Update Flask secret key if SESSION_SECRET_KEY changed
         if SESSION_SECRET_KEY:
             app.secret_key = SESSION_SECRET_KEY
+
+        # Reinitialize API clients if API keys were updated
+        if "GOOGLE_API_KEY" in updated_vars or "OPENAI_API_KEY" in updated_vars:
+            google_api_key = os.environ.get("GOOGLE_API_KEY")
+            openai_api_key = os.environ.get("OPENAI_API_KEY")
+
+            # Reinitialize Google APIs if key was updated
+            if "GOOGLE_API_KEY" in updated_vars and google_api_key:
+                try:
+                    tts_client = texttospeech.TextToSpeechClient(client_options=ClientOptions(api_key=google_api_key))
+                    genai.configure(api_key=google_api_key)
+                    youtube = build("youtube", "v3", developerKey=google_api_key)
+                    gemini_model = genai.GenerativeModel(model_name="gemini-2.5-flash-preview-05-20")
+                    print("✅ Google APIs reinitialized successfully")
+                except Exception as e:
+                    print(f"Warning: Could not reinitialize Google APIs. Error: {e}")
+
+            # Reinitialize OpenAI API if key was updated
+            if "OPENAI_API_KEY" in updated_vars and openai_api_key:
+                try:
+                    openai_client = openai.OpenAI(api_key=openai_api_key)
+                    print("✅ OpenAI API reinitialized successfully")
+                except Exception as e:
+                    print(f"Warning: Could not reinitialize OpenAI API. Error: {e}")
 
         # Save environment variables to .env file for persistence
         save_success = save_env_to_file(updated_vars)

@@ -12,7 +12,7 @@
 
 ---
 
-**YouTube Summarizer** is a Flask web application that generates AI-powered summaries of YouTube videos and playlists. The app extracts transcripts from YouTube videos, creates concise summaries using Google's Gemini AI, and can convert summaries to audio using Google's Text-to-Speech API.
+**YouTube Summarizer** is a Flask web application that generates AI-powered summaries of YouTube videos and playlists. The app extracts transcripts from YouTube videos, creates concise summaries using multiple AI models (Google Gemini and OpenAI GPT models), and can convert summaries to audio using Google's Text-to-Speech API.
 
 ## 📋 Table of Contents
 
@@ -33,6 +33,7 @@
 
 - 📹 **Video Summarization** - Generate AI-powered summaries for individual YouTube videos
 - 📋 **Playlist Support** - Process and summarize entire YouTube playlists
+- 🤖 **Multi-Model AI Support** - Choose from Google Gemini and OpenAI GPT models for summarization
 - 🔊 **Audio Generation** - Convert summaries to MP3 audio files using Text-to-Speech
 - 💾 **Smart Caching** - Store summaries and audio files to minimize API calls
 - 🎨 **Clean Interface** - Simple, responsive web UI for easy interaction
@@ -68,6 +69,7 @@ FLASK_DEBUG=false                    # Enable Flask debug mode (default: true, s
 **Docker Compose** - Add to your `.env` file:
 ```bash
 GOOGLE_API_KEY=your_google_api_key_here
+OPENAI_API_KEY=your_openai_api_key_here
 LOGIN_ENABLED=true
 LOGIN_CODE=MySecurePasscode123
 SESSION_SECRET_KEY=a-long-random-string-for-session-encryption
@@ -170,10 +172,11 @@ If you experience issues with proxy configuration:
 
 ## 🔧 Prerequisites
 
-- Google API Key with access to:
+- **Google API Key** (required) with access to:
   - YouTube Data API v3
   - Google Generative AI (Gemini)
   - Google Cloud Text-to-Speech API
+- **OpenAI API Key** (optional) for GPT models
 
 ## 🐳 Usage with Docker (Recommended)
 
@@ -187,6 +190,7 @@ cd youtube-summarizer
 Create a `.env` file in the project root:
 ```bash
 GOOGLE_API_KEY=your_google_api_key_here
+OPENAI_API_KEY=your_openai_api_key_here  # Optional, for GPT models
 ```
 
 ### 3. Initialize Data Directory
@@ -234,14 +238,16 @@ pip install -r requirements.txt
 ```
 
 ### 4. Set Up Environment Variables
-Create a `.env` file or export the environment variable:
+Create a `.env` file or export the environment variables:
 ```bash
 export GOOGLE_API_KEY=your_google_api_key_here
+export OPENAI_API_KEY=your_openai_api_key_here  # Optional, for GPT models
 ```
 
 On Windows:
 ```cmd
 set GOOGLE_API_KEY=your_google_api_key_here
+set OPENAI_API_KEY=your_openai_api_key_here
 ```
 
 ### 5. Run the Application
@@ -296,16 +302,35 @@ youtube-summarizer/
 
 ## 🔑 API Requirements
 
-This project requires a Google API key with the following APIs enabled:
+This project supports multiple AI providers. You can use either or both:
+
+### Google APIs (Required for YouTube access and Gemini models)
 1. **YouTube Data API v3** - For fetching video metadata and playlist information
-2. **Generative AI API** - For accessing Google's Gemini model
+2. **Generative AI API** - For accessing Google's Gemini models
 3. **Cloud Text-to-Speech API** - For converting summaries to audio
 
-To set up:
+To set up Google APIs:
 1. Go to [Google Cloud Console](https://console.cloud.google.com/)
 2. Create a new project or select an existing one
 3. Enable the required APIs
-4. Create an API key and add it to your `.env` file
+4. Create an API key and add it as `GOOGLE_API_KEY` to your `.env` file
+
+### OpenAI API (Optional, for GPT models)
+1. **OpenAI API** - For accessing GPT-4o, GPT-4 Turbo, and GPT-3.5 Turbo models
+
+To set up OpenAI API:
+1. Go to [OpenAI Platform](https://platform.openai.com/)
+2. Create an account and generate an API key
+3. Add it as `OPENAI_API_KEY` to your `.env` file
+
+### Available AI Models
+- **OpenAI GPT-5** - Most advanced AI model available (default)
+- **OpenAI GPT-5 Chat** - GPT-5 optimized for conversations
+- **OpenAI GPT-5 Mini** - Faster GPT-5 variant
+- **OpenAI GPT-4o** - Advanced multimodal capabilities
+- **OpenAI GPT-4o Mini** - Fast and cost-effective
+- **Google Gemini 2.5 Flash** - Fast and efficient
+- **Google Gemini 1.5 Pro** - More capable for complex content
 
 ## 🛠️ Troubleshooting
 

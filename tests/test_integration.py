@@ -25,27 +25,21 @@ class TestIntegration(unittest.TestCase):
 
     @patch("app.youtube")
     @patch("app.YouTubeTranscriptApi")
-    @patch("app.model")
+    @patch("app.generate_summary")
+    @patch("app.get_video_details")
     @patch("app.summary_cache", {})
-    def test_full_video_summarization_flow(self, mock_model, mock_transcript_api, mock_youtube):
+    def test_full_video_summarization_flow(self, mock_get_video_details, mock_generate_summary, mock_transcript_api, mock_youtube):
         """Test complete flow: URL -> Transcript -> Summary -> Cache"""
         video_url = "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
         video_id = "dQw4w9WgXcQ"
 
         # Mock video details
-        mock_request = MagicMock()
-        mock_request.execute.return_value = {
-            "items": [
-                {
-                    "id": video_id,
-                    "snippet": {
-                        "title": "Never Gonna Give You Up",
-                        "thumbnails": {"medium": {"url": "http://example.com/thumb.jpg"}},
-                    },
-                }
-            ]
+        mock_get_video_details.return_value = {
+            video_id: {
+                "title": "Never Gonna Give You Up",
+                "thumbnail_url": "http://example.com/thumb.jpg"
+            }
         }
-        mock_youtube.videos().list.return_value = mock_request
 
         # Mock transcript
         mock_transcript_api.get_transcript.return_value = [
@@ -54,9 +48,7 @@ class TestIntegration(unittest.TestCase):
         ]
 
         # Mock summary generation
-        mock_response = MagicMock()
-        mock_response.text = "This is a summary of Rick Astley's famous song."
-        mock_model.generate_content.return_value = mock_response
+        mock_generate_summary.return_value = ("This is a summary of Rick Astley's famous song.", None)
 
         # Make request
         response = self.client.post(
@@ -79,7 +71,9 @@ class TestIntegration(unittest.TestCase):
         playlist_url = "https://www.youtube.com/playlist?list=PLrAXtmErZgOeiKm4sgNOknGvNjby9efdf"
 
         # Mock playlist metadata
-        mock_youtube.playlists().list().execute.return_value = {"items": [{"snippet": {"title": "Test Playlist"}}]}
+        playlist_request = MagicMock()
+        playlist_request.execute.return_value = {"items": [{"snippet": {"title": "Test Playlist"}}]}
+        mock_youtube.playlists().list.return_value = playlist_request
 
         # Mock playlist items
         pl_items_request = MagicMock()
@@ -102,7 +96,7 @@ class TestIntegration(unittest.TestCase):
 
         # Mock cache for video1
         mock_get_transcript.side_effect = lambda x: ("Video 1 transcript", None)
-        mock_generate_summary.side_effect = lambda x, y: ("Cached summary for video 1", None)
+        mock_generate_summary.side_effect = lambda x, y, z=None: ("Cached summary for video 1", None)
 
         # Make request
         response = self.client.post(

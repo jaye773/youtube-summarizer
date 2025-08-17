@@ -187,7 +187,16 @@
                         <input type="password" id="google_api_key" name="google_api_key" value="{{ env_vars.GOOGLE_API_KEY or '' }}">
                         <button type="button" class="toggle-btn" onclick="togglePassword('google_api_key')">👁️</button>
                     </div>
-                    <div class="description">Required for YouTube API access and AI summarization</div>
+                    <div class="description">Required for YouTube API access and Gemini AI models</div>
+                </div>
+
+                <div class="form-group">
+                    <label for="openai_api_key">OpenAI API Key</label>
+                    <div class="password-toggle">
+                        <input type="password" id="openai_api_key" name="openai_api_key" value="{{ env_vars.OPENAI_API_KEY or '' }}">
+                        <button type="button" class="toggle-btn" onclick="togglePassword('openai_api_key')">👁️</button>
+                    </div>
+                    <div class="description">Required for OpenAI models (GPT-4o, GPT-4 Turbo, GPT-3.5 Turbo)</div>
                 </div>
             </div>
 

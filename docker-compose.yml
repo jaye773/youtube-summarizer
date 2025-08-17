@@ -11,9 +11,10 @@ services:
     # Map port 5001 on the host machine to port 5001 in the container
     ports:
       - "5001:5001"
-    # Pass the environment variable from the .env file to the container
+    # Pass the environment variables from the .env file to the container
     environment:
       - GOOGLE_API_KEY=${GOOGLE_API_KEY}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
     # Mount the data directory to persist data
     volumes:
       # Map the entire data directory instead of individual files
