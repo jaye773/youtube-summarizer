@@ -198,6 +198,36 @@ class TestYouTubeSummarizer(unittest.TestCase):
             # Verify file was written
             mock_file().write.assert_called_with(b"generated audio content")
 
+    @patch("app.tts_client")
+    @patch("os.path.exists")
+    def test_speak_text_cleaning(self, mock_exists, mock_tts_client):
+        """Test that speak endpoint cleans text before sending to TTS"""
+        mock_exists.return_value = False
+
+        # Mock TTS response
+        mock_response = MagicMock()
+        mock_response.audio_content = b"generated audio content"
+        mock_tts_client.synthesize_speech.return_value = mock_response
+
+        # Text with special characters that should be cleaned
+        # Note: HTML escaping happens first, so quotes become &quot; and & becomes &amp;
+        input_text = 'Hello "world" with $100 & special characters!'
+        expected_cleaned_text = 'Hello world with dollars 100 and special characters!'
+
+        with patch("builtins.open", mock_open()) as mock_file:
+            response = self.client.post(
+                "/speak", data=json.dumps({"text": input_text}), content_type="application/json"
+            )
+
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(response.content_type, "audio/mpeg")
+
+            # Verify TTS was called with cleaned text
+            mock_tts_client.synthesize_speech.assert_called_once()
+            call_args = mock_tts_client.synthesize_speech.call_args
+            actual_text = call_args[1]["input"].text
+            self.assertEqual(actual_text, expected_cleaned_text)
+
     @patch("app.summary_cache", {})  # Clear the cache for this test
     @patch("app.generate_summary")
     @patch("app.get_transcript")
@@ -779,6 +809,198 @@ class TestYouTubeSummarizer(unittest.TestCase):
         # Should redirect or return unauthorized
         self.assertIn(response.status_code, [302, 401])
 
+    # --- SETTINGS FUNCTIONALITY TESTS ---
+    def test_settings_page_get(self):
+        """Test that settings page loads correctly"""
+        response = self.client.get("/settings")
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"Settings", response.data)
+        self.assertIn(b"API Configuration", response.data)
+        self.assertIn(b"Authentication Settings", response.data)
+
+    def test_settings_page_displays_current_env_vars(self):
+        """Test that settings page displays current environment variables"""
+        # Set some test environment variables
+        test_vars = {"GOOGLE_API_KEY": "test_api_key", "LOGIN_ENABLED": "true", "MAX_LOGIN_ATTEMPTS": "10"}
+
+        with patch.dict(os.environ, test_vars):
+            response = self.client.get("/settings")
+            self.assertEqual(response.status_code, 200)
+            # Check that the values appear in the form (they'll be in value attributes)
+            response_text = response.data.decode("utf-8")
+            self.assertIn('value="test_api_key"', response_text)
+            self.assertIn("checked", response_text)  # LOGIN_ENABLED checkbox should be checked
+            self.assertIn('value="10"', response_text)
+
+    def test_settings_update_post_valid_data(self):
+        """Test updating settings with valid data"""
+        settings_data = {
+            "google_api_key": "new_test_key",
+            "login_enabled": "true",
+            "login_code": "test123",
+            "max_login_attempts": "5",
+            "lockout_duration": "20",
+            "webshare_proxy_enabled": "false",
+            "flask_debug": "false",
+        }
+
+        with patch("app.save_env_to_file") as mock_save:
+            mock_save.return_value = True
+            response = self.client.post("/settings", data=json.dumps(settings_data), content_type="application/json")
+
+            self.assertEqual(response.status_code, 200)
+            data = json.loads(response.data)
+            self.assertTrue(data["success"])
+            self.assertIn("Settings updated successfully", data["message"])
+            self.assertIn("updated_variables", data)
+
+            # Verify save_env_to_file was called
+            mock_save.assert_called_once()
+
+    def test_settings_update_post_invalid_json(self):
+        """Test updating settings with invalid JSON"""
+        response = self.client.post("/settings", data="invalid json", content_type="application/json")
+
+        self.assertEqual(response.status_code, 400)
+        data = json.loads(response.data)
+        self.assertIn("error", data)
+
+    def test_settings_update_post_invalid_numeric_values(self):
+        """Test updating settings with invalid numeric values"""
+        settings_data = {"max_login_attempts": "not_a_number", "lockout_duration": "also_not_a_number"}
+
+        response = self.client.post("/settings", data=json.dumps(settings_data), content_type="application/json")
+
+        self.assertEqual(response.status_code, 400)
+        data = json.loads(response.data)
+        self.assertIn("error", data)
+        self.assertIn("must be a number", data["error"])
+
+    def test_settings_update_updates_global_variables(self):
+        """Test that updating settings updates global variables"""
+        settings_data = {"login_enabled": "true", "max_login_attempts": "3", "lockout_duration": "30"}
+
+        with patch("app.save_env_to_file") as mock_save:
+            mock_save.return_value = True
+
+            # Import the global variables to check them
+            import app
+
+            response = self.client.post("/settings", data=json.dumps(settings_data), content_type="application/json")
+
+            self.assertEqual(response.status_code, 200)
+
+            # Check that global variables were updated
+            self.assertTrue(app.LOGIN_ENABLED)
+            self.assertEqual(app.MAX_LOGIN_ATTEMPTS, 3)
+            self.assertEqual(app.LOCKOUT_DURATION, 30)
+
+    @patch("app.save_env_to_file")
+    def test_settings_env_file_save_failure(self, mock_save):
+        """Test handling of .env file save failure"""
+        mock_save.return_value = False
+
+        settings_data = {"google_api_key": "test_key"}
+
+        response = self.client.post("/settings", data=json.dumps(settings_data), content_type="application/json")
+
+        self.assertEqual(response.status_code, 200)
+        data = json.loads(response.data)
+        self.assertTrue(data["success"])
+        self.assertIn("Could not save to .env file", data["message"])
+        self.assertFalse(data["env_file_saved"])
+
+    def test_settings_authentication_required(self):
+        """Test that settings endpoints require authentication when login is enabled"""
+        # Remove testing environment variable to enable authentication
+        if "TESTING" in os.environ:
+            del os.environ["TESTING"]
+
+        with patch("app.LOGIN_ENABLED", True):
+            # Test GET request without authentication
+            response = self.client.get("/settings")
+            self.assertEqual(response.status_code, 302)  # Redirect to login
+
+            # Test POST request without authentication
+            response = self.client.post("/settings", data=json.dumps({"test": "data"}), content_type="application/json")
+            self.assertEqual(response.status_code, 401)  # JSON error for API request
+
+
+class TestTextCleaning(unittest.TestCase):
+    """Test text cleaning functionality for TTS"""
+
+    def test_clean_text_for_tts_basic(self):
+        """Test basic text cleaning functionality"""
+        from app import clean_text_for_tts
+
+        # Test basic special character removal
+        input_text = 'Hello "world" with *special* characters!'
+        expected = 'Hello world with special characters!'
+        result = clean_text_for_tts(input_text)
+        self.assertEqual(result, expected)
+
+    def test_clean_text_for_tts_quotes_and_dashes(self):
+        """Test cleaning of quotes and dashes"""
+        from app import clean_text_for_tts
+
+        input_text = "This is a \"test\" with—various—types of 'quotes' and – dashes."
+        expected = 'This is a test with various types of quotes and dashes.'
+        result = clean_text_for_tts(input_text)
+        self.assertEqual(result, expected)
+
+    def test_clean_text_for_tts_symbols(self):
+        """Test cleaning of mathematical and currency symbols"""
+        from app import clean_text_for_tts
+
+        input_text = 'The price is $100 + 5% tax = $105 total.'
+        expected = 'The price is dollars 100 plus 5 percent tax equals dollars 105 total.'
+        result = clean_text_for_tts(input_text)
+        self.assertEqual(result, expected)
+
+    def test_clean_text_for_tts_urls_and_emails(self):
+        """Test cleaning of URLs and email addresses"""
+        from app import clean_text_for_tts
+
+        input_text = 'Visit https://example.com or email test@example.com for more info.'
+        expected = 'Visit link or email email address for more info.'
+        result = clean_text_for_tts(input_text)
+        self.assertEqual(result, expected)
+
+    def test_clean_text_for_tts_brackets_and_underscores(self):
+        """Test cleaning of brackets and underscores"""
+        from app import clean_text_for_tts
+
+        input_text = 'This [content] has {various} brackets and_underscores.'
+        expected = 'This content has various brackets and underscores.'
+        result = clean_text_for_tts(input_text)
+        self.assertEqual(result, expected)
+
+    def test_clean_text_for_tts_numbers(self):
+        """Test cleaning of formatted numbers"""
+        from app import clean_text_for_tts
+
+        input_text = 'The total is 1,000,000 dollars.'
+        expected = 'The total is 1000000 dollars.'
+        result = clean_text_for_tts(input_text)
+        self.assertEqual(result, expected)
+
+    def test_clean_text_for_tts_empty_and_none(self):
+        """Test edge cases with empty or None input"""
+        from app import clean_text_for_tts
+
+        self.assertEqual(clean_text_for_tts(''), '')
+        self.assertEqual(clean_text_for_tts(None), None)
+        self.assertEqual(clean_text_for_tts('   '), '')
+
+    def test_clean_text_for_tts_whitespace_normalization(self):
+        """Test whitespace normalization"""
+        from app import clean_text_for_tts
+
+        input_text = 'This   has    multiple     spaces.'
+        expected = 'This has multiple spaces.'
+        result = clean_text_for_tts(input_text)
+        self.assertEqual(result, expected)
+
 
 class TestHelperFunctions(unittest.TestCase):
     """Test suite for helper functions"""
@@ -837,6 +1059,59 @@ class TestHelperFunctions(unittest.TestCase):
         url = "https://www.youtube.com/watch?v=dQw4w9WgXcQ&list=WL"
         cleaned_url = url.replace("&list=WL", "")
         self.assertIsNone(get_playlist_id(cleaned_url))
+
+    def test_save_env_to_file_function(self):
+        """Test the save_env_to_file function"""
+        from app import save_env_to_file
+
+        test_vars = {"TEST_VAR1": "value1", "TEST_VAR2": "value2"}
+
+        test_filename = "test.env"
+
+        with patch("builtins.open", mock_open()) as mock_file:
+            with patch("os.path.exists") as mock_exists:
+                mock_exists.return_value = False  # No existing file
+
+                result = save_env_to_file(test_vars, test_filename)
+
+                self.assertTrue(result)
+                mock_file.assert_called()
+
+                # Check that write was called with expected content
+                handle = mock_file()
+                write_calls = handle.write.call_args_list
+
+                # Should write header and variables
+                self.assertTrue(any("Environment Variables" in str(call) for call in write_calls))
+                self.assertTrue(any("TEST_VAR1" in str(call) for call in write_calls))
+                self.assertTrue(any("TEST_VAR2" in str(call) for call in write_calls))
+
+    def test_save_env_to_file_with_existing_file(self):
+        """Test save_env_to_file with existing .env file"""
+        from app import save_env_to_file
+
+        existing_content = "EXISTING_VAR=existing_value\nANOTHER_VAR=another_value"
+        new_vars = {"NEW_VAR": "new_value", "EXISTING_VAR": "updated_value"}  # This should update the existing var
+
+        with patch("builtins.open", mock_open(read_data=existing_content)) as mock_file:
+            with patch("os.path.exists") as mock_exists:
+                mock_exists.return_value = True  # File exists
+
+                result = save_env_to_file(new_vars, "test.env")
+
+                self.assertTrue(result)
+
+                # Check that both read and write were called
+                mock_file.assert_called()
+                handle = mock_file()
+
+                # Should have read the existing file and written the updated content
+                write_calls = handle.write.call_args_list
+                written_content = "".join(str(call[0][0]) for call in write_calls)
+
+                self.assertIn("NEW_VAR", written_content)
+                self.assertIn("ANOTHER_VAR", written_content)
+                self.assertIn("updated_value", written_content)  # Updated value
 
 
 if __name__ == "__main__":

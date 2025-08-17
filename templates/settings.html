@@ -1,0 +1,392 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Settings - YouTube Summarizer</title>
+    <style>
+        body { 
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; 
+            line-height: 1.6; 
+            background-color: #f4f7f6; 
+            color: #333; 
+            margin: 0; 
+            padding: 20px; 
+        }
+        .container { 
+            max-width: 800px; 
+            margin: 0 auto; 
+            background-color: #fff; 
+            padding: 30px; 
+            border-radius: 10px; 
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1); 
+        }
+        .header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 30px;
+            border-bottom: 2px solid #ecf0f1;
+            padding-bottom: 15px;
+        }
+        .header h1 { 
+            color: #2c3e50; 
+            margin: 0;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .back-btn {
+            background-color: #95a5a6;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 6px;
+            cursor: pointer;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            font-size: 14px;
+            transition: background-color 0.3s;
+        }
+        .back-btn:hover {
+            background-color: #7f8c8d;
+        }
+        .settings-form {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+        .form-group {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+        .form-group label {
+            font-weight: bold;
+            color: #2c3e50;
+            font-size: 14px;
+        }
+        .form-group input, .form-group select {
+            padding: 12px;
+            border: 1px solid #bdc3c7;
+            border-radius: 6px;
+            font-size: 16px;
+            transition: border-color 0.3s;
+        }
+        .form-group input:focus, .form-group select:focus {
+            outline: none;
+            border-color: #8e44ad;
+            box-shadow: 0 0 0 2px rgba(142, 68, 173, 0.2);
+        }
+        .form-group .description {
+            font-size: 12px;
+            color: #7f8c8d;
+            margin-top: 4px;
+        }
+        .form-section {
+            border: 1px solid #ecf0f1;
+            border-radius: 8px;
+            padding: 20px;
+            background-color: #fafafa;
+        }
+        .form-section h3 {
+            margin: 0 0 15px 0;
+            color: #2c3e50;
+            font-size: 18px;
+            border-bottom: 1px solid #ecf0f1;
+            padding-bottom: 8px;
+        }
+        .save-btn {
+            background-color: #27ae60;
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            border-radius: 6px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: background-color 0.3s;
+            align-self: flex-start;
+            margin-top: 20px;
+        }
+        .save-btn:hover {
+            background-color: #229954;
+        }
+        .save-btn:disabled {
+            background-color: #bdc3c7;
+            cursor: not-allowed;
+        }
+        .message {
+            padding: 12px;
+            border-radius: 6px;
+            margin-bottom: 20px;
+            display: none;
+        }
+        .message.success {
+            background-color: #d5f4e6;
+            color: #27ae60;
+            border: 1px solid #27ae60;
+        }
+        .message.error {
+            background-color: #fadbd8;
+            color: #e74c3c;
+            border: 1px solid #e74c3c;
+        }
+        .checkbox-group {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .checkbox-group input[type="checkbox"] {
+            width: auto;
+            margin: 0;
+        }
+        .password-toggle {
+            position: relative;
+        }
+        .password-toggle input {
+            padding-right: 40px;
+        }
+        .password-toggle .toggle-btn {
+            position: absolute;
+            right: 10px;
+            top: 50%;
+            transform: translateY(-50%);
+            background: none;
+            border: none;
+            cursor: pointer;
+            font-size: 16px;
+            color: #7f8c8d;
+        }
+        .loading {
+            display: none;
+            margin-left: 10px;
+            color: #7f8c8d;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>⚙️ Settings</h1>
+            <a href="/" class="back-btn">← Back to Home</a>
+        </div>
+
+        <div id="message" class="message"></div>
+
+        <form id="settings-form" class="settings-form">
+            <!-- API Configuration Section -->
+            <div class="form-section">
+                <h3>🔑 API Configuration</h3>
+                
+                <div class="form-group">
+                    <label for="google_api_key">Google API Key</label>
+                    <div class="password-toggle">
+                        <input type="password" id="google_api_key" name="google_api_key" value="{{ env_vars.GOOGLE_API_KEY or '' }}">
+                        <button type="button" class="toggle-btn" onclick="togglePassword('google_api_key')">👁️</button>
+                    </div>
+                    <div class="description">Required for YouTube API access and AI summarization</div>
+                </div>
+            </div>
+
+            <!-- Authentication Section -->
+            <div class="form-section">
+                <h3>🔐 Authentication Settings</h3>
+                
+                <div class="form-group">
+                    <div class="checkbox-group">
+                        <input type="checkbox" id="login_enabled" name="login_enabled" {{ 'checked' if env_vars.LOGIN_ENABLED == 'true' else '' }}>
+                        <label for="login_enabled">Enable Login Protection</label>
+                    </div>
+                    <div class="description">Require a passcode to access the application</div>
+                </div>
+
+                <div class="form-group">
+                    <label for="login_code">Login Passcode</label>
+                    <div class="password-toggle">
+                        <input type="password" id="login_code" name="login_code" value="{{ env_vars.LOGIN_CODE or '' }}">
+                        <button type="button" class="toggle-btn" onclick="togglePassword('login_code')">👁️</button>
+                    </div>
+                    <div class="description">The passcode users must enter to access the application</div>
+                </div>
+
+                <div class="form-group">
+                    <label for="session_secret_key">Session Secret Key</label>
+                    <div class="password-toggle">
+                        <input type="password" id="session_secret_key" name="session_secret_key" value="{{ env_vars.SESSION_SECRET_KEY or '' }}">
+                        <button type="button" class="toggle-btn" onclick="togglePassword('session_secret_key')">👁️</button>
+                    </div>
+                    <div class="description">Secret key for session encryption (auto-generated if empty)</div>
+                </div>
+
+                <div class="form-group">
+                    <label for="max_login_attempts">Max Login Attempts</label>
+                    <input type="number" id="max_login_attempts" name="max_login_attempts" value="{{ env_vars.MAX_LOGIN_ATTEMPTS or '5' }}" min="1" max="20">
+                    <div class="description">Maximum failed login attempts before lockout</div>
+                </div>
+
+                <div class="form-group">
+                    <label for="lockout_duration">Lockout Duration (minutes)</label>
+                    <input type="number" id="lockout_duration" name="lockout_duration" value="{{ env_vars.LOCKOUT_DURATION or '15' }}" min="1" max="1440">
+                    <div class="description">How long to lock out an IP after max failed attempts</div>
+                </div>
+            </div>
+
+            <!-- Proxy Configuration Section -->
+            <div class="form-section">
+                <h3>🌐 Proxy Settings</h3>
+                
+                <div class="form-group">
+                    <div class="checkbox-group">
+                        <input type="checkbox" id="webshare_proxy_enabled" name="webshare_proxy_enabled" {{ 'checked' if env_vars.WEBSHARE_PROXY_ENABLED == 'true' else '' }}>
+                        <label for="webshare_proxy_enabled">Enable Webshare Proxy</label>
+                    </div>
+                    <div class="description">Use proxy for YouTube requests (useful for rate limiting)</div>
+                </div>
+
+                <div class="form-group">
+                    <label for="webshare_proxy_host">Proxy Host</label>
+                    <input type="text" id="webshare_proxy_host" name="webshare_proxy_host" value="{{ env_vars.WEBSHARE_PROXY_HOST or '' }}" placeholder="proxy.webshare.io">
+                    <div class="description">Proxy server hostname</div>
+                </div>
+
+                <div class="form-group">
+                    <label for="webshare_proxy_port">Proxy Port</label>
+                    <input type="number" id="webshare_proxy_port" name="webshare_proxy_port" value="{{ env_vars.WEBSHARE_PROXY_PORT or '' }}" placeholder="80">
+                    <div class="description">Proxy server port</div>
+                </div>
+
+                <div class="form-group">
+                    <label for="webshare_proxy_username">Proxy Username</label>
+                    <input type="text" id="webshare_proxy_username" name="webshare_proxy_username" value="{{ env_vars.WEBSHARE_PROXY_USERNAME or '' }}">
+                    <div class="description">Proxy authentication username</div>
+                </div>
+
+                <div class="form-group">
+                    <label for="webshare_proxy_password">Proxy Password</label>
+                    <div class="password-toggle">
+                        <input type="password" id="webshare_proxy_password" name="webshare_proxy_password" value="{{ env_vars.WEBSHARE_PROXY_PASSWORD or '' }}">
+                        <button type="button" class="toggle-btn" onclick="togglePassword('webshare_proxy_password')">👁️</button>
+                    </div>
+                    <div class="description">Proxy authentication password</div>
+                </div>
+            </div>
+
+            <!-- Application Settings Section -->
+            <div class="form-section">
+                <h3>🔧 Application Settings</h3>
+                
+                <div class="form-group">
+                    <label for="data_dir">Data Directory</label>
+                    <input type="text" id="data_dir" name="data_dir" value="{{ env_vars.DATA_DIR or '' }}" placeholder="data">
+                    <div class="description">Directory for storing cache files and data</div>
+                </div>
+
+                <div class="form-group">
+                    <div class="checkbox-group">
+                        <input type="checkbox" id="flask_debug" name="flask_debug" {{ 'checked' if env_vars.FLASK_DEBUG == 'true' else '' }}>
+                        <label for="flask_debug">Enable Debug Mode</label>
+                    </div>
+                    <div class="description">Enable Flask debug mode (not recommended for production)</div>
+                </div>
+            </div>
+
+            <button type="submit" class="save-btn">
+                💾 Save Settings
+                <span class="loading">Saving...</span>
+            </button>
+        </form>
+    </div>
+
+    <script>
+        function togglePassword(fieldId) {
+            const field = document.getElementById(fieldId);
+            const button = field.nextElementSibling;
+
+            if (field.type === 'password') {
+                field.type = 'text';
+                button.textContent = '🙈';
+            } else {
+                field.type = 'password';
+                button.textContent = '👁️';
+            }
+        }
+
+        function showMessage(text, type) {
+            const messageDiv = document.getElementById('message');
+            messageDiv.textContent = text;
+            messageDiv.className = `message ${type}`;
+            messageDiv.style.display = 'block';
+
+            // Auto-hide success messages after 5 seconds
+            if (type === 'success') {
+                setTimeout(() => {
+                    messageDiv.style.display = 'none';
+                }, 5000);
+            }
+        }
+
+        function setLoading(loading) {
+            const submitBtn = document.querySelector('.save-btn');
+            const loadingSpan = submitBtn.querySelector('.loading');
+
+            if (loading) {
+                submitBtn.disabled = true;
+                loadingSpan.style.display = 'inline';
+            } else {
+                submitBtn.disabled = false;
+                loadingSpan.style.display = 'none';
+            }
+        }
+
+        document.getElementById('settings-form').addEventListener('submit', async function(e) {
+            e.preventDefault();
+
+            setLoading(true);
+
+            const formData = new FormData(this);
+            const settings = {};
+
+            // Convert form data to object
+            for (let [key, value] of formData.entries()) {
+                settings[key] = value;
+            }
+
+            // Handle checkboxes (they won't be in formData if unchecked)
+            const checkboxes = ['login_enabled', 'webshare_proxy_enabled', 'flask_debug'];
+            checkboxes.forEach(checkbox => {
+                if (!settings[checkbox]) {
+                    settings[checkbox] = 'false';
+                } else {
+                    settings[checkbox] = 'true';
+                }
+            });
+
+            try {
+                const response = await fetch('/settings', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(settings)
+                });
+
+                const result = await response.json();
+
+                if (response.ok) {
+                    showMessage(result.message || 'Settings saved successfully!', 'success');
+                } else {
+                    showMessage(result.error || 'Failed to save settings', 'error');
+                }
+            } catch (error) {
+                console.error('Error saving settings:', error);
+                showMessage('Connection error. Please try again.', 'error');
+            } finally {
+                setLoading(false);
+            }
+        });
+    </script>
+</body>
+</html>

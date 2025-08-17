@@ -1,4 +1,5 @@
 import hashlib  # For generating filenames
+import html  # For HTML escaping user inputs
 import json
 import os
 import re
@@ -171,6 +172,42 @@ summary_cache = load_summary_cache()
 print(f"✅ Loaded {len(summary_cache)} summaries from cache.")
 
 
+# --- ENVIRONMENT VARIABLE PERSISTENCE ---
+def save_env_to_file(env_vars, filename=".env"):
+    """Save environment variables to a .env file for persistence"""
+    try:
+        env_file_path = os.path.join(DATA_DIR, filename)
+
+        # Read existing .env file if it exists
+        existing_vars = {}
+        if os.path.exists(env_file_path):
+            with open(env_file_path, "r") as f:
+                for line in f:
+                    line = line.strip()
+                    if line and not line.startswith("#") and "=" in line:
+                        key, value = line.split("=", 1)
+                        existing_vars[key] = value
+
+        # Update with new variables
+        existing_vars.update(env_vars)
+
+        # Write back to file
+        with open(env_file_path, "w") as f:
+            f.write("# YouTube Summarizer Environment Variables\n")
+            f.write(f"# Updated: {datetime.now().isoformat()}\n\n")
+
+            for key, value in sorted(existing_vars.items()):
+                # Properly escape quotes and backslashes in values
+                value = value.replace('\\', '\\\\').replace('"', '\\"')
+                f.write(f'{key}="{value}"\n')
+
+        print(f"✅ Environment variables saved to {env_file_path}")
+        return True
+
+    except Exception as e:
+        print(f"❌ Failed to save environment variables: {e}")
+        return False
+
 # --- LOGIN CONFIGURATION ---
 LOGIN_ENABLED = os.environ.get("LOGIN_ENABLED", "false").lower() == "true"
 LOGIN_CODE = os.environ.get("LOGIN_CODE", "")
@@ -220,7 +257,109 @@ if os.environ.get("TESTING") and not model:
         pass
 
 
-# --- HELPER FUNCTIONS (No changes) ---
+# --- HELPER FUNCTIONS ---
+def clean_text_for_tts(text):
+    """
+    Clean and preprocess text for text-to-speech to avoid ASCII pronunciation issues.
+    Removes or replaces special characters that cause TTS to spell out ASCII codes.
+    """
+    if not text:
+        return text
+
+    # Dictionary of common problematic characters and their replacements
+    replacements = {
+        # HTML entities (from html.escape)
+        '&quot;': '',  # HTML escaped double quotes
+        '&#x27;': '',  # HTML escaped single quotes
+        '&amp;': ' and ',  # HTML escaped ampersand
+        '&lt;': ' less than ',  # HTML escaped less than
+        '&gt;': ' greater than ',  # HTML escaped greater than
+
+        # Quotes and apostrophes
+        '"': '',  # Remove double quotes
+        "'": '',  # Remove single quotes
+        "'": '',  # Remove smart apostrophe
+        "'": '',  # Remove smart apostrophe
+        """: '',  # Remove smart quote
+        """: '',  # Remove smart quote
+
+        # Dashes and hyphens
+        '—': ' ',  # Em dash to space
+        '–': ' ',  # En dash to space
+
+        # Brackets and parentheses (keep content, remove brackets)
+        '[': ' ',
+        ']': ' ',
+        '{': ' ',
+        '}': ' ',
+
+        # Other punctuation that can cause issues
+        '`': '',   # Backtick
+        '~': '',   # Tilde
+        '^': '',   # Caret
+        '*': '',   # Asterisk
+        '_': ' ',  # Underscore to space
+        '|': ' ',  # Pipe to space
+        '\\': ' ', # Backslash to space
+        '/': ' ',  # Forward slash to space (except in URLs, handled separately)
+
+        # Mathematical symbols
+        '±': ' plus or minus ',
+        '×': ' times ',
+        '÷': ' divided by ',
+        '=': ' equals ',
+        '+': ' plus ',
+        '<': ' less than ',
+        '>': ' greater than ',
+
+        # Currency symbols (keep common ones)
+        '$': ' dollars ',
+        '€': ' euros ',
+        '£': ' pounds ',
+        '¥': ' yen ',
+
+        # Other symbols
+        '@': ' at ',
+        '#': ' number ',
+        '%': ' percent ',
+        '&': ' and ',
+
+        # Special characters that often cause issues
+        '§': ' section ',
+        '©': ' copyright ',
+        '®': ' registered ',
+        '™': ' trademark ',
+    }
+
+    # Handle URLs and emails FIRST before character replacements
+    import re
+    cleaned_text = text
+
+    # Handle URLs specially - replace with "link"
+    url_pattern = r'https?://[^\s]+'
+    cleaned_text = re.sub(url_pattern, ' link ', cleaned_text)
+
+    # Handle email addresses
+    email_pattern = r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b'
+    cleaned_text = re.sub(email_pattern, ' email address ', cleaned_text)
+
+    # Apply character replacements AFTER URL/email handling
+    for char, replacement in replacements.items():
+        cleaned_text = cleaned_text.replace(char, replacement)
+
+    # Handle numbers with special formatting
+    # Convert things like "1,000,000" to "1000000" to avoid comma pronunciation issues
+    # Use a loop to handle any number of commas in numbers
+    while re.search(r'(\d+),(\d+)', cleaned_text):
+        cleaned_text = re.sub(r'(\d+),(\d+)', r'\1\2', cleaned_text)
+
+    # Clean up multiple spaces and normalize whitespace
+    cleaned_text = re.sub(r'\s+', ' ', cleaned_text)
+    cleaned_text = cleaned_text.strip()
+
+    return cleaned_text
+
+
 def clean_youtube_url(url):
     if not isinstance(url, str) or not url.strip():
         return ""
@@ -428,10 +567,14 @@ def require_auth(f):
                 "/api_status",
             ]
 
+            # Special handling for settings: GET requests should redirect, POST should return JSON
+            is_settings_post = request.path.startswith("/settings") and request.method == "POST"
+
             is_api_request = (
                 request.content_type == "application/json"
                 or any(request.path.startswith(endpoint) for endpoint in api_endpoints)
                 or request.headers.get("Accept", "").startswith("application/json")
+                or is_settings_post
             )
 
             if is_api_request:
@@ -504,6 +647,9 @@ def login():
         passcode = data.get("passcode", "").strip()
         if not passcode:
             return jsonify({"error": "Passcode is required"}), 400
+        
+        # Sanitize passcode input to prevent XSS
+        passcode = html.escape(passcode)
 
         # Simple authentication check
         if passcode == LOGIN_CODE:
@@ -659,6 +805,9 @@ def search_summaries():
             jsonify({"error": "Query parameter 'q' is required and cannot be empty"}),
             400,
         )
+    
+    # Sanitize search query to prevent XSS
+    query = html.escape(query)
 
     if not summary_cache:
         return jsonify([])
@@ -708,6 +857,9 @@ def debug_transcript():
     url = request.args.get("url", "").strip()
     if not url:
         return jsonify({"error": "URL parameter is required"}), 400
+    
+    # Sanitize URL input to prevent XSS
+    url = html.escape(url)
 
     video_id = get_video_id(url)
     if not video_id:
@@ -957,6 +1109,12 @@ def speak():
         text_to_speak = data.get("text")
         if not text_to_speak:
             return jsonify({"error": "No text provided"}), 400
+        
+        # Sanitize text input to prevent XSS (though this goes to TTS, not display)
+        text_to_speak = html.escape(text_to_speak)
+
+        # Clean text for TTS to avoid ASCII pronunciation issues
+        text_to_speak = clean_text_for_tts(text_to_speak)
     except Exception as e:
         return jsonify({"error": f"Failed to parse request: {str(e)}"}), 400
 
@@ -979,7 +1137,7 @@ def speak():
 
     try:
         synthesis_input = texttospeech.SynthesisInput(text=text_to_speak)
-        voice = texttospeech.VoiceSelectionParams(language_code="en-US", name="en-US-Studio-O")
+        voice = texttospeech.VoiceSelectionParams(language_code="en-US", name="en-US-Chirp3-HD-Zephyr")
         audio_config = texttospeech.AudioConfig(audio_encoding=texttospeech.AudioEncoding.MP3)
 
         response = tts_client.synthesize_speech(input=synthesis_input, voice=voice, audio_config=audio_config)
@@ -1012,6 +1170,9 @@ def delete_summary():
         video_id = data.get("video_id")
         if not video_id:
             return jsonify({"error": "video_id is required"}), 400
+        
+        # Sanitize video_id input to prevent XSS
+        video_id = html.escape(video_id)
 
         if video_id not in summary_cache:
             return jsonify({"error": "Summary not found"}), 404
@@ -1043,6 +1204,118 @@ def delete_summary():
         return jsonify({"error": "Failed to delete summary", "message": str(e)}), 500
 
 
+@app.route("/settings")
+@require_auth
+def settings_page():
+    """Display the settings page with current environment variables"""
+    # Collect current environment variables
+    env_vars = {
+        "GOOGLE_API_KEY": os.environ.get("GOOGLE_API_KEY", ""),
+        "LOGIN_ENABLED": os.environ.get("LOGIN_ENABLED", "false"),
+        "LOGIN_CODE": os.environ.get("LOGIN_CODE", ""),
+        "SESSION_SECRET_KEY": os.environ.get("SESSION_SECRET_KEY", ""),
+        "MAX_LOGIN_ATTEMPTS": os.environ.get("MAX_LOGIN_ATTEMPTS", "5"),
+        "LOCKOUT_DURATION": os.environ.get("LOCKOUT_DURATION", "15"),
+        "WEBSHARE_PROXY_ENABLED": os.environ.get("WEBSHARE_PROXY_ENABLED", "false"),
+        "WEBSHARE_PROXY_HOST": os.environ.get("WEBSHARE_PROXY_HOST", ""),
+        "WEBSHARE_PROXY_PORT": os.environ.get("WEBSHARE_PROXY_PORT", ""),
+        "WEBSHARE_PROXY_USERNAME": os.environ.get("WEBSHARE_PROXY_USERNAME", ""),
+        "WEBSHARE_PROXY_PASSWORD": os.environ.get("WEBSHARE_PROXY_PASSWORD", ""),
+        "DATA_DIR": os.environ.get("DATA_DIR", ""),
+        "FLASK_DEBUG": os.environ.get("FLASK_DEBUG", "true"),
+    }
+
+    return render_template("settings.html", env_vars=env_vars)
+
+
+@app.route("/settings", methods=["POST"])
+@require_auth
+def update_settings():
+    """Update environment variables from settings form"""
+    try:
+        data = request.get_json(force=True)
+        if not data:
+            return jsonify({"error": "Invalid JSON in request body"}), 400
+    except Exception as e:
+        return jsonify({"error": "Invalid JSON in request body", "message": str(e)}), 400
+
+    try:
+        # Define which environment variables we allow to be updated
+        allowed_vars = {
+            "google_api_key": "GOOGLE_API_KEY",
+            "login_enabled": "LOGIN_ENABLED",
+            "login_code": "LOGIN_CODE",
+            "session_secret_key": "SESSION_SECRET_KEY",
+            "max_login_attempts": "MAX_LOGIN_ATTEMPTS",
+            "lockout_duration": "LOCKOUT_DURATION",
+            "webshare_proxy_enabled": "WEBSHARE_PROXY_ENABLED",
+            "webshare_proxy_host": "WEBSHARE_PROXY_HOST",
+            "webshare_proxy_port": "WEBSHARE_PROXY_PORT",
+            "webshare_proxy_username": "WEBSHARE_PROXY_USERNAME",
+            "webshare_proxy_password": "WEBSHARE_PROXY_PASSWORD",
+            "data_dir": "DATA_DIR",
+            "flask_debug": "FLASK_DEBUG",
+        }
+
+        # Validate and update environment variables
+        updated_vars = {}
+        for form_key, env_key in allowed_vars.items():
+            if form_key in data:
+                value = data[form_key].strip() if isinstance(data[form_key], str) else str(data[form_key])
+                
+                # Sanitize settings input to prevent XSS
+                value = html.escape(value)
+
+                # Special validation for numeric fields
+                if form_key in ["max_login_attempts", "lockout_duration", "webshare_proxy_port"]:
+                    if value and not value.isdigit():
+                        return jsonify({"error": f"Invalid value for {form_key}: must be a number"}), 400
+
+                # Update environment variable
+                os.environ[env_key] = value
+                updated_vars[env_key] = value
+
+        # Update global variables that depend on environment variables
+        global LOGIN_ENABLED, LOGIN_CODE, SESSION_SECRET_KEY, MAX_LOGIN_ATTEMPTS, LOCKOUT_DURATION
+        global WEBSHARE_PROXY_ENABLED, WEBSHARE_PROXY_HOST, WEBSHARE_PROXY_PORT
+        global WEBSHARE_PROXY_USERNAME, WEBSHARE_PROXY_PASSWORD, DATA_DIR
+
+        LOGIN_ENABLED = os.environ.get("LOGIN_ENABLED", "false").lower() == "true"
+        LOGIN_CODE = os.environ.get("LOGIN_CODE", "")
+        SESSION_SECRET_KEY = os.environ.get("SESSION_SECRET_KEY", "")
+        MAX_LOGIN_ATTEMPTS = int(os.environ.get("MAX_LOGIN_ATTEMPTS", "5"))
+        LOCKOUT_DURATION = int(os.environ.get("LOCKOUT_DURATION", "15"))
+
+        WEBSHARE_PROXY_ENABLED = os.environ.get("WEBSHARE_PROXY_ENABLED", "false").lower() == "true"
+        WEBSHARE_PROXY_HOST = os.environ.get("WEBSHARE_PROXY_HOST")
+        WEBSHARE_PROXY_PORT = os.environ.get("WEBSHARE_PROXY_PORT")
+        WEBSHARE_PROXY_USERNAME = os.environ.get("WEBSHARE_PROXY_USERNAME")
+        WEBSHARE_PROXY_PASSWORD = os.environ.get("WEBSHARE_PROXY_PASSWORD")
+
+        DATA_DIR = os.environ.get("DATA_DIR", "data" if os.path.exists("/.dockerenv") else ".")
+
+        # Update Flask secret key if SESSION_SECRET_KEY changed
+        if SESSION_SECRET_KEY:
+            app.secret_key = SESSION_SECRET_KEY
+
+        # Save environment variables to .env file for persistence
+        save_success = save_env_to_file(updated_vars)
+
+        return jsonify(
+            {
+                "success": True,
+                "message": f"Settings updated successfully! {len(updated_vars)} variables updated."
+                + (" Saved to .env file." if save_success else " Warning: Could not save to .env file."),
+                "updated_variables": list(updated_vars.keys()),
+                "env_file_saved": save_success,
+            }
+        )
+
+    except Exception as e:
+        print(f"Error updating settings: {e}")
+        return jsonify({"error": "Failed to update settings", "message": str(e)}), 500
+
+
 # Error handlers to ensure JSON responses for API endpoints
 @app.errorhandler(400)
 def bad_request(e):
@@ -1057,6 +1330,7 @@ def bad_request(e):
         "/logout",
         "/login_status",
         "/delete_summary",
+        "/settings",
     ]
     if any(request.path.startswith(path) for path in api_paths):
         return jsonify({"error": "Bad request", "message": str(e), "stacktrace": traceback.format_exc()}), 400
@@ -1076,6 +1350,7 @@ def not_found(e):
         "/logout",
         "/login_status",
         "/delete_summary",
+        "/settings",
     ]
     if any(request.path.startswith(path) for path in api_paths):
         return jsonify({"error": "Endpoint not found", "message": str(e), "path": request.path}), 404
@@ -1095,6 +1370,7 @@ def server_error(e):
         "/logout",
         "/login_status",
         "/delete_summary",
+        "/settings",
     ]
     if any(request.path.startswith(path) for path in api_paths):
         return jsonify({"error": "Internal server error", "message": str(e), "stacktrace": traceback.format_exc()}), 500
@@ -1116,6 +1392,7 @@ def handle_exception(e):
         "/logout",
         "/login_status",
         "/delete_summary",
+        "/settings",
     ]
     if any(request.path.startswith(path) for path in api_paths):
         return (

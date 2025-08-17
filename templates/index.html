@@ -8,6 +8,10 @@
         body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; line-height: 1.6; background-color: #f4f7f6; color: #333; margin: 0; padding: 20px; }
         .container { max-width: 800px; margin: 0 auto; background-color: #fff; padding: 30px; border-radius: 10px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
         h1 { text-align: center; color: #2c3e50; margin-bottom: 20px; }
+        .header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; }
+        .header h1 { margin: 0; text-align: left; }
+        .settings-btn { background-color: #95a5a6; color: white; border: none; padding: 10px; border-radius: 50%; cursor: pointer; text-decoration: none; display: inline-flex; align-items: center; justify-content: center; width: 40px; height: 40px; font-size: 18px; transition: background-color 0.3s; }
+        .settings-btn:hover { background-color: #7f8c8d; }
         textarea { width: 100%; height: 150px; padding: 12px; border-radius: 6px; border: 1px solid #ccc; font-size: 16px; box-sizing: border-box; margin-bottom: 20px; }
         button { display: block; width: 100%; padding: 15px; background-color: #8e44ad; color: white; border: none; border-radius: 6px; font-size: 18px; font-weight: bold; cursor: pointer; transition: background-color 0.3s; }
         button:hover { background-color: #732d91; }
@@ -171,7 +175,10 @@
 <body>
 
     <div class="container">
-        <h1>Universal YouTube Summarizer 🔮</h1>
+        <div class="header">
+            <h1>Universal YouTube Summarizer 🔮</h1>
+            <a href="/settings" class="settings-btn" title="Settings">⚙️</a>
+        </div>
         <p>Paste any mix of YouTube video or playlist links below (one per line) to get a summary.</p>
         
         <textarea id="youtube-links" placeholder="e.g., https://www.youtube.com/watch?v=...\nhttps://www.youtube.com/playlist?list=..."></textarea>

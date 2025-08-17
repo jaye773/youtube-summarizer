@@ -166,7 +166,7 @@ class TestIntegration(unittest.TestCase):
             call_args = mock_tts_client.synthesize_speech.call_args
             self.assertEqual(call_args[1]["input"].text, test_text)
             self.assertEqual(call_args[1]["voice"].language_code, "en-US")
-            self.assertEqual(call_args[1]["voice"].name, "en-US-Studio-O")
+            self.assertEqual(call_args[1]["voice"].name, "en-US-Chirp3-HD-Zephyr")
 
     @patch("app.summary_cache")
     def test_search_functionality_integration(self, mock_cache):
