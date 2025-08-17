@@ -424,11 +424,10 @@ class TestTranscriptAndSummary(unittest.TestCase):
 
     def test_generate_summary_default_model(self):
         """Test that default model is used when none specified"""
-        with patch("app.openai_client") as mock_openai_client:
+        with patch("app.gemini_model") as mock_gemini_model:
             mock_response = MagicMock()
-            mock_response.choices = [MagicMock()]
-            mock_response.choices[0].message.content = "Default model summary"
-            mock_openai_client.chat.completions.create.return_value = mock_response
+            mock_response.text = "Default model summary"
+            mock_gemini_model.generate_content.return_value = mock_response
 
             summary, error = generate_summary(self.test_transcript, self.test_title)
 

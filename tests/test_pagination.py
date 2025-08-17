@@ -1,8 +1,8 @@
 import json
 import os
 import unittest
-from unittest.mock import patch
 from datetime import datetime, timezone
+from unittest.mock import patch
 
 from app import app
 
@@ -40,7 +40,7 @@ class TestPagination(unittest.TestCase):
         with patch("app.summary_cache", self.mock_cache):
             response = self.client.get("/get_cached_summaries?page=1&per_page=10")
             self.assertEqual(response.status_code, 200)
-            
+
             data = json.loads(response.data)
             self.assertIsInstance(data, dict)
             self.assertEqual(data["page"], 1)
@@ -48,7 +48,7 @@ class TestPagination(unittest.TestCase):
             self.assertEqual(data["total"], 25)
             self.assertEqual(data["total_pages"], 3)
             self.assertEqual(len(data["summaries"]), 10)
-            
+
             # Should be sorted by date (most recent first)
             self.assertEqual(data["summaries"][0]["title"], "Video 25")
             self.assertEqual(data["summaries"][9]["title"], "Video 16")
@@ -58,14 +58,14 @@ class TestPagination(unittest.TestCase):
         with patch("app.summary_cache", self.mock_cache):
             response = self.client.get("/get_cached_summaries?page=2&per_page=10")
             self.assertEqual(response.status_code, 200)
-            
+
             data = json.loads(response.data)
             self.assertEqual(data["page"], 2)
             self.assertEqual(data["per_page"], 10)
             self.assertEqual(data["total"], 25)
             self.assertEqual(data["total_pages"], 3)
             self.assertEqual(len(data["summaries"]), 10)
-            
+
             # Second page should have videos 15-6
             self.assertEqual(data["summaries"][0]["title"], "Video 15")
             self.assertEqual(data["summaries"][9]["title"], "Video 06")
@@ -75,14 +75,14 @@ class TestPagination(unittest.TestCase):
         with patch("app.summary_cache", self.mock_cache):
             response = self.client.get("/get_cached_summaries?page=3&per_page=10")
             self.assertEqual(response.status_code, 200)
-            
+
             data = json.loads(response.data)
             self.assertEqual(data["page"], 3)
             self.assertEqual(data["per_page"], 10)
             self.assertEqual(data["total"], 25)
             self.assertEqual(data["total_pages"], 3)
             self.assertEqual(len(data["summaries"]), 5)  # Only 5 items on last page
-            
+
             # Last page should have videos 5-1
             self.assertEqual(data["summaries"][0]["title"], "Video 05")
             self.assertEqual(data["summaries"][4]["title"], "Video 01")
@@ -96,14 +96,14 @@ class TestPagination(unittest.TestCase):
             self.assertEqual(data["per_page"], 20)
             self.assertEqual(data["total_pages"], 2)  # 25 items / 20 per page = 2 pages
             self.assertEqual(len(data["summaries"]), 20)
-            
+
             # Test with page size 50
             response = self.client.get("/get_cached_summaries?page=1&per_page=50")
             data = json.loads(response.data)
             self.assertEqual(data["per_page"], 50)
             self.assertEqual(data["total_pages"], 1)  # All items fit on one page
             self.assertEqual(len(data["summaries"]), 25)
-            
+
             # Test with page size 100
             response = self.client.get("/get_cached_summaries?page=1&per_page=100")
             data = json.loads(response.data)
@@ -118,12 +118,12 @@ class TestPagination(unittest.TestCase):
             response = self.client.get("/get_cached_summaries?page=1&per_page=150")
             data = json.loads(response.data)
             self.assertEqual(data["per_page"], 100)  # Should be capped
-            
+
             # Test invalid page size (should default to 10)
             response = self.client.get("/get_cached_summaries?page=1&per_page=0")
             data = json.loads(response.data)
             self.assertEqual(data["per_page"], 10)  # Should default
-            
+
             # Test negative page size (should default to 10)
             response = self.client.get("/get_cached_summaries?page=1&per_page=-5")
             data = json.loads(response.data)
@@ -136,12 +136,12 @@ class TestPagination(unittest.TestCase):
             response = self.client.get("/get_cached_summaries?page=0&per_page=10")
             data = json.loads(response.data)
             self.assertEqual(data["page"], 1)  # Should default to 1
-            
+
             # Test negative page (should default to 1)
             response = self.client.get("/get_cached_summaries?page=-1&per_page=10")
             data = json.loads(response.data)
             self.assertEqual(data["page"], 1)  # Should default to 1
-            
+
             # Test page beyond available pages (should still work, just return empty)
             response = self.client.get("/get_cached_summaries?page=10&per_page=10")
             data = json.loads(response.data)
@@ -154,12 +154,12 @@ class TestPagination(unittest.TestCase):
             # Test with limit parameter (old format)
             response = self.client.get("/get_cached_summaries?limit=5")
             self.assertEqual(response.status_code, 200)
-            
+
             data = json.loads(response.data)
             # Should return old array format, not pagination object
             self.assertIsInstance(data, list)
             self.assertEqual(len(data), 5)
-            
+
             # Should be sorted by date (most recent first)
             self.assertEqual(data[0]["title"], "Video 25")
             self.assertEqual(data[4]["title"], "Video 21")
@@ -177,7 +177,7 @@ class TestPagination(unittest.TestCase):
         with patch("app.summary_cache", {}):
             response = self.client.get("/get_cached_summaries?page=1&per_page=10")
             self.assertEqual(response.status_code, 200)
-            
+
             data = json.loads(response.data)
             self.assertEqual(data["summaries"], [])
             self.assertEqual(data["total"], 0)
@@ -206,8 +206,16 @@ class TestPagination(unittest.TestCase):
             # Check summary structure
             if data["summaries"]:
                 summary = data["summaries"][0]
-                required_summary_fields = ["type", "video_id", "title", "thumbnail_url",
-                                         "summary", "summarized_at", "video_url", "error"]
+                required_summary_fields = [
+                    "type",
+                    "video_id",
+                    "title",
+                    "thumbnail_url",
+                    "summary",
+                    "summarized_at",
+                    "video_url",
+                    "error",
+                ]
                 for field in required_summary_fields:
                     self.assertIn(field, summary)
 
@@ -250,8 +258,7 @@ class TestPagination(unittest.TestCase):
             for case in test_cases:
                 response = self.client.get(f"/get_cached_summaries?page=1&per_page={case['per_page']}")
                 data = json.loads(response.data)
-                self.assertEqual(data["total_pages"], case["expected_pages"],
-                               f"Failed for per_page={case['per_page']}")
+                self.assertEqual(data["total_pages"], case["expected_pages"], f"Failed for per_page={case['per_page']}")
                 self.assertEqual(data["total"], 25)
 
                 # Test that all pages combined contain all items

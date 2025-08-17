@@ -442,12 +442,12 @@
                     modelSelect.appendChild(optgroup);
                 });
 
-                // Set default selection (prefer GPT-5 if available, then Gemini 2.5 Flash, otherwise first available)
+                // Set default selection (prefer Gemini 2.5 Flash if available, then GPT-5, otherwise first available)
                 let defaultModel;
-                if (status.available_models.includes('gpt-5') && status.openai_api_key_set) {
-                    defaultModel = 'gpt-5';
-                } else if (status.available_models.includes('gemini-2.5-flash') && status.google_api_key_set) {
+                if (status.available_models.includes('gemini-2.5-flash') && status.google_api_key_set) {
                     defaultModel = 'gemini-2.5-flash';
+                } else if (status.available_models.includes('gpt-5') && status.openai_api_key_set) {
+                    defaultModel = 'gpt-5';
                 } else {
                     defaultModel = modelSelect.querySelector('option')?.value;
                 }

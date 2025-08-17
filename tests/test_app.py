@@ -109,7 +109,7 @@ class TestYouTubeSummarizer(unittest.TestCase):
         response = self.client.post(
             "/summarize",
             data=json.dumps({"urls": [self.test_video_url], "model": "invalid-model"}),
-            content_type="application/json"
+            content_type="application/json",
         )
         self.assertEqual(response.status_code, 400)
         data = json.loads(response.data)
@@ -148,7 +148,7 @@ class TestYouTubeSummarizer(unittest.TestCase):
         self.assertEqual(data[0]["video_url"], f"https://www.youtube.com/watch?v={self.test_video_id}")
 
         # Verify that generate_summary was called with default model
-        mock_generate_summary.assert_called_with("This is a test transcript", "Test Video Title", "gpt-5")
+        mock_generate_summary.assert_called_with("This is a test transcript", "Test Video Title", "gemini-2.5-flash")
 
     @patch("app.summary_cache", {})  # Clear the cache for this test
     @patch("app.generate_summary")
@@ -172,7 +172,7 @@ class TestYouTubeSummarizer(unittest.TestCase):
         response = self.client.post(
             "/summarize",
             data=json.dumps({"urls": [self.test_video_url], "model": "gpt-4o"}),
-            content_type="application/json"
+            content_type="application/json",
         )
 
         self.assertEqual(response.status_code, 200)
@@ -263,7 +263,7 @@ class TestYouTubeSummarizer(unittest.TestCase):
         input_text = 'Hello "world" with $100 & special characters!'
         expected_cleaned_text = "Hello world with dollars 100 and special characters!"
 
-        with patch("builtins.open", mock_open()) as mock_file:
+        with patch("builtins.open", mock_open()):
             response = self.client.post(
                 "/speak", data=json.dumps({"text": input_text}), content_type="application/json"
             )

@@ -235,51 +235,51 @@ if LOGIN_ENABLED:
 
 # --- AI MODEL CONFIGURATION ---
 AVAILABLE_MODELS = {
-    'gemini-2.5-flash': {
-        'provider': 'google',
-        'model': 'gemini-2.5-flash-preview-05-20',
-        'display_name': 'Gemini 2.5 Flash (Fast)',
-        'description': 'Fast and efficient for most content'
+    "gemini-2.5-flash": {
+        "provider": "google",
+        "model": "gemini-2.5-flash-preview-05-20",
+        "display_name": "Gemini 2.5 Flash (Fast)",
+        "description": "Fast and efficient for most content",
     },
-    'gemini-1.5-pro': {
-        'provider': 'google',
-        'model': 'gemini-1.5-pro',
-        'display_name': 'Gemini 1.5 Pro (Advanced)',
-        'description': 'More capable for complex content'
+    "gemini-1.5-pro": {
+        "provider": "google",
+        "model": "gemini-1.5-pro",
+        "display_name": "Gemini 1.5 Pro (Advanced)",
+        "description": "More capable for complex content",
     },
-    'gpt-5': {
-        'provider': 'openai',
-        'model': 'gpt-5-2025-08-07',
-        'display_name': 'GPT-5 (Latest)',
-        'description': 'OpenAI\'s most advanced model'
+    "gpt-5": {
+        "provider": "openai",
+        "model": "gpt-5-2025-08-07",
+        "display_name": "GPT-5 (Latest)",
+        "description": "OpenAI's most advanced model",
     },
-    'gpt-5-chat': {
-        'provider': 'openai',
-        'model': 'gpt-5-chat-latest',
-        'display_name': 'GPT-5 Chat (Optimized)',
-        'description': 'GPT-5 optimized for conversations'
+    "gpt-5-chat": {
+        "provider": "openai",
+        "model": "gpt-5-chat-latest",
+        "display_name": "GPT-5 Chat (Optimized)",
+        "description": "GPT-5 optimized for conversations",
     },
-    'gpt-5-mini': {
-        'provider': 'openai',
-        'model': 'gpt-5-mini-2025-08-07',
-        'display_name': 'GPT-5 Mini (Fast)',
-        'description': 'Faster GPT-5 variant'
+    "gpt-5-mini": {
+        "provider": "openai",
+        "model": "gpt-5-mini-2025-08-07",
+        "display_name": "GPT-5 Mini (Fast)",
+        "description": "Faster GPT-5 variant",
     },
-    'gpt-4o': {
-        'provider': 'openai',
-        'model': 'gpt-4o-2024-11-20',
-        'display_name': 'GPT-4o (Multimodal)',
-        'description': 'Advanced multimodal capabilities'
+    "gpt-4o": {
+        "provider": "openai",
+        "model": "gpt-4o-2024-11-20",
+        "display_name": "GPT-4o (Multimodal)",
+        "description": "Advanced multimodal capabilities",
     },
-    'gpt-4o-mini': {
-        'provider': 'openai',
-        'model': 'gpt-4o-mini-2024-07-18',
-        'display_name': 'GPT-4o Mini (Efficient)',
-        'description': 'Fast and cost-effective'
-    }
+    "gpt-4o-mini": {
+        "provider": "openai",
+        "model": "gpt-4o-mini-2024-07-18",
+        "display_name": "GPT-4o Mini (Efficient)",
+        "description": "Fast and cost-effective",
+    },
 }
 
-DEFAULT_MODEL = 'gpt-5'
+DEFAULT_MODEL = "gemini-2.5-flash"
 
 
 # --- API CLIENT INITIALIZATION ---
@@ -545,8 +545,8 @@ def get_summary_prompt(transcript, title):
     into a single, cohesive, and engaging audio-friendly summary. Your goal is to create a narrative that is not
     only informative but also easy for a listener to understand and retain when read aloud.
 
-    **Your Task:** I will provide you with a transcript from a YouTube video titled "{title}". Your task is to synthesize this
-    transcript into one continuous, audio-friendly summary.
+    **Your Task:** I will provide you with a transcript from a YouTube video titled "{title}".
+    Your task is to synthesize this transcript into one continuous, audio-friendly summary.
 
     Within this summary, you must identify the 3-10 most critical points or actionable insights and seamlessly
     weave them into the narrative. You should introduce these key points using natural, conversational phrases
@@ -626,15 +626,21 @@ def generate_summary_openai(transcript, title, model_name):
         api_params = {
             "model": model_name,
             "messages": [
-                {"role": "system", "content": "You are an expert content summarizer specializing in creating engaging, audio-friendly summaries of YouTube videos."},
-                {"role": "user", "content": prompt}
+                {
+                    "role": "system",
+                    "content": (
+                        "You are an expert content summarizer specializing in creating engaging, "
+                        "audio-friendly summaries of YouTube videos."
+                    ),
+                },
+                {"role": "user", "content": prompt},
             ],
-            "max_completion_tokens": 2000
+            "max_completion_tokens": 2000,
         }
 
         # Some models (like GPT-5 Mini) only support default temperature (1)
         # Only add temperature parameter for models that support it
-        models_with_default_temp_only = ['gpt-5-mini-2025-08-07', 'gpt-5-nano-2025-08-07']
+        models_with_default_temp_only = ["gpt-5-mini-2025-08-07", "gpt-5-nano-2025-08-07"]
         if model_name not in models_with_default_temp_only:
             api_params["temperature"] = 0.7
 
@@ -660,13 +666,13 @@ def generate_summary(transcript, title, model_key=None):
         return None, f"Unsupported model: {model_key}. Available models: {list(AVAILABLE_MODELS.keys())}"
 
     model_config = AVAILABLE_MODELS[model_key]
-    provider = model_config['provider']
-    model_name = model_config['model']
+    provider = model_config["provider"]
+    model_name = model_config["model"]
 
     # Route to appropriate provider
-    if provider == 'google':
+    if provider == "google":
         return generate_summary_gemini(transcript, title, model_name)
-    elif provider == 'openai':
+    elif provider == "openai":
         return generate_summary_openai(transcript, title, model_name)
     else:
         return None, f"Unknown provider: {provider}"
@@ -855,13 +861,9 @@ def get_cached_summaries():
 
     if not summary_cache:
         if is_pagination_request:
-            return jsonify({
-                "summaries": [],
-                "total": 0,
-                "page": page or 1,
-                "per_page": per_page or 10,
-                "total_pages": 0
-            })
+            return jsonify(
+                {"summaries": [], "total": 0, "page": page or 1, "per_page": per_page or 10, "total_pages": 0}
+            )
         else:
             return jsonify([])
 
@@ -916,13 +918,9 @@ def get_cached_summaries():
 
     paginated_list = cached_list[start_index:end_index]
 
-    return jsonify({
-        "summaries": paginated_list,
-        "total": total,
-        "page": page,
-        "per_page": per_page,
-        "total_pages": total_pages
-    })
+    return jsonify(
+        {"summaries": paginated_list, "total": total, "page": page, "per_page": per_page, "total_pages": total_pages}
+    )
 
 
 @app.route("/search_summaries", methods=["GET"])
@@ -1035,7 +1033,8 @@ def summarize_links():
 
         # Validate model key
         if model_key not in AVAILABLE_MODELS:
-            return jsonify({"error": f"Unsupported model: {model_key}. Available models: {list(AVAILABLE_MODELS.keys())}"}), 400
+            available_models = list(AVAILABLE_MODELS.keys())
+            return jsonify({"error": f"Unsupported model: {model_key}. Available models: {available_models}"}), 400
 
         results = []
         for url in urls:

@@ -324,13 +324,13 @@ To set up OpenAI API:
 3. Add it as `OPENAI_API_KEY` to your `.env` file
 
 ### Available AI Models
-- **OpenAI GPT-5** - Most advanced AI model available (default)
+- **Google Gemini 2.5 Flash** - Fast and efficient (default)
+- **Google Gemini 1.5 Pro** - More capable for complex content
+- **OpenAI GPT-5** - Most advanced AI model available
 - **OpenAI GPT-5 Chat** - GPT-5 optimized for conversations
 - **OpenAI GPT-5 Mini** - Faster GPT-5 variant
 - **OpenAI GPT-4o** - Advanced multimodal capabilities
 - **OpenAI GPT-4o Mini** - Fast and cost-effective
-- **Google Gemini 2.5 Flash** - Fast and efficient
-- **Google Gemini 1.5 Pro** - More capable for complex content
 
 ## 🛠️ Troubleshooting
 
