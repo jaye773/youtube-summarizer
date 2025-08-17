@@ -198,7 +198,7 @@ def save_env_to_file(env_vars, filename=".env"):
 
             for key, value in sorted(existing_vars.items()):
                 # Properly escape quotes and backslashes in values
-                value = value.replace('\\', '\\\\').replace('"', '\\"')
+                value = value.replace("\\", "\\\\").replace('"', '\\"')
                 f.write(f'{key}="{value}"\n')
 
         print(f"✅ Environment variables saved to {env_file_path}")
@@ -207,6 +207,7 @@ def save_env_to_file(env_vars, filename=".env"):
     except Exception as e:
         print(f"❌ Failed to save environment variables: {e}")
         return False
+
 
 # --- LOGIN CONFIGURATION ---
 LOGIN_ENABLED = os.environ.get("LOGIN_ENABLED", "false").lower() == "true"
@@ -269,79 +270,72 @@ def clean_text_for_tts(text):
     # Dictionary of common problematic characters and their replacements
     replacements = {
         # HTML entities (from html.escape)
-        '&quot;': '',  # HTML escaped double quotes
-        '&#x27;': '',  # HTML escaped single quotes
-        '&amp;': ' and ',  # HTML escaped ampersand
-        '&lt;': ' less than ',  # HTML escaped less than
-        '&gt;': ' greater than ',  # HTML escaped greater than
-
+        "&quot;": "",  # HTML escaped double quotes
+        "&#x27;": "",  # HTML escaped single quotes
+        "&amp;": " and ",  # HTML escaped ampersand
+        "&lt;": " less than ",  # HTML escaped less than
+        "&gt;": " greater than ",  # HTML escaped greater than
         # Quotes and apostrophes
-        '"': '',  # Remove double quotes
-        "'": '',  # Remove single quotes
-        "'": '',  # Remove smart apostrophe
-        "'": '',  # Remove smart apostrophe
+        '"': "",  # Remove double quotes
+        "'": "",  # Remove single quotes
+        "'": "",  # Remove smart apostrophe
+        "'": "",  # Remove smart apostrophe
         """: '',  # Remove smart quote
-        """: '',  # Remove smart quote
-
+        """: "",  # Remove smart quote
         # Dashes and hyphens
-        '—': ' ',  # Em dash to space
-        '–': ' ',  # En dash to space
-
+        "—": " ",  # Em dash to space
+        "–": " ",  # En dash to space
         # Brackets and parentheses (keep content, remove brackets)
-        '[': ' ',
-        ']': ' ',
-        '{': ' ',
-        '}': ' ',
-
+        "[": " ",
+        "]": " ",
+        "{": " ",
+        "}": " ",
         # Other punctuation that can cause issues
-        '`': '',   # Backtick
-        '~': '',   # Tilde
-        '^': '',   # Caret
-        '*': '',   # Asterisk
-        '_': ' ',  # Underscore to space
-        '|': ' ',  # Pipe to space
-        '\\': ' ', # Backslash to space
-        '/': ' ',  # Forward slash to space (except in URLs, handled separately)
-
+        "`": "",  # Backtick
+        "~": "",  # Tilde
+        "^": "",  # Caret
+        "*": "",  # Asterisk
+        "_": " ",  # Underscore to space
+        "|": " ",  # Pipe to space
+        "\\": " ",  # Backslash to space
+        "/": " ",  # Forward slash to space (except in URLs, handled separately)
         # Mathematical symbols
-        '±': ' plus or minus ',
-        '×': ' times ',
-        '÷': ' divided by ',
-        '=': ' equals ',
-        '+': ' plus ',
-        '<': ' less than ',
-        '>': ' greater than ',
-
+        "±": " plus or minus ",
+        "×": " times ",
+        "÷": " divided by ",
+        "=": " equals ",
+        "+": " plus ",
+        "<": " less than ",
+        ">": " greater than ",
         # Currency symbols (keep common ones)
-        '$': ' dollars ',
-        '€': ' euros ',
-        '£': ' pounds ',
-        '¥': ' yen ',
-
+        "$": " dollars ",
+        "€": " euros ",
+        "£": " pounds ",
+        "¥": " yen ",
         # Other symbols
-        '@': ' at ',
-        '#': ' number ',
-        '%': ' percent ',
-        '&': ' and ',
-
+        "@": " at ",
+        "#": " number ",
+        "%": " percent ",
+        "&": " and ",
         # Special characters that often cause issues
-        '§': ' section ',
-        '©': ' copyright ',
-        '®': ' registered ',
-        '™': ' trademark ',
+        "§": " section ",
+        "©": " copyright ",
+        "®": " registered ",
+        "™": " trademark ",
     }
 
     # Handle URLs and emails FIRST before character replacements
     import re
+
     cleaned_text = text
 
     # Handle URLs specially - replace with "link"
-    url_pattern = r'https?://[^\s]+'
-    cleaned_text = re.sub(url_pattern, ' link ', cleaned_text)
+    url_pattern = r"https?://[^\s]+"
+    cleaned_text = re.sub(url_pattern, " link ", cleaned_text)
 
     # Handle email addresses
-    email_pattern = r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b'
-    cleaned_text = re.sub(email_pattern, ' email address ', cleaned_text)
+    email_pattern = r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b"
+    cleaned_text = re.sub(email_pattern, " email address ", cleaned_text)
 
     # Apply character replacements AFTER URL/email handling
     for char, replacement in replacements.items():
@@ -350,11 +344,11 @@ def clean_text_for_tts(text):
     # Handle numbers with special formatting
     # Convert things like "1,000,000" to "1000000" to avoid comma pronunciation issues
     # Use a loop to handle any number of commas in numbers
-    while re.search(r'(\d+),(\d+)', cleaned_text):
-        cleaned_text = re.sub(r'(\d+),(\d+)', r'\1\2', cleaned_text)
+    while re.search(r"(\d+),(\d+)", cleaned_text):
+        cleaned_text = re.sub(r"(\d+),(\d+)", r"\1\2", cleaned_text)
 
     # Clean up multiple spaces and normalize whitespace
-    cleaned_text = re.sub(r'\s+', ' ', cleaned_text)
+    cleaned_text = re.sub(r"\s+", " ", cleaned_text)
     cleaned_text = cleaned_text.strip()
 
     return cleaned_text
@@ -647,7 +641,7 @@ def login():
         passcode = data.get("passcode", "").strip()
         if not passcode:
             return jsonify({"error": "Passcode is required"}), 400
-        
+
         # Sanitize passcode input to prevent XSS
         passcode = html.escape(passcode)
 
@@ -805,7 +799,7 @@ def search_summaries():
             jsonify({"error": "Query parameter 'q' is required and cannot be empty"}),
             400,
         )
-    
+
     # Sanitize search query to prevent XSS
     query = html.escape(query)
 
@@ -857,7 +851,7 @@ def debug_transcript():
     url = request.args.get("url", "").strip()
     if not url:
         return jsonify({"error": "URL parameter is required"}), 400
-    
+
     # Sanitize URL input to prevent XSS
     url = html.escape(url)
 
@@ -1109,7 +1103,7 @@ def speak():
         text_to_speak = data.get("text")
         if not text_to_speak:
             return jsonify({"error": "No text provided"}), 400
-        
+
         # Sanitize text input to prevent XSS (though this goes to TTS, not display)
         text_to_speak = html.escape(text_to_speak)
 
@@ -1170,7 +1164,7 @@ def delete_summary():
         video_id = data.get("video_id")
         if not video_id:
             return jsonify({"error": "video_id is required"}), 400
-        
+
         # Sanitize video_id input to prevent XSS
         video_id = html.escape(video_id)
 
@@ -1262,7 +1256,7 @@ def update_settings():
         for form_key, env_key in allowed_vars.items():
             if form_key in data:
                 value = data[form_key].strip() if isinstance(data[form_key], str) else str(data[form_key])
-                
+
                 # Sanitize settings input to prevent XSS
                 value = html.escape(value)
 

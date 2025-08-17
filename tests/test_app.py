@@ -212,7 +212,7 @@ class TestYouTubeSummarizer(unittest.TestCase):
         # Text with special characters that should be cleaned
         # Note: HTML escaping happens first, so quotes become &quot; and & becomes &amp;
         input_text = 'Hello "world" with $100 & special characters!'
-        expected_cleaned_text = 'Hello world with dollars 100 and special characters!'
+        expected_cleaned_text = "Hello world with dollars 100 and special characters!"
 
         with patch("builtins.open", mock_open()) as mock_file:
             response = self.client.post(
@@ -935,7 +935,7 @@ class TestTextCleaning(unittest.TestCase):
 
         # Test basic special character removal
         input_text = 'Hello "world" with *special* characters!'
-        expected = 'Hello world with special characters!'
+        expected = "Hello world with special characters!"
         result = clean_text_for_tts(input_text)
         self.assertEqual(result, expected)
 
@@ -944,7 +944,7 @@ class TestTextCleaning(unittest.TestCase):
         from app import clean_text_for_tts
 
         input_text = "This is a \"test\" with—various—types of 'quotes' and – dashes."
-        expected = 'This is a test with various types of quotes and dashes.'
+        expected = "This is a test with various types of quotes and dashes."
         result = clean_text_for_tts(input_text)
         self.assertEqual(result, expected)
 
@@ -952,8 +952,8 @@ class TestTextCleaning(unittest.TestCase):
         """Test cleaning of mathematical and currency symbols"""
         from app import clean_text_for_tts
 
-        input_text = 'The price is $100 + 5% tax = $105 total.'
-        expected = 'The price is dollars 100 plus 5 percent tax equals dollars 105 total.'
+        input_text = "The price is $100 + 5% tax = $105 total."
+        expected = "The price is dollars 100 plus 5 percent tax equals dollars 105 total."
         result = clean_text_for_tts(input_text)
         self.assertEqual(result, expected)
 
@@ -961,8 +961,8 @@ class TestTextCleaning(unittest.TestCase):
         """Test cleaning of URLs and email addresses"""
         from app import clean_text_for_tts
 
-        input_text = 'Visit https://example.com or email test@example.com for more info.'
-        expected = 'Visit link or email email address for more info.'
+        input_text = "Visit https://example.com or email test@example.com for more info."
+        expected = "Visit link or email email address for more info."
         result = clean_text_for_tts(input_text)
         self.assertEqual(result, expected)
 
@@ -970,8 +970,8 @@ class TestTextCleaning(unittest.TestCase):
         """Test cleaning of brackets and underscores"""
         from app import clean_text_for_tts
 
-        input_text = 'This [content] has {various} brackets and_underscores.'
-        expected = 'This content has various brackets and underscores.'
+        input_text = "This [content] has {various} brackets and_underscores."
+        expected = "This content has various brackets and underscores."
         result = clean_text_for_tts(input_text)
         self.assertEqual(result, expected)
 
@@ -979,8 +979,8 @@ class TestTextCleaning(unittest.TestCase):
         """Test cleaning of formatted numbers"""
         from app import clean_text_for_tts
 
-        input_text = 'The total is 1,000,000 dollars.'
-        expected = 'The total is 1000000 dollars.'
+        input_text = "The total is 1,000,000 dollars."
+        expected = "The total is 1000000 dollars."
         result = clean_text_for_tts(input_text)
         self.assertEqual(result, expected)
 
@@ -988,16 +988,16 @@ class TestTextCleaning(unittest.TestCase):
         """Test edge cases with empty or None input"""
         from app import clean_text_for_tts
 
-        self.assertEqual(clean_text_for_tts(''), '')
+        self.assertEqual(clean_text_for_tts(""), "")
         self.assertEqual(clean_text_for_tts(None), None)
-        self.assertEqual(clean_text_for_tts('   '), '')
+        self.assertEqual(clean_text_for_tts("   "), "")
 
     def test_clean_text_for_tts_whitespace_normalization(self):
         """Test whitespace normalization"""
         from app import clean_text_for_tts
 
-        input_text = 'This   has    multiple     spaces.'
-        expected = 'This has multiple spaces.'
+        input_text = "This   has    multiple     spaces."
+        expected = "This has multiple spaces."
         result = clean_text_for_tts(input_text)
         self.assertEqual(result, expected)
 
