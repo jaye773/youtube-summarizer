@@ -633,11 +633,8 @@ def generate_summary_openai(transcript, title, model_name):
             "max_completion_tokens": 2000,
         }
 
-        # Some models (like GPT-5 Mini) only support default temperature (1)
-        # Only add temperature parameter for models that support it
-        models_with_default_temp_only = ["gpt-5-mini-2025-08-07", "gpt-5-nano-2025-08-07"]
-        if model_name not in models_with_default_temp_only:
-            api_params["temperature"] = 0.7
+        # OpenAI models will use their default temperature settings
+        # No temperature parameter needed
 
         response = openai_client.chat.completions.create(**api_params)
 
