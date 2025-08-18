@@ -241,10 +241,10 @@ AVAILABLE_MODELS = {
         "display_name": "Gemini 2.5 Flash (Fast)",
         "description": "Fast and efficient for most content",
     },
-    "gemini-1.5-pro": {
+    "gemini-2.5-pro": {
         "provider": "google",
-        "model": "gemini-1.5-pro",
-        "display_name": "Gemini 1.5 Pro (Advanced)",
+        "model": "gemini-2.5-pro",
+        "display_name": "Gemini 2.5 Pro (Advanced)",
         "description": "More capable for complex content",
     },
     "gpt-5": {
@@ -253,12 +253,7 @@ AVAILABLE_MODELS = {
         "display_name": "GPT-5 (Latest)",
         "description": "OpenAI's most advanced model",
     },
-    "gpt-5-chat": {
-        "provider": "openai",
-        "model": "gpt-5-chat-latest",
-        "display_name": "GPT-5 Chat (Optimized)",
-        "description": "GPT-5 optimized for conversations",
-    },
+
     "gpt-5-mini": {
         "provider": "openai",
         "model": "gpt-5-mini-2025-08-07",
