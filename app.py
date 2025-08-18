@@ -638,10 +638,23 @@ def generate_summary_openai(transcript, title, model_name):
 
         response = openai_client.chat.completions.create(**api_params)
 
+        if not response.choices or not response.choices[0].message.content:
+            return None, "Empty response from OpenAI API"
+
         return response.choices[0].message.content, None
     except Exception as e:
         print(f"Error calling OpenAI API ({model_name}): {e}")
-        return None, f"Error calling OpenAI API: {e}"
+
+        # Provide more specific error messages
+        error_msg = str(e)
+        if "api_key" in error_msg.lower():
+            return None, "OpenAI API key is invalid or missing"
+        elif "rate_limit" in error_msg.lower():
+            return None, "OpenAI API rate limit exceeded"
+        elif "model" in error_msg.lower() and "not found" in error_msg.lower():
+            return None, f"OpenAI model '{model_name}' not found or not accessible"
+        else:
+            return None, f"Error calling OpenAI API: {e}"
 
 
 def generate_summary(transcript, title, model_key=None):
@@ -1006,6 +1019,46 @@ def debug_transcript():
         result["transcript_preview"] = transcript[:200] + "..." if len(transcript) > 200 else transcript
 
     return jsonify(result)
+
+
+@app.route("/debug_model", methods=["GET"])
+@require_auth
+def debug_model():
+    """Debug endpoint to test model functionality"""
+    model_key = request.args.get("model", "gpt-5")
+
+    try:
+        # Test with a simple transcript
+        test_transcript = "This is a test transcript about artificial intelligence and machine learning technologies."
+        test_title = "Test Video About AI"
+
+        print(f"🔍 Debug endpoint testing model: {model_key}")
+
+        # Test the model
+        summary, error = generate_summary(test_transcript, test_title, model_key)
+
+        result = {
+            "model_key": model_key,
+            "model_config": AVAILABLE_MODELS.get(model_key, {}),
+            "openai_client_available": openai_client is not None,
+            "summary_success": summary is not None,
+            "summary_length": len(summary) if summary else 0,
+            "error": error,
+        }
+
+        if summary:
+            result["summary_preview"] = summary[:200] + "..." if len(summary) > 200 else summary
+
+        return jsonify(result)
+
+    except Exception as e:
+        import traceback
+        return jsonify({
+            "error": "Exception in debug_model",
+            "message": str(e),
+            "type": type(e).__name__,
+            "traceback": traceback.format_exc()
+        }), 500
 
 
 @app.route("/summarize", methods=["POST"])
