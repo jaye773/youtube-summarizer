@@ -13,6 +13,7 @@ import openai
 from flask import Flask, Response, jsonify, redirect, render_template, request, session, url_for
 from google.api_core.client_options import ClientOptions
 from google.cloud import texttospeech
+from voice_config import AVAILABLE_VOICES, DEFAULT_VOICE, get_voice_config, get_voice_with_fallback, get_voices_by_tier, validate_voice_name, get_sample_text, get_fallback_voice, get_optimized_cache_key, cleanup_audio_cache, should_cleanup_cache, CACHE_CONFIG
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 from youtube_transcript_api import NoTranscriptFound, TranscriptsDisabled, YouTubeTranscriptApi
@@ -26,6 +27,7 @@ WEBSHARE_PROXY_HOST = os.environ.get("WEBSHARE_PROXY_HOST")
 WEBSHARE_PROXY_PORT = os.environ.get("WEBSHARE_PROXY_PORT")
 WEBSHARE_PROXY_USERNAME = os.environ.get("WEBSHARE_PROXY_USERNAME")
 WEBSHARE_PROXY_PASSWORD = os.environ.get("WEBSHARE_PROXY_PASSWORD")
+
 
 
 def get_proxy_config():
@@ -216,6 +218,9 @@ LOGIN_CODE = os.environ.get("LOGIN_CODE", "")
 SESSION_SECRET_KEY = os.environ.get("SESSION_SECRET_KEY", "")
 MAX_LOGIN_ATTEMPTS = int(os.environ.get("MAX_LOGIN_ATTEMPTS", "5"))
 LOCKOUT_DURATION = int(os.environ.get("LOCKOUT_DURATION", "15"))  # minutes
+
+# --- TTS CONFIGURATION ---
+TTS_VOICE = os.environ.get("TTS_VOICE", "en-US-Chirp3-HD-Zephyr")
 
 # Configure Flask session
 if LOGIN_ENABLED:
@@ -1303,7 +1308,17 @@ def speak():
     except Exception as e:
         return jsonify({"error": f"Failed to parse request: {str(e)}"}), 400
 
-    filename = f"{hashlib.sha256(text_to_speak.encode('utf-8')).hexdigest()}.mp3"
+    # Get voice selection from request data (default to configured voice)
+    voice_id = data.get('voice_id', TTS_VOICE)
+    
+    # Check if cache cleanup is needed (do this before generating cache key)
+    if should_cleanup_cache(AUDIO_CACHE_DIR):
+        cleanup_result = cleanup_audio_cache(AUDIO_CACHE_DIR)
+        print(f"Cache cleanup: removed {cleanup_result['cleaned']} files, freed {cleanup_result['size_freed']/1024/1024:.1f}MB")
+    
+    # Use optimized cache key generation
+    cache_key = get_optimized_cache_key(voice_id, text_to_speak)
+    filename = f"{cache_key}.mp3"
     filepath = os.path.join(AUDIO_CACHE_DIR, filename)
 
     if os.path.exists(filepath):
@@ -1321,21 +1336,215 @@ def speak():
         )
 
     try:
+        # Get voice configuration with fallback support
+        voice_config = get_voice_with_fallback(voice_id)
+        if not voice_config:
+            return Response("No valid voice configuration found", status=500)
+        
         synthesis_input = texttospeech.SynthesisInput(text=text_to_speak)
-        voice = texttospeech.VoiceSelectionParams(language_code="en-US", name="en-US-Chirp3-HD-Zephyr")
+        voice = texttospeech.VoiceSelectionParams(
+            language_code=voice_config["language_code"], 
+            name=voice_config["name"]
+        )
         audio_config = texttospeech.AudioConfig(audio_encoding=texttospeech.AudioEncoding.MP3)
 
-        response = tts_client.synthesize_speech(input=synthesis_input, voice=voice, audio_config=audio_config)
+        response = tts_client.synthesize_speech(
+            input=synthesis_input, 
+            voice=voice, 
+            audio_config=audio_config
+        )
 
         with open(filepath, "wb") as f:
             f.write(response.audio_content)
-        print(f"Saved new audio file to cache: {filepath}")
+        print(f"Saved new audio file to cache: {filepath} using voice: {voice_id}")
 
         return Response(response.audio_content, mimetype="audio/mpeg")
 
     except Exception as e:
         print(f"Error in TTS endpoint: {e}")
         return Response(f"Failed to generate audio: {e}", status=500)
+
+
+@app.route("/api/voices", methods=["GET"])
+@require_auth
+def get_voices():
+    """Get available voices organized by tier"""
+    try:
+        return jsonify({
+            "voices": AVAILABLE_VOICES,
+            "tiers": get_voices_by_tier(),
+            "current_voice": TTS_VOICE,
+            "default_voice": DEFAULT_VOICE
+        })
+    except Exception as e:
+        return jsonify({"error": f"Failed to get voices: {str(e)}"}), 500
+
+@app.route("/api/cache/status", methods=["GET"])
+@require_auth
+def get_cache_status():
+    """Get audio cache status and statistics"""
+    try:
+        import os
+        from pathlib import Path
+        
+        if not os.path.exists(AUDIO_CACHE_DIR):
+            return jsonify({
+                "total_files": 0,
+                "total_size_mb": 0,
+                "cache_utilization": 0,
+                "needs_cleanup": False
+            })
+        
+        total_size = 0
+        file_count = 0
+        preview_count = 0
+        
+        for file_path in Path(AUDIO_CACHE_DIR).glob("*.mp3"):
+            total_size += file_path.stat().st_size
+            file_count += 1
+            if file_path.name.startswith("preview_"):
+                preview_count += 1
+        
+        max_size_bytes = CACHE_CONFIG["max_size_mb"] * 1024 * 1024
+        utilization = (total_size / max_size_bytes) * 100 if max_size_bytes > 0 else 0
+        
+        return jsonify({
+            "total_files": file_count,
+            "preview_files": preview_count,
+            "total_size_mb": round(total_size / 1024 / 1024, 2),
+            "max_size_mb": CACHE_CONFIG["max_size_mb"],
+            "cache_utilization": round(utilization, 1),
+            "needs_cleanup": should_cleanup_cache(AUDIO_CACHE_DIR),
+            "config": CACHE_CONFIG
+        })
+    except Exception as e:
+        return jsonify({"error": f"Failed to get cache status: {str(e)}"}), 500
+
+@app.route("/api/cache/cleanup", methods=["POST"])
+@require_auth
+def manual_cache_cleanup():
+    """Manually trigger cache cleanup"""
+    try:
+        cleanup_result = cleanup_audio_cache(AUDIO_CACHE_DIR)
+        return jsonify({
+            "success": True,
+            "cleaned_files": cleanup_result["cleaned"],
+            "size_freed_mb": round(cleanup_result["size_freed"] / 1024 / 1024, 2),
+            "remaining_files": cleanup_result["remaining_files"],
+            "remaining_size_mb": round(cleanup_result["remaining_size"] / 1024 / 1024, 2)
+        })
+    except Exception as e:
+        return jsonify({"error": f"Failed to cleanup cache: {str(e)}"}), 500
+
+@app.route("/preview-voice", methods=["POST"])
+@require_auth
+def preview_voice():
+    """Preview a voice with custom text"""
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({"error": "Invalid JSON in request body"}), 400
+            
+        voice_id = data.get("voice_id")
+        text_to_speak = data.get("text")
+        
+        if not voice_id:
+            return jsonify({"error": "No voice_id provided"}), 400
+        if not text_to_speak:
+            return jsonify({"error": "No text provided"}), 400
+            
+        # Sanitize text input
+        text_to_speak = html.escape(text_to_speak)
+        # Clean text for TTS to avoid ASCII pronunciation issues
+        text_to_speak = clean_text_for_tts(text_to_speak)
+        
+        # Limit text length for previews to prevent abuse
+        if len(text_to_speak) > 500:
+            text_to_speak = text_to_speak[:500] + "..."
+            
+    except Exception as e:
+        return jsonify({"error": f"Failed to parse request: {str(e)}"}), 400
+    
+    # Use optimized cache key for previews
+    preview_key = f"preview_{get_optimized_cache_key(voice_id, text_to_speak)}"
+    filename = f"{preview_key}.mp3"
+    filepath = os.path.join(AUDIO_CACHE_DIR, filename)
+    
+    # Check cache first
+    if os.path.exists(filepath):
+        print(f"VOICE PREVIEW CACHE HIT for file: {filename}")
+        with open(filepath, "rb") as f:
+            audio_content = f.read()
+        return Response(audio_content, mimetype="audio/mpeg")
+    
+    print(f"VOICE PREVIEW CACHE MISS for file: {filename}. Generating...")
+    
+    # Check if TTS client is available
+    if not tts_client:
+        return Response(
+            "Text-to-speech service not available. Please set the GOOGLE_API_KEY environment variable.", 
+            status=503
+        )
+    
+    try:
+        # Get voice configuration with fallback support
+        voice_config = get_voice_with_fallback(voice_id)
+        if not voice_config:
+            return Response("No valid voice configuration found", status=500)
+        
+        synthesis_input = texttospeech.SynthesisInput(text=text_to_speak)
+        voice = texttospeech.VoiceSelectionParams(
+            language_code=voice_config["language_code"], 
+            name=voice_config["name"]
+        )
+        audio_config = texttospeech.AudioConfig(audio_encoding=texttospeech.AudioEncoding.MP3)
+        
+        response = tts_client.synthesize_speech(
+            input=synthesis_input, 
+            voice=voice, 
+            audio_config=audio_config
+        )
+        
+        # Cache the result
+        with open(filepath, "wb") as f:
+            f.write(response.audio_content)
+        print(f"Saved new voice preview to cache: {filepath}")
+        
+        return Response(response.audio_content, mimetype="audio/mpeg")
+        
+    except Exception as e:
+        print(f"Error in voice preview endpoint with voice {voice_id}: {e}")
+        
+        # Try fallback voice if the selected voice failed
+        try:
+            fallback_voice_id = get_fallback_voice(voice_id)
+            print(f"Trying fallback voice for preview: {fallback_voice_id}")
+            
+            fallback_config = get_voice_with_fallback(fallback_voice_id)
+            if not fallback_config:
+                return Response("No fallback voice available", status=500)
+            
+            fallback_voice = texttospeech.VoiceSelectionParams(
+                language_code=fallback_config["language_code"],
+                name=fallback_config["name"]
+            )
+            fallback_audio_config = texttospeech.AudioConfig(audio_encoding=texttospeech.AudioEncoding.MP3)
+            
+            response = tts_client.synthesize_speech(
+                input=synthesis_input,
+                voice=fallback_voice,
+                audio_config=fallback_audio_config
+            )
+            
+            with open(filepath, "wb") as f:
+                f.write(response.audio_content)
+            print(f"Saved voice preview using fallback voice: {fallback_voice_id}")
+            
+            return Response(response.audio_content, mimetype="audio/mpeg")
+            
+        except Exception as fallback_error:
+            print(f"Fallback voice preview also failed: {fallback_error}")
+            return Response(f"Failed to generate voice preview: {e}", status=500)
 
 
 @app.route("/delete_summary", methods=["DELETE"])
@@ -1409,6 +1618,7 @@ def settings_page():
         "WEBSHARE_PROXY_PASSWORD": os.environ.get("WEBSHARE_PROXY_PASSWORD", ""),
         "DATA_DIR": os.environ.get("DATA_DIR", ""),
         "FLASK_DEBUG": os.environ.get("FLASK_DEBUG", "true"),
+        "TTS_VOICE": os.environ.get("TTS_VOICE", "en-US-Chirp3-HD-Zephyr"),
     }
 
     return render_template("settings.html", env_vars=env_vars)
@@ -1442,6 +1652,7 @@ def update_settings():
             "webshare_proxy_password": "WEBSHARE_PROXY_PASSWORD",
             "data_dir": "DATA_DIR",
             "flask_debug": "FLASK_DEBUG",
+            "tts_voice": "TTS_VOICE",
         }
 
         # Validate and update environment variables
@@ -1465,7 +1676,7 @@ def update_settings():
         # Update global variables that depend on environment variables
         global LOGIN_ENABLED, LOGIN_CODE, SESSION_SECRET_KEY, MAX_LOGIN_ATTEMPTS, LOCKOUT_DURATION
         global WEBSHARE_PROXY_ENABLED, WEBSHARE_PROXY_HOST, WEBSHARE_PROXY_PORT
-        global WEBSHARE_PROXY_USERNAME, WEBSHARE_PROXY_PASSWORD, DATA_DIR
+        global WEBSHARE_PROXY_USERNAME, WEBSHARE_PROXY_PASSWORD, DATA_DIR, TTS_VOICE
         global google_api_key, openai_api_key, gemini_model, openai_client, tts_client, youtube
 
         LOGIN_ENABLED = os.environ.get("LOGIN_ENABLED", "false").lower() == "true"
@@ -1481,6 +1692,7 @@ def update_settings():
         WEBSHARE_PROXY_PASSWORD = os.environ.get("WEBSHARE_PROXY_PASSWORD")
 
         DATA_DIR = os.environ.get("DATA_DIR", "data" if os.path.exists("/.dockerenv") else ".")
+        TTS_VOICE = os.environ.get("TTS_VOICE", "en-US-Chirp3-HD-Zephyr")
 
         # Update Flask secret key if SESSION_SECRET_KEY changed
         if SESSION_SECRET_KEY:

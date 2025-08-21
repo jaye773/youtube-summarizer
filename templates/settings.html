@@ -165,6 +165,265 @@
             margin-left: 10px;
             color: #7f8c8d;
         }
+        
+        /* Voice Selection Styles */
+        .voice-selection-group {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+        
+        .voice-option {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 12px 16px;
+            border: 2px solid #ecf0f1;
+            border-radius: 8px;
+            background-color: #fff;
+            transition: all 0.3s ease;
+            cursor: pointer;
+        }
+        
+        .voice-option:hover {
+            border-color: #bdc3c7;
+            background-color: #f8f9fa;
+        }
+        
+        .voice-option:focus {
+            outline: 3px solid #8e44ad;
+            outline-offset: 2px;
+        }
+        
+        .voice-option.selected {
+            border-color: #8e44ad;
+            background-color: #f4f1f7;
+        }
+        
+        .voice-info {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            flex: 1;
+        }
+        
+        .voice-name {
+            font-weight: 600;
+            color: #2c3e50;
+            font-size: 15px;
+        }
+        
+        .voice-description {
+            font-size: 13px;
+            color: #7f8c8d;
+        }
+        
+        .voice-characteristics {
+            display: flex;
+            gap: 8px;
+            margin-top: 4px;
+        }
+        
+        .voice-tag {
+            background-color: #ecf0f1;
+            color: #5d6d7e;
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-size: 11px;
+            font-weight: 500;
+        }
+        
+        .voice-tag.gender-male { background-color: #d5e8f7; color: #2980b9; }
+        .voice-tag.gender-female { background-color: #f7d5e8; color: #e91e63; }
+        .voice-tag.accent-us { background-color: #e8f5e8; color: #27ae60; }
+        .voice-tag.accent-uk { background-color: #fff3cd; color: #f39c12; }
+        .voice-tag.accent-au { background-color: #f0e6ff; color: #8e44ad; }
+        .voice-tag.style-professional { background-color: #d1ecf1; color: #17a2b8; }
+        .voice-tag.style-warm { background-color: #ffeaa7; color: #e17055; }
+        .voice-tag.style-casual { background-color: #fab1a0; color: #e84393; }
+        
+        .voice-controls {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        
+        .preview-btn {
+            background-color: #3498db;
+            color: white;
+            border: none;
+            padding: 12px 16px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            transition: background-color 0.3s;
+            min-width: 100px;
+            min-height: 44px;
+            justify-content: center;
+        }
+        
+        .preview-btn:hover {
+            background-color: #2980b9;
+        }
+        
+        .preview-btn:disabled {
+            background-color: #bdc3c7;
+            cursor: not-allowed;
+        }
+        
+        .preview-btn.playing {
+            background-color: #e74c3c;
+        }
+        
+        .preview-btn.playing:hover {
+            background-color: #c0392b;
+        }
+        
+        .voice-radio {
+            width: 20px;
+            height: 20px;
+            accent-color: #8e44ad;
+        }
+        
+        .sample-text-input {
+            margin-top: 15px;
+            padding: 10px;
+            border: 1px solid #bdc3c7;
+            border-radius: 6px;
+            font-size: 14px;
+            resize: vertical;
+            min-height: 60px;
+        }
+        
+        .sample-text-input:focus {
+            outline: none;
+            border-color: #8e44ad;
+            box-shadow: 0 0 0 2px rgba(142, 68, 173, 0.2);
+        }
+        
+        .voice-section-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+        
+        .test-all-btn {
+            background-color: #95a5a6;
+            color: white;
+            border: none;
+            padding: 12px 20px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            min-height: 44px;
+            transition: background-color 0.3s;
+        }
+        
+        .test-all-btn:hover {
+            background-color: #7f8c8d;
+        }
+        
+        .test-all-btn:disabled {
+            background-color: #bdc3c7;
+            cursor: not-allowed;
+        }
+        
+        .audio-loading {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border: 2px solid #f3f3f3;
+            border-top: 2px solid #3498db;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+        
+        .progress-container {
+            width: 100%;
+            height: 4px;
+            background-color: #ecf0f1;
+            border-radius: 2px;
+            margin-top: 8px;
+            overflow: hidden;
+        }
+        
+        .progress-bar {
+            height: 100%;
+            background-color: #3498db;
+            border-radius: 2px;
+            transition: width 0.3s ease;
+            width: 0%;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        /* Screen reader only text */
+        .sr-only {
+            position: absolute;
+            width: 1px;
+            height: 1px;
+            padding: 0;
+            margin: -1px;
+            overflow: hidden;
+            clip: rect(0, 0, 0, 0);
+            white-space: nowrap;
+            border: 0;
+        }
+        
+        /* Responsive Design */
+        @media (max-width: 768px) {
+            .container {
+                padding: 20px 15px;
+            }
+            
+            .voice-option {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 15px;
+                padding: 16px;
+            }
+            
+            .voice-controls {
+                align-self: stretch;
+                justify-content: space-between;
+                gap: 16px;
+            }
+            
+            .voice-characteristics {
+                flex-wrap: wrap;
+                gap: 6px;
+            }
+            
+            .voice-section-header {
+                flex-direction: column;
+                gap: 12px;
+                align-items: stretch;
+            }
+            
+            .test-all-btn {
+                width: 100%;
+                justify-content: center;
+            }
+            
+            .preview-btn {
+                min-height: 48px;
+                min-width: 120px;
+                font-size: 16px;
+                padding: 14px 20px;
+            }
+            
+            .voice-radio {
+                width: 24px;
+                height: 24px;
+            }
+        }
     </style>
 </head>
 <body>
@@ -302,6 +561,236 @@
                 </div>
             </div>
 
+            <!-- Audio Settings Section -->
+            <div class="form-section">
+                <div class="voice-section-header">
+                    <h3>🔊 Audio Settings</h3>
+                    <div>
+                        <button type="button" class="test-all-btn" onclick="testAllVoices()" id="testAllBtn">
+                            🎵 Test All Voices
+                        </button>
+                        <div id="testProgress" class="progress-container" style="display: none;">
+                            <div id="testProgressBar" class="progress-bar" role="progressbar" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100" aria-label="Voice testing progress"></div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="form-group">
+                    <label for="tts_voice">Text-to-Speech Voice</label>
+                    <div class="description">Choose the voice for audio summaries. Click preview to hear a sample before selecting.</div>
+                    
+                    <!-- ARIA live region for screen reader announcements -->
+                    <div id="voice-status" aria-live="polite" aria-atomic="true" style="position: absolute; left: -10000px; width: 1px; height: 1px; overflow: hidden;"></div>
+                    
+                    <div class="voice-selection-group" role="radiogroup" aria-labelledby="tts_voice" aria-describedby="voice-selection-instructions">
+                        <div id="voice-selection-instructions" class="sr-only">Use arrow keys to navigate between voice options. Press Enter or Space to select a voice. Use the Preview button to hear a sample of each voice.</div>
+                        <!-- Tier 1: Chirp3-HD Voices (Latest Generation - Premium) -->
+                        <div class="voice-option {{ 'selected' if env_vars.TTS_VOICE == 'en-US-Chirp3-HD-Zephyr' else '' }}" onclick="selectVoice('en-US-Chirp3-HD-Zephyr')" role="radio" aria-checked="{{ 'true' if env_vars.TTS_VOICE == 'en-US-Chirp3-HD-Zephyr' else 'false' }}" aria-describedby="zephyr-desc" tabindex="{{ '0' if env_vars.TTS_VOICE == 'en-US-Chirp3-HD-Zephyr' else '-1' }}">
+                            <div class="voice-info">
+                                <div class="voice-name">Zephyr - AI Narrative (Premium)</div>
+                                <div class="voice-description" id="zephyr-desc">Most advanced AI voice, excellent for storytelling and long-form content. Female voice with US accent and narrative style.</div>
+                                <div class="voice-characteristics">
+                                    <span class="voice-tag gender-female">Female</span>
+                                    <span class="voice-tag accent-us">US Accent</span>
+                                    <span class="voice-tag style-professional">Narrative</span>
+                                </div>
+                            </div>
+                            <div class="voice-controls">
+                                <button type="button" class="preview-btn" onclick="previewVoice(event, 'en-US-Chirp3-HD-Zephyr')" aria-label="Preview Zephyr voice">
+                                    ▶️ Preview
+                                </button>
+                                <input type="radio" name="tts_voice" value="en-US-Chirp3-HD-Zephyr" class="voice-radio" {{ 'checked' if env_vars.TTS_VOICE == 'en-US-Chirp3-HD-Zephyr' else '' }} aria-label="Select Zephyr voice" aria-describedby="zephyr-desc">
+                            </div>
+                        </div>
+
+                        <div class="voice-option" onclick="selectVoice('en-US-Chirp3-HD-Charon')" role="radio" aria-checked="false" tabindex="0">
+                            <div class="voice-info">
+                                <div class="voice-name">Charon - AI Authoritative (Premium)</div>
+                                <div class="voice-description">Strong, commanding voice ideal for professional summaries and business content</div>
+                                <div class="voice-characteristics">
+                                    <span class="voice-tag gender-male">Male</span>
+                                    <span class="voice-tag accent-us">US Accent</span>
+                                    <span class="voice-tag style-professional">Authoritative</span>
+                                </div>
+                            </div>
+                            <div class="voice-controls">
+                                <button type="button" class="preview-btn" onclick="previewVoice(event, 'en-US-Chirp3-HD-Charon')" aria-label="Preview Charon voice">
+                                    ▶️ Preview
+                                </button>
+                                <input type="radio" name="tts_voice" value="en-US-Chirp3-HD-Charon" class="voice-radio" aria-label="Select Charon voice">
+                            </div>
+                        </div>
+
+                        <div class="voice-option" onclick="selectVoice('en-US-Chirp3-HD-Leda')" role="radio" aria-checked="false" tabindex="0">
+                            <div class="voice-info">
+                                <div class="voice-name">Leda - AI Versatile (Premium)</div>
+                                <div class="voice-description">Clear and adaptable, perfect for diverse content types and educational material</div>
+                                <div class="voice-characteristics">
+                                    <span class="voice-tag gender-female">Female</span>
+                                    <span class="voice-tag accent-us">US Accent</span>
+                                    <span class="voice-tag style-warm">Versatile</span>
+                                </div>
+                            </div>
+                            <div class="voice-controls">
+                                <button type="button" class="preview-btn" onclick="previewVoice(event, 'en-US-Chirp3-HD-Leda')" aria-label="Preview Leda voice">
+                                    ▶️ Preview
+                                </button>
+                                <input type="radio" name="tts_voice" value="en-US-Chirp3-HD-Leda" class="voice-radio" aria-label="Select Leda voice">
+                            </div>
+                        </div>
+
+                        <div class="voice-option" onclick="selectVoice('en-US-Chirp3-HD-Aoede')" role="radio" aria-checked="false" tabindex="0">
+                            <div class="voice-info">
+                                <div class="voice-name">Aoede - AI Smooth (Premium)</div>
+                                <div class="voice-description">Gentle delivery, ideal for educational and tutorial content with smooth intonation</div>
+                                <div class="voice-characteristics">
+                                    <span class="voice-tag gender-female">Female</span>
+                                    <span class="voice-tag accent-us">US Accent</span>
+                                    <span class="voice-tag style-warm">Smooth</span>
+                                </div>
+                            </div>
+                            <div class="voice-controls">
+                                <button type="button" class="preview-btn" onclick="previewVoice(event, 'en-US-Chirp3-HD-Aoede')" aria-label="Preview Aoede voice">
+                                    ▶️ Preview
+                                </button>
+                                <input type="radio" name="tts_voice" value="en-US-Chirp3-HD-Aoede" class="voice-radio" aria-label="Select Aoede voice">
+                            </div>
+                        </div>
+
+                        <!-- Tier 2: Neural2 Voices (High Quality) -->
+                        <div class="voice-option" onclick="selectVoice('en-US-Neural2-C')" role="radio" aria-checked="false" tabindex="0">
+                            <div class="voice-info">
+                                <div class="voice-name">Neural2-C - Natural Female</div>
+                                <div class="voice-description">Natural intonation with excellent storytelling capability and warm delivery</div>
+                                <div class="voice-characteristics">
+                                    <span class="voice-tag gender-female">Female</span>
+                                    <span class="voice-tag accent-us">US Accent</span>
+                                    <span class="voice-tag style-warm">Natural</span>
+                                </div>
+                            </div>
+                            <div class="voice-controls">
+                                <button type="button" class="preview-btn" onclick="previewVoice(event, 'en-US-Neural2-C')" aria-label="Preview Neural2-C voice">
+                                    ▶️ Preview
+                                </button>
+                                <input type="radio" name="tts_voice" value="en-US-Neural2-C" class="voice-radio" aria-label="Select Neural2-C voice">
+                            </div>
+                        </div>
+
+                        <div class="voice-option" onclick="selectVoice('en-US-Neural2-J')" role="radio" aria-checked="false" tabindex="0">
+                            <div class="voice-info">
+                                <div class="voice-name">Neural2-J - Professional Male</div>
+                                <div class="voice-description">Professional tone perfect for business content and news summaries</div>
+                                <div class="voice-characteristics">
+                                    <span class="voice-tag gender-male">Male</span>
+                                    <span class="voice-tag accent-us">US Accent</span>
+                                    <span class="voice-tag style-professional">Professional</span>
+                                </div>
+                            </div>
+                            <div class="voice-controls">
+                                <button type="button" class="preview-btn" onclick="previewVoice(event, 'en-US-Neural2-J')" aria-label="Preview Neural2-J voice">
+                                    ▶️ Preview
+                                </button>
+                                <input type="radio" name="tts_voice" value="en-US-Neural2-J" class="voice-radio" aria-label="Select Neural2-J voice">
+                            </div>
+                        </div>
+
+                        <div class="voice-option" onclick="selectVoice('en-US-Neural2-F')" role="radio" aria-checked="false" tabindex="0">
+                            <div class="voice-info">
+                                <div class="voice-name">Neural2-F - Warm Female</div>
+                                <div class="voice-description">Engaging and friendly, suitable for lifestyle and general content</div>
+                                <div class="voice-characteristics">
+                                    <span class="voice-tag gender-female">Female</span>
+                                    <span class="voice-tag accent-us">US Accent</span>
+                                    <span class="voice-tag style-warm">Warm</span>
+                                </div>
+                            </div>
+                            <div class="voice-controls">
+                                <button type="button" class="preview-btn" onclick="previewVoice(event, 'en-US-Neural2-F')" aria-label="Preview Neural2-F voice">
+                                    ▶️ Preview
+                                </button>
+                                <input type="radio" name="tts_voice" value="en-US-Neural2-F" class="voice-radio" aria-label="Select Neural2-F voice">
+                            </div>
+                        </div>
+
+                        <!-- Tier 3: Studio & WaveNet Voices (Standard Quality) -->
+                        <div class="voice-option" onclick="selectVoice('en-US-Studio-O')" role="radio" aria-checked="false" tabindex="0">
+                            <div class="voice-info">
+                                <div class="voice-name">Studio-O - Professional Narrator</div>
+                                <div class="voice-description">Professional narrator quality for polished delivery and presentations</div>
+                                <div class="voice-characteristics">
+                                    <span class="voice-tag gender-female">Female</span>
+                                    <span class="voice-tag accent-us">US Accent</span>
+                                    <span class="voice-tag style-professional">Narrator</span>
+                                </div>
+                            </div>
+                            <div class="voice-controls">
+                                <button type="button" class="preview-btn" onclick="previewVoice(event, 'en-US-Studio-O')" aria-label="Preview Studio-O voice">
+                                    ▶️ Preview
+                                </button>
+                                <input type="radio" name="tts_voice" value="en-US-Studio-O" class="voice-radio" aria-label="Select Studio-O voice">
+                            </div>
+                        </div>
+
+                        <div class="voice-option" onclick="selectVoice('en-US-Wavenet-H')" role="radio" aria-checked="false" tabindex="0">
+                            <div class="voice-info">
+                                <div class="voice-name">WaveNet-H - Human-like Female</div>
+                                <div class="voice-description">Human-like emphasis and inflection for natural speech patterns</div>
+                                <div class="voice-characteristics">
+                                    <span class="voice-tag gender-female">Female</span>
+                                    <span class="voice-tag accent-us">US Accent</span>
+                                    <span class="voice-tag style-warm">Human-like</span>
+                                </div>
+                            </div>
+                            <div class="voice-controls">
+                                <button type="button" class="preview-btn" onclick="previewVoice(event, 'en-US-Wavenet-H')" aria-label="Preview WaveNet-H voice">
+                                    ▶️ Preview
+                                </button>
+                                <input type="radio" name="tts_voice" value="en-US-Wavenet-H" class="voice-radio" aria-label="Select WaveNet-H voice">
+                            </div>
+                        </div>
+
+                        <div class="voice-option" onclick="selectVoice('en-US-Wavenet-D')" role="radio" aria-checked="false" tabindex="0">
+                            <div class="voice-info">
+                                <div class="voice-name">WaveNet-D - Technical Male</div>
+                                <div class="voice-description">Clear, strong delivery ideal for technical and educational content</div>
+                                <div class="voice-characteristics">
+                                    <span class="voice-tag gender-male">Male</span>
+                                    <span class="voice-tag accent-us">US Accent</span>
+                                    <span class="voice-tag style-professional">Technical</span>
+                                </div>
+                            </div>
+                            <div class="voice-controls">
+                                <button type="button" class="preview-btn" onclick="previewVoice(event, 'en-US-Wavenet-D')" aria-label="Preview WaveNet-D voice">
+                                    ▶️ Preview
+                                </button>
+                                <input type="radio" name="tts_voice" value="en-US-Wavenet-D" class="voice-radio" aria-label="Select WaveNet-D voice">
+                            </div>
+                        </div>
+                        <div class="voice-option" onclick="selectVoice('en-GB-Neural2-A')" role="radio" aria-checked="false" tabindex="0">
+                            <div class="voice-info">
+                                <div class="voice-name">Neural2-A - British Female</div>
+                                <div class="voice-description">Professional British accent, excellent for international content and formal presentations</div>
+                                <div class="voice-characteristics">
+                                    <span class="voice-tag gender-female">Female</span>
+                                    <span class="voice-tag accent-uk">UK Accent</span>
+                                    <span class="voice-tag style-professional">Professional</span>
+                                </div>
+                            </div>
+                            <div class="voice-controls">
+                                <button type="button" class="preview-btn" onclick="previewVoice(event, 'en-GB-Neural2-A')" aria-label="Preview Neural2-A voice">
+                                    ▶️ Preview
+                                </button>
+                                <input type="radio" name="tts_voice" value="en-GB-Neural2-A" class="voice-radio" aria-label="Select Neural2-A voice">
+                            </div>
+                        </div>
+                    </div>
+
+                    <label for="sampleText" class="sr-only">Sample text for voice preview</label>
+                    <textarea class="sample-text-input" id="sampleText" placeholder="Enter custom text to test with different voices..." aria-label="Custom sample text for voice preview" aria-describedby="sample-text-help">Welcome to the YouTube Summarizer! This is how your chosen voice will sound when reading video summaries. You can edit this text to test with your own content.</textarea>
+                    <div id="sample-text-help" class="description">This text will be used when previewing voices. You can customize it to test how voices sound with your preferred content.</div>
+                </div>
+            </div>
+
             <button type="submit" class="save-btn">
                 💾 Save Settings
                 <span class="loading">Saving...</span>
@@ -394,6 +883,326 @@
                 showMessage('Connection error. Please try again.', 'error');
             } finally {
                 setLoading(false);
+            }
+        });
+
+        // Voice Selection and Preview Functionality
+        let currentlyPlayingAudio = null;
+        let isTestingAllVoices = false;
+
+        // Voice selection function
+        function selectVoice(voiceId) {
+            // Clear all selections
+            document.querySelectorAll('.voice-option').forEach((option, index) => {
+                option.classList.remove('selected');
+                option.setAttribute('aria-checked', 'false');
+                option.setAttribute('tabindex', '-1');
+            });
+            
+            // Clear all radio buttons
+            document.querySelectorAll('input[name="tts_voice"]').forEach(radio => {
+                radio.checked = false;
+            });
+            
+            // Select the clicked voice
+            const selectedOption = document.querySelector(`input[value="${voiceId}"]`).closest('.voice-option');
+            selectedOption.classList.add('selected');
+            selectedOption.setAttribute('aria-checked', 'true');
+            selectedOption.setAttribute('tabindex', '0');
+            
+            // Check the radio button
+            document.querySelector(`input[value="${voiceId}"]`).checked = true;
+            
+            // Announce selection to screen readers
+            const voiceName = selectedOption.querySelector('.voice-name').textContent;
+            announceToScreenReader(`Selected voice: ${voiceName}`);
+        }
+        
+        // Function to announce messages to screen readers
+        function announceToScreenReader(message) {
+            const statusElement = document.getElementById('voice-status');
+            if (statusElement) {
+                statusElement.textContent = message;
+                // Clear after announcement
+                setTimeout(() => {
+                    statusElement.textContent = '';
+                }, 1000);
+            }
+        }
+
+        // Voice preview function
+        async function previewVoice(event, voiceId) {
+            event.stopPropagation(); // Prevent the voice selection when clicking preview
+            
+            const button = event.target;
+            const originalText = button.innerHTML;
+            
+            // Check if this button is currently playing - if so, stop it
+            if (button.classList.contains('playing')) {
+                if (currentlyPlayingAudio) {
+                    currentlyPlayingAudio.pause();
+                    currentlyPlayingAudio = null;
+                }
+                button.innerHTML = '▶️ Preview';
+                button.classList.remove('playing');
+                button.disabled = false;
+                button.setAttribute('aria-label', `Preview ${voiceId} voice`);
+                announceToScreenReader('Voice preview stopped');
+                return;
+            }
+            
+            // Stop any other currently playing audio
+            if (currentlyPlayingAudio) {
+                currentlyPlayingAudio.pause();
+                currentlyPlayingAudio = null;
+                // Reset all preview buttons
+                document.querySelectorAll('.preview-btn').forEach(btn => {
+                    btn.classList.remove('playing');
+                    if (btn.innerHTML.includes('Stop')) {
+                        btn.innerHTML = '▶️ Preview';
+                    }
+                });
+            }
+            
+            try {
+                // Set loading state
+                button.innerHTML = '<span class="audio-loading"></span> Loading...';
+                button.disabled = true;
+                button.setAttribute('aria-label', 'Loading voice preview');
+                announceToScreenReader('Loading voice preview');
+                
+                // Get sample text
+                const sampleText = document.getElementById('sampleText').value || 
+                    'Welcome to the YouTube Summarizer! This is how your chosen voice will sound when reading video summaries.';
+                
+                // Make request to preview endpoint with timeout
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 15000); // 15 second timeout
+                
+                const response = await fetch('/preview-voice', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        voice_id: voiceId,
+                        text: sampleText
+                    }),
+                    signal: controller.signal
+                });
+                
+                clearTimeout(timeoutId);
+                
+                if (!response.ok) {
+                    throw new Error(`Preview failed: ${response.status}`);
+                }
+                
+                // Get the audio blob
+                const audioBlob = await response.blob();
+                const audioUrl = URL.createObjectURL(audioBlob);
+                
+                // Create and play audio
+                const audio = new Audio(audioUrl);
+                currentlyPlayingAudio = audio;
+                
+                // Set playing state
+                button.innerHTML = '⏹️ Stop';
+                button.classList.add('playing');
+                button.disabled = false;
+                button.setAttribute('aria-label', 'Stop voice preview');
+                announceToScreenReader('Voice preview playing. Click to stop.');
+                
+                // Handle audio end
+                audio.addEventListener('ended', () => {
+                    button.innerHTML = '▶️ Preview';
+                    button.classList.remove('playing');
+                    button.setAttribute('aria-label', `Preview ${voiceId} voice`);
+                    currentlyPlayingAudio = null;
+                    URL.revokeObjectURL(audioUrl);
+                    announceToScreenReader('Voice preview finished');
+                });
+                
+                // Handle audio errors
+                audio.addEventListener('error', () => {
+                    button.innerHTML = '▶️ Preview';
+                    button.classList.remove('playing');
+                    button.disabled = false;
+                    button.setAttribute('aria-label', `Preview ${voiceId} voice`);
+                    currentlyPlayingAudio = null;
+                    URL.revokeObjectURL(audioUrl);
+                    announceToScreenReader('Voice preview failed');
+                });
+                
+                audio.play();
+                
+            } catch (error) {
+                console.error('Voice preview error:', error);
+                button.innerHTML = '▶️ Preview';
+                button.disabled = false;
+                button.classList.remove('playing');
+                button.setAttribute('aria-label', `Preview ${voiceId} voice`);
+                currentlyPlayingAudio = null;
+                const errorMsg = 'Failed to preview voice. Please check your Google API key and internet connection, then try again.';
+                showMessage(errorMsg, 'error');
+                announceToScreenReader(errorMsg);
+            }
+        }
+
+        // Test all voices function
+        async function testAllVoices() {
+            if (isTestingAllVoices) {
+                return; // Prevent multiple simultaneous tests
+            }
+            
+            isTestingAllVoices = true;
+            const testAllBtn = document.getElementById('testAllBtn');
+            const testProgress = document.getElementById('testProgress');
+            const testProgressBar = document.getElementById('testProgressBar');
+            const originalText = testAllBtn.innerHTML;
+            
+            try {
+                testAllBtn.innerHTML = '<span class="audio-loading"></span> Testing voices...';
+                testAllBtn.disabled = true;
+                testProgress.style.display = 'block';
+                announceToScreenReader('Starting voice testing for all available voices');
+                
+                const voiceOptions = document.querySelectorAll('.voice-option');
+                const sampleText = document.getElementById('sampleText').value || 
+                    'This is a sample of how this voice sounds.';
+                
+                for (let i = 0; i < voiceOptions.length; i++) {
+                    const option = voiceOptions[i];
+                    const voiceId = option.querySelector('input[name="tts_voice"]').value;
+                    const voiceName = option.querySelector('.voice-name').textContent;
+                    
+                    // Update progress
+                    const progress = ((i + 1) / voiceOptions.length) * 100;
+                    testProgressBar.style.width = `${progress}%`;
+                    testProgressBar.setAttribute('aria-valuenow', progress.toString());
+                    
+                    testAllBtn.innerHTML = `<span class="audio-loading"></span> Testing ${voiceName}... (${i + 1}/${voiceOptions.length})`;
+                    announceToScreenReader(`Testing voice ${i + 1} of ${voiceOptions.length}: ${voiceName}`);
+                    
+                    // Highlight current voice being tested
+                    option.style.transform = 'scale(1.02)';
+                    option.style.transition = 'transform 0.3s ease';
+                    
+                    try {
+                        const controller = new AbortController();
+                        const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout for batch testing
+                        
+                        const response = await fetch('/preview-voice', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                            },
+                            body: JSON.stringify({
+                                voice_id: voiceId,
+                                text: `${voiceName}: ${sampleText}`
+                            }),
+                            signal: controller.signal
+                        });
+                        
+                        clearTimeout(timeoutId);
+                        
+                        if (response.ok) {
+                            const audioBlob = await response.blob();
+                            const audioUrl = URL.createObjectURL(audioBlob);
+                            const audio = new Audio(audioUrl);
+                            
+                            // Play and wait for completion
+                            await new Promise((resolve, reject) => {
+                                audio.addEventListener('ended', resolve);
+                                audio.addEventListener('error', reject);
+                                audio.play().catch(reject);
+                            });
+                            
+                            URL.revokeObjectURL(audioUrl);
+                        }
+                    } catch (error) {
+                        console.warn(`Failed to test voice ${voiceId}:`, error);
+                    }
+                    
+                    // Reset highlight
+                    option.style.transform = '';
+                    
+                    // Brief pause between voices
+                    await new Promise(resolve => setTimeout(resolve, 500));
+                }
+                
+                showMessage('Voice testing completed! Choose your preferred voice and save settings.', 'success');
+                announceToScreenReader('Voice testing completed. All voices have been tested successfully.');
+                
+            } catch (error) {
+                console.error('Test all voices error:', error);
+                const errorMsg = 'Failed to test voices. Please check your Google API key and internet connection, then try again.';
+                showMessage(errorMsg, 'error');
+                announceToScreenReader(errorMsg);
+            } finally {
+                testAllBtn.innerHTML = originalText;
+                testAllBtn.disabled = false;
+                testProgress.style.display = 'none';
+                testProgressBar.style.width = '0%';
+                testProgressBar.setAttribute('aria-valuenow', '0');
+                isTestingAllVoices = false;
+            }
+        }
+
+        // Keyboard navigation support
+        document.addEventListener('DOMContentLoaded', function() {
+            const voiceOptions = document.querySelectorAll('.voice-option[role="radio"]');
+            
+            voiceOptions.forEach((option, index) => {
+                option.addEventListener('keydown', function(e) {
+                    switch(e.key) {
+                        case 'Enter':
+                        case ' ':
+                            e.preventDefault();
+                            const voiceId = option.querySelector('input[name="tts_voice"]').value;
+                            selectVoice(voiceId);
+                            break;
+                        case 'ArrowDown':
+                        case 'ArrowRight':
+                            e.preventDefault();
+                            const nextIndex = (index + 1) % voiceOptions.length;
+                            voiceOptions[nextIndex].focus();
+                            break;
+                        case 'ArrowUp':
+                        case 'ArrowLeft':
+                            e.preventDefault();
+                            const prevIndex = (index - 1 + voiceOptions.length) % voiceOptions.length;
+                            voiceOptions[prevIndex].focus();
+                            break;
+                    }
+                });
+            });
+            
+            // Set initial focus management
+            const selectedVoice = document.querySelector('.voice-option.selected');
+            if (selectedVoice) {
+                selectedVoice.setAttribute('tabindex', '0');
+                voiceOptions.forEach(option => {
+                    if (option !== selectedVoice) {
+                        option.setAttribute('tabindex', '-1');
+                    }
+                });
+            } else {
+                // If no voice is selected, make the first one focusable
+                voiceOptions[0]?.setAttribute('tabindex', '0');
+                voiceOptions.forEach((option, index) => {
+                    if (index > 0) {
+                        option.setAttribute('tabindex', '-1');
+                    }
+                });
+            }
+        });
+
+        // Handle voice option click events
+        document.addEventListener('click', function(e) {
+            if (e.target.closest('.voice-option') && !e.target.closest('.preview-btn')) {
+                const option = e.target.closest('.voice-option');
+                const voiceId = option.querySelector('input[name="tts_voice"]').value;
+                selectVoice(voiceId);
             }
         });
     </script>

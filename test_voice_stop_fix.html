@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Voice Stop Functionality Test</title>
+    <style>
+        .preview-btn { padding: 10px 20px; margin: 10px; }
+        .playing { background-color: #ff4444; color: white; }
+        .audio-loading { animation: spin 1s linear infinite; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    </style>
+</head>
+<body>
+    <h2>Voice Preview Stop Test</h2>
+    <p>This tests the fixed stop functionality for voice previews.</p>
+    
+    <button class="preview-btn" onclick="previewVoice(event, 'test-voice-1')">▶️ Preview Voice 1</button>
+    <button class="preview-btn" onclick="previewVoice(event, 'test-voice-2')">▶️ Preview Voice 2</button>
+    
+    <div id="status"></div>
+    
+    <script>
+        let currentlyPlayingAudio = null;
+        
+        function announceToScreenReader(msg) {
+            console.log('Screen reader:', msg);
+            document.getElementById('status').textContent = msg;
+        }
+        
+        async function previewVoice(event, voiceId) {
+            event.stopPropagation();
+            
+            const button = event.target;
+            const originalText = button.innerHTML;
+            
+            // Check if this button is currently playing - if so, stop it
+            if (button.classList.contains('playing')) {
+                if (currentlyPlayingAudio) {
+                    currentlyPlayingAudio.pause();
+                    currentlyPlayingAudio = null;
+                }
+                button.innerHTML = '▶️ Preview';
+                button.classList.remove('playing');
+                button.disabled = false;
+                button.setAttribute('aria-label', `Preview ${voiceId} voice`);
+                announceToScreenReader('Voice preview stopped');
+                return;
+            }
+            
+            // Stop any other currently playing audio
+            if (currentlyPlayingAudio) {
+                currentlyPlayingAudio.pause();
+                currentlyPlayingAudio = null;
+                // Reset all preview buttons
+                document.querySelectorAll('.preview-btn').forEach(btn => {
+                    btn.classList.remove('playing');
+                    if (btn.innerHTML.includes('Stop')) {
+                        btn.innerHTML = '▶️ Preview';
+                    }
+                });
+            }
+            
+            try {
+                // Set loading state
+                button.innerHTML = '<span class="audio-loading">⌛</span> Loading...';
+                button.disabled = true;
+                button.setAttribute('aria-label', 'Loading voice preview');
+                announceToScreenReader('Loading voice preview');
+                
+                // Simulate loading delay
+                await new Promise(resolve => setTimeout(resolve, 1000));
+                
+                // Create mock audio for testing
+                const audio = new Audio('data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2/LDciUFLIHO8tiJNwgZaLvt559NEAxQp+PwtmMcBjiR1/LMeSwFJHfH8N2QQAoUXrTp66hVFApGn+DyvmojBT2R3+zEeCkEIHzK8t+PIAvV');
+                currentlyPlayingAudio = audio;
+                
+                // Set playing state
+                button.innerHTML = '⏹️ Stop';
+                button.classList.add('playing');
+                button.disabled = false;
+                button.setAttribute('aria-label', 'Stop voice preview');
+                announceToScreenReader('Voice preview playing. Click to stop.');
+                
+                // Handle audio end
+                audio.addEventListener('ended', () => {
+                    button.innerHTML = '▶️ Preview';
+                    button.classList.remove('playing');
+                    button.setAttribute('aria-label', `Preview ${voiceId} voice`);
+                    currentlyPlayingAudio = null;
+                    announceToScreenReader('Voice preview finished');
+                });
+                
+                // Handle audio errors
+                audio.addEventListener('error', () => {
+                    button.innerHTML = '▶️ Preview';
+                    button.classList.remove('playing');
+                    button.disabled = false;
+                    button.setAttribute('aria-label', `Preview ${voiceId} voice`);
+                    currentlyPlayingAudio = null;
+                    announceToScreenReader('Voice preview failed');
+                });
+                
+                audio.play();
+                
+            } catch (error) {
+                console.error('Voice preview error:', error);
+                button.innerHTML = '▶️ Preview';
+                button.disabled = false;
+                button.classList.remove('playing');
+                button.setAttribute('aria-label', `Preview ${voiceId} voice`);
+                currentlyPlayingAudio = null;
+                announceToScreenReader('Voice preview failed');
+            }
+        }
+    </script>
+</body>
+</html>
