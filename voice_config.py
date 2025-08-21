@@ -15,11 +15,11 @@ AVAILABLE_VOICES = {
         "quality": "premium"
     },
     "en-US-Chirp3-HD-Charon": {
-        "name": "en-US-Chirp3-HD-Charon", 
+        "name": "en-US-Chirp3-HD-Charon",
         "display_name": "Charon (Premium Male)",
         "language_code": "en-US",
         "gender": "male",
-        "accent": "US", 
+        "accent": "US",
         "style": "authoritative",
         "tier": "chirp3-hd",
         "description": "Premium AI voice with authoritative tone for professional content",
@@ -28,32 +28,32 @@ AVAILABLE_VOICES = {
     "en-US-Chirp3-HD-Leda": {
         "name": "en-US-Chirp3-HD-Leda",
         "display_name": "Leda (Premium Female)",
-        "language_code": "en-US", 
+        "language_code": "en-US",
         "gender": "female",
         "accent": "US",
         "style": "versatile",
-        "tier": "chirp3-hd", 
+        "tier": "chirp3-hd",
         "description": "Premium AI voice, versatile and perfect for diverse content",
         "quality": "premium"
     },
     "en-US-Chirp3-HD-Aoede": {
         "name": "en-US-Chirp3-HD-Aoede",
         "display_name": "Aoede (Premium Female)",
-        "language_code": "en-US", 
+        "language_code": "en-US",
         "gender": "female",
         "accent": "US",
         "style": "smooth",
-        "tier": "chirp3-hd", 
+        "tier": "chirp3-hd",
         "description": "Premium AI voice with smooth delivery for educational content",
         "quality": "premium"
     },
-    
+
     # Tier 2: Neural2 (High Quality)
     "en-US-Neural2-C": {
         "name": "en-US-Neural2-C",
         "display_name": "Neural2-C (Female)",
         "language_code": "en-US",
-        "gender": "female", 
+        "gender": "female",
         "accent": "US",
         "style": "storytelling",
         "tier": "neural2",
@@ -65,7 +65,7 @@ AVAILABLE_VOICES = {
         "display_name": "Neural2-J (Male)",
         "language_code": "en-US",
         "gender": "male",
-        "accent": "US", 
+        "accent": "US",
         "style": "professional",
         "tier": "neural2",
         "description": "Professional business tone, clear and confident",
@@ -78,11 +78,11 @@ AVAILABLE_VOICES = {
         "gender": "female",
         "accent": "US",
         "style": "warm",
-        "tier": "neural2", 
+        "tier": "neural2",
         "description": "Warm, engaging delivery perfect for educational content",
         "quality": "high"
     },
-    
+
     # Tier 3: Studio & WaveNet (Standard Quality)
     "en-US-Studio-O": {
         "name": "en-US-Studio-O",
@@ -96,12 +96,12 @@ AVAILABLE_VOICES = {
         "quality": "standard"
     },
     "en-US-Wavenet-H": {
-        "name": "en-US-Wavenet-H", 
+        "name": "en-US-Wavenet-H",
         "display_name": "Wavenet-H (Female)",
         "language_code": "en-US",
         "gender": "female",
         "accent": "US",
-        "style": "human-like", 
+        "style": "human-like",
         "tier": "wavenet",
         "description": "Human-like inflection with natural speech patterns",
         "quality": "standard"
@@ -109,12 +109,12 @@ AVAILABLE_VOICES = {
     "en-US-Wavenet-D": {
         "name": "en-US-Wavenet-D",
         "display_name": "Wavenet-D (Male)",
-        "language_code": "en-US", 
+        "language_code": "en-US",
         "gender": "male",
         "accent": "US",
         "style": "technical",
         "tier": "wavenet",
-        "description": "Clear technical delivery, ideal for instructional content", 
+        "description": "Clear technical delivery, ideal for instructional content",
         "quality": "standard"
     },
     "en-GB-Neural2-A": {
@@ -122,7 +122,7 @@ AVAILABLE_VOICES = {
         "display_name": "Neural2-A (British Female)",
         "language_code": "en-GB",
         "gender": "female",
-        "accent": "UK", 
+        "accent": "UK",
         "style": "professional",
         "tier": "neural2",
         "description": "British accent with professional tone",
@@ -144,7 +144,7 @@ CACHE_CONFIG = {
 # Fallback chain for voice selection
 FALLBACK_VOICES = [
     "en-US-Chirp3-HD-Zephyr",   # Premium default
-    "en-US-Neural2-C",          # High quality female  
+    "en-US-Neural2-C",          # High quality female
     "en-US-Neural2-J",          # High quality male
     "en-US-Studio-O",           # Standard female
     "en-US-Wavenet-D"           # Standard male fallback
@@ -159,16 +159,16 @@ def get_voice_with_fallback(preferred_voice):
     # Try preferred voice first
     if preferred_voice and preferred_voice in AVAILABLE_VOICES:
         return AVAILABLE_VOICES[preferred_voice]
-    
+
     # Try fallback chain
     for fallback_voice in FALLBACK_VOICES:
         if fallback_voice in AVAILABLE_VOICES:
             return AVAILABLE_VOICES[fallback_voice]
-    
+
     # Final fallback - return first available voice
     if AVAILABLE_VOICES:
         return list(AVAILABLE_VOICES.values())[0]
-    
+
     return None
 
 def get_voices_by_tier():
@@ -179,12 +179,12 @@ def get_voices_by_tier():
         "studio": [],
         "wavenet": []
     }
-    
+
     for voice in AVAILABLE_VOICES.values():
         tier = voice.get("tier", "other")
         if tier in tiers:
             tiers[tier].append(voice)
-    
+
     return tiers
 
 def validate_voice_name(voice_name):
@@ -200,12 +200,12 @@ def get_fallback_voice(failed_voice_id):
             fallback_index = FALLBACK_VOICES.index(failed_voice_id) + 1
     except ValueError:
         fallback_index = 0
-    
+
     # Return next available voice in chain
     for i in range(fallback_index, len(FALLBACK_VOICES)):
         if FALLBACK_VOICES[i] in AVAILABLE_VOICES:
             return FALLBACK_VOICES[i]
-    
+
     # Last resort - return first available voice
     return list(AVAILABLE_VOICES.keys())[0] if AVAILABLE_VOICES else None
 
@@ -221,26 +221,26 @@ def cleanup_audio_cache(cache_dir, config=None):
     import os
     import time
     from pathlib import Path
-    
+
     if config is None:
         config = CACHE_CONFIG
-    
+
     if not os.path.exists(cache_dir):
         return {"cleaned": 0, "size_freed": 0}
-    
+
     max_size_bytes = config["max_size_mb"] * 1024 * 1024
     max_age_seconds = config["ttl_hours"] * 3600
     max_files = config["max_files"]
     current_time = time.time()
-    
+
     # Get all cache files with metadata
     cache_files = []
     total_size = 0
-    
+
     for file_path in Path(cache_dir).glob("*.mp3"):
         stat = file_path.stat()
         age = current_time - stat.st_mtime
-        
+
         cache_files.append({
             "path": file_path,
             "size": stat.st_size,
@@ -248,24 +248,24 @@ def cleanup_audio_cache(cache_dir, config=None):
             "mtime": stat.st_mtime
         })
         total_size += stat.st_size
-    
+
     files_to_delete = []
-    
+
     # Remove files older than TTL
     for file_info in cache_files:
         if file_info["age"] > max_age_seconds:
             files_to_delete.append(file_info)
-    
+
     # Remove excess files if over limit (oldest first)
     remaining_files = [f for f in cache_files if f not in files_to_delete]
     if len(remaining_files) > max_files:
         remaining_files.sort(key=lambda x: x["mtime"])
         files_to_delete.extend(remaining_files[max_files:])
-    
+
     # Remove files if cache size exceeds limit (oldest first)
     remaining_files = [f for f in cache_files if f not in files_to_delete]
     remaining_size = sum(f["size"] for f in remaining_files)
-    
+
     if remaining_size > max_size_bytes:
         remaining_files.sort(key=lambda x: x["mtime"])
         for file_info in remaining_files:
@@ -273,11 +273,11 @@ def cleanup_audio_cache(cache_dir, config=None):
                 break
             files_to_delete.append(file_info)
             remaining_size -= file_info["size"]
-    
+
     # Delete files and track results
     cleaned_files = 0
     size_freed = 0
-    
+
     for file_info in files_to_delete:
         try:
             file_info["path"].unlink()
@@ -285,7 +285,7 @@ def cleanup_audio_cache(cache_dir, config=None):
             size_freed += file_info["size"]
         except OSError as e:
             print(f"Warning: Could not delete {file_info['path']}: {e}")
-    
+
     return {
         "cleaned": cleaned_files,
         "size_freed": size_freed,
@@ -298,27 +298,27 @@ def should_cleanup_cache(cache_dir, config=None):
     """Check if cache cleanup is needed."""
     import os
     from pathlib import Path
-    
+
     if config is None:
         config = CACHE_CONFIG
-    
+
     if not os.path.exists(cache_dir):
         return False
-    
+
     max_size_bytes = config["max_size_mb"] * 1024 * 1024
     cleanup_threshold = config["cleanup_threshold"]
     max_files = config["max_files"]
-    
+
     total_size = 0
     file_count = 0
-    
+
     for file_path in Path(cache_dir).glob("*.mp3"):
         total_size += file_path.stat().st_size
         file_count += 1
-    
+
     size_ratio = total_size / max_size_bytes
     file_ratio = file_count / max_files
-    
+
     return size_ratio > cleanup_threshold or file_ratio > cleanup_threshold
 
 def get_sample_text():

@@ -1310,12 +1310,12 @@ def speak():
 
     # Get voice selection from request data (default to configured voice)
     voice_id = data.get('voice_id', TTS_VOICE)
-    
+
     # Check if cache cleanup is needed (do this before generating cache key)
     if should_cleanup_cache(AUDIO_CACHE_DIR):
         cleanup_result = cleanup_audio_cache(AUDIO_CACHE_DIR)
         print(f"Cache cleanup: removed {cleanup_result['cleaned']} files, freed {cleanup_result['size_freed']/1024/1024:.1f}MB")
-    
+
     # Use optimized cache key generation
     cache_key = get_optimized_cache_key(voice_id, text_to_speak)
     filename = f"{cache_key}.mp3"
@@ -1340,17 +1340,17 @@ def speak():
         voice_config = get_voice_with_fallback(voice_id)
         if not voice_config:
             return Response("No valid voice configuration found", status=500)
-        
+
         synthesis_input = texttospeech.SynthesisInput(text=text_to_speak)
         voice = texttospeech.VoiceSelectionParams(
-            language_code=voice_config["language_code"], 
+            language_code=voice_config["language_code"],
             name=voice_config["name"]
         )
         audio_config = texttospeech.AudioConfig(audio_encoding=texttospeech.AudioEncoding.MP3)
 
         response = tts_client.synthesize_speech(
-            input=synthesis_input, 
-            voice=voice, 
+            input=synthesis_input,
+            voice=voice,
             audio_config=audio_config
         )
 
@@ -1386,7 +1386,7 @@ def get_cache_status():
     try:
         import os
         from pathlib import Path
-        
+
         if not os.path.exists(AUDIO_CACHE_DIR):
             return jsonify({
                 "total_files": 0,
@@ -1394,20 +1394,20 @@ def get_cache_status():
                 "cache_utilization": 0,
                 "needs_cleanup": False
             })
-        
+
         total_size = 0
         file_count = 0
         preview_count = 0
-        
+
         for file_path in Path(AUDIO_CACHE_DIR).glob("*.mp3"):
             total_size += file_path.stat().st_size
             file_count += 1
             if file_path.name.startswith("preview_"):
                 preview_count += 1
-        
+
         max_size_bytes = CACHE_CONFIG["max_size_mb"] * 1024 * 1024
         utilization = (total_size / max_size_bytes) * 100 if max_size_bytes > 0 else 0
-        
+
         return jsonify({
             "total_files": file_count,
             "preview_files": preview_count,
@@ -1444,104 +1444,104 @@ def preview_voice():
         data = request.get_json()
         if not data:
             return jsonify({"error": "Invalid JSON in request body"}), 400
-            
+
         voice_id = data.get("voice_id")
         text_to_speak = data.get("text")
-        
+
         if not voice_id:
             return jsonify({"error": "No voice_id provided"}), 400
         if not text_to_speak:
             return jsonify({"error": "No text provided"}), 400
-            
+
         # Sanitize text input
         text_to_speak = html.escape(text_to_speak)
         # Clean text for TTS to avoid ASCII pronunciation issues
         text_to_speak = clean_text_for_tts(text_to_speak)
-        
+
         # Limit text length for previews to prevent abuse
         if len(text_to_speak) > 500:
             text_to_speak = text_to_speak[:500] + "..."
-            
+
     except Exception as e:
         return jsonify({"error": f"Failed to parse request: {str(e)}"}), 400
-    
+
     # Use optimized cache key for previews
     preview_key = f"preview_{get_optimized_cache_key(voice_id, text_to_speak)}"
     filename = f"{preview_key}.mp3"
     filepath = os.path.join(AUDIO_CACHE_DIR, filename)
-    
+
     # Check cache first
     if os.path.exists(filepath):
         print(f"VOICE PREVIEW CACHE HIT for file: {filename}")
         with open(filepath, "rb") as f:
             audio_content = f.read()
         return Response(audio_content, mimetype="audio/mpeg")
-    
+
     print(f"VOICE PREVIEW CACHE MISS for file: {filename}. Generating...")
-    
+
     # Check if TTS client is available
     if not tts_client:
         return Response(
-            "Text-to-speech service not available. Please set the GOOGLE_API_KEY environment variable.", 
+            "Text-to-speech service not available. Please set the GOOGLE_API_KEY environment variable.",
             status=503
         )
-    
+
     try:
         # Get voice configuration with fallback support
         voice_config = get_voice_with_fallback(voice_id)
         if not voice_config:
             return Response("No valid voice configuration found", status=500)
-        
+
         synthesis_input = texttospeech.SynthesisInput(text=text_to_speak)
         voice = texttospeech.VoiceSelectionParams(
-            language_code=voice_config["language_code"], 
+            language_code=voice_config["language_code"],
             name=voice_config["name"]
         )
         audio_config = texttospeech.AudioConfig(audio_encoding=texttospeech.AudioEncoding.MP3)
-        
+
         response = tts_client.synthesize_speech(
-            input=synthesis_input, 
-            voice=voice, 
+            input=synthesis_input,
+            voice=voice,
             audio_config=audio_config
         )
-        
+
         # Cache the result
         with open(filepath, "wb") as f:
             f.write(response.audio_content)
         print(f"Saved new voice preview to cache: {filepath}")
-        
+
         return Response(response.audio_content, mimetype="audio/mpeg")
-        
+
     except Exception as e:
         print(f"Error in voice preview endpoint with voice {voice_id}: {e}")
-        
+
         # Try fallback voice if the selected voice failed
         try:
             fallback_voice_id = get_fallback_voice(voice_id)
             print(f"Trying fallback voice for preview: {fallback_voice_id}")
-            
+
             fallback_config = get_voice_with_fallback(fallback_voice_id)
             if not fallback_config:
                 return Response("No fallback voice available", status=500)
-            
+
             fallback_voice = texttospeech.VoiceSelectionParams(
                 language_code=fallback_config["language_code"],
                 name=fallback_config["name"]
             )
             fallback_audio_config = texttospeech.AudioConfig(audio_encoding=texttospeech.AudioEncoding.MP3)
-            
+
             response = tts_client.synthesize_speech(
                 input=synthesis_input,
                 voice=fallback_voice,
                 audio_config=fallback_audio_config
             )
-            
+
             with open(filepath, "wb") as f:
                 f.write(response.audio_content)
             print(f"Saved voice preview using fallback voice: {fallback_voice_id}")
-            
+
             return Response(response.audio_content, mimetype="audio/mpeg")
-            
+
         except Exception as fallback_error:
             print(f"Fallback voice preview also failed: {fallback_error}")
             return Response(f"Failed to generate voice preview: {e}", status=500)
