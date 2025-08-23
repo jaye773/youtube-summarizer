@@ -33,7 +33,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from app import app
 from job_models import JobPriority, JobStatus, JobType
 from job_state import JobStateManager
-from sse_manager import SSEManager as NewSSEManager
+from sse_manager import SSEManager
 from worker_manager import WorkerManager
 
 
@@ -57,7 +57,7 @@ def mock_worker_system():
     """Mock the entire worker system for testing."""
     with patch("app.WORKER_SYSTEM_AVAILABLE", True):
         with patch("app.WorkerManager") as mock_wm, patch("app.JobStateManager") as mock_jsm, patch(
-            "app.NewSSEManager"
+            "app.get_sse_manager"
         ) as mock_sse:
 
             # Configure mock instances
@@ -366,7 +366,7 @@ class TestErrorHandling:
 
     def test_sse_manager_exception_handling(self, client):
         """Test handling of SSE manager exceptions."""
-        with patch("app.NewSSEManager", side_effect=Exception("SSE error")):
+        with patch("app.get_sse_manager", side_effect=Exception("SSE error")):
             with app.app_context():
                 response = client.get("/events", headers={"Accept": "text/event-stream"})
                 # Should handle SSE errors gracefully

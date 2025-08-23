@@ -36,7 +36,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from app import app
 from job_models import JobPriority, JobResult, JobStatus, JobType, ProcessingJob
 from job_state import JobStateManager
-from sse_manager import SSEManager as NewSSEManager
+from sse_manager import SSEManager
 from worker_manager import WorkerManager
 
 
