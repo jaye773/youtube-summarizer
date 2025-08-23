@@ -12,12 +12,7 @@ import traceback
 from datetime import datetime, timezone
 from typing import Any, Callable, Dict, List, Optional
 
-from job_models import (
-    JobResult,
-    JobType,
-    ProcessingJob,
-    WorkerMetrics,
-)
+from job_models import JobResult, JobType, ProcessingJob, WorkerMetrics
 from job_queue import JobScheduler
 
 # Functions will be injected via app_context to avoid circular imports
@@ -81,9 +76,7 @@ class WorkerThread:
             return
 
         self.should_stop = False
-        self.thread = threading.Thread(
-            target=self._run, name=f"Worker-{self.worker_id}"
-        )
+        self.thread = threading.Thread(target=self._run, name=f"Worker-{self.worker_id}")
         self.thread.daemon = True
         self.thread.start()
         self.is_running = True
@@ -118,9 +111,7 @@ class WorkerThread:
         # Load cache at start
         try:
             self._summary_cache = load_summary_cache()
-            logger.debug(
-                f"Worker {self.worker_id} loaded cache with {len(self._summary_cache)} entries"
-            )
+            logger.debug(f"Worker {self.worker_id} loaded cache with {len(self._summary_cache)} entries")
         except Exception as e:
             logger.error(f"Worker {self.worker_id} failed to load cache: {e}")
             self._summary_cache = {}
@@ -155,9 +146,7 @@ class WorkerThread:
 
                 # If we have a current job, mark it as failed
                 if self.current_job:
-                    self.current_job.fail_with_error(
-                        f"Worker error: {str(e)}", can_retry=True
-                    )
+                    self.current_job.fail_with_error(f"Worker error: {str(e)}", can_retry=True)
                     self.current_job = None
 
                 # Brief sleep to prevent tight error loop
@@ -195,9 +184,7 @@ class WorkerThread:
             job.complete_successfully(result_data)
             processing_time = time.time() - start_time
 
-            logger.info(
-                f"Worker {self.worker_id} completed job {job.job_id} in {processing_time:.2f}s"
-            )
+            logger.info(f"Worker {self.worker_id} completed job {job.job_id} in {processing_time:.2f}s")
 
             return JobResult(
                 job_id=job.job_id,
@@ -209,9 +196,7 @@ class WorkerThread:
 
         except Exception as e:
             error_msg = str(e)
-            logger.error(
-                f"Worker {self.worker_id} failed to process job {job.job_id}: {error_msg}"
-            )
+            logger.error(f"Worker {self.worker_id} failed to process job {job.job_id}: {error_msg}")
             logger.error(traceback.format_exc())
 
             # Mark job as failed
@@ -331,11 +316,7 @@ class WorkerThread:
             if error:
                 raise ValueError(f"Could not fetch playlist videos: {error}")
 
-            video_ids = [
-                item["contentDetails"]["videoId"]
-                for item in video_items
-                if "contentDetails" in item
-            ]
+            video_ids = [item["contentDetails"]["videoId"] for item in video_items if "contentDetails" in item]
 
         if not video_ids:
             raise ValueError("No videos found in playlist")
@@ -346,9 +327,7 @@ class WorkerThread:
 
         for i, video_id in enumerate(video_ids):
             progress = (i / total_videos) * 0.9  # Reserve last 10% for finalization
-            self._notify_progress(
-                job, progress, f"Processing video {i+1} of {total_videos}..."
-            )
+            self._notify_progress(job, progress, f"Processing video {i+1} of {total_videos}...")
 
             try:
                 # Create a temporary video job
@@ -416,9 +395,7 @@ class WorkerThread:
 
         for i, url in enumerate(urls):
             progress = (i / total_urls) * 0.9
-            self._notify_progress(
-                job, progress, f"Processing URL {i+1} of {total_urls}..."
-            )
+            self._notify_progress(job, progress, f"Processing URL {i+1} of {total_urls}...")
 
             try:
                 # Determine if it's a video or playlist
@@ -595,9 +572,7 @@ class WorkerManager:
 
         # Start management thread
         self._should_stop_management = False
-        self._management_thread = threading.Thread(
-            target=self._management_loop, name="WorkerManager-Management"
-        )
+        self._management_thread = threading.Thread(target=self._management_loop, name="WorkerManager-Management")
         self._management_thread.daemon = True
         self._management_thread.start()
 
@@ -685,9 +660,7 @@ class WorkerManager:
             "queue": queue_status,
             "system_metrics": {
                 "total_workers": len(self.workers),
-                "active_workers": sum(
-                    1 for w in self.workers if w.current_job is not None
-                ),
+                "active_workers": sum(1 for w in self.workers if w.current_job is not None),
                 "idle_workers": sum(1 for w in self.workers if w.current_job is None),
             },
         }
@@ -738,15 +711,11 @@ class WorkerManager:
                 # Check worker health
                 for worker in self.workers:
                     if not worker.is_running and not self._should_stop_management:
-                        logger.warning(
-                            f"Worker {worker.worker_id} stopped unexpectedly, restarting..."
-                        )
+                        logger.warning(f"Worker {worker.worker_id} stopped unexpectedly, restarting...")
                         try:
                             worker.start()
                         except Exception as e:
-                            logger.error(
-                                f"Failed to restart worker {worker.worker_id}: {e}"
-                            )
+                            logger.error(f"Failed to restart worker {worker.worker_id}: {e}")
 
                 # Sleep for 30 seconds before next check
                 for _ in range(30):

@@ -404,7 +404,7 @@ class TestCompletePlaylistWorkflow:
                 "failed_videos": [{"video_id": "test3", "error": "Transcript not available"}],
                 "total_videos": 3,
                 "successful_videos": 2,
-                "failed_videos": 1,
+                "failed_video_count": 1,
             },
         )
 

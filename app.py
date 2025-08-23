@@ -32,25 +32,12 @@ import socket
 import google.generativeai as genai
 import httplib2
 import openai
-from flask import (
-    Flask,
-    Response,
-    jsonify,
-    redirect,
-    render_template,
-    request,
-    session,
-    url_for,
-)
+from flask import Flask, Response, jsonify, redirect, render_template, request, session, url_for
 from google.api_core.client_options import ClientOptions
 from google.cloud import texttospeech
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
-from youtube_transcript_api import (
-    NoTranscriptFound,
-    TranscriptsDisabled,
-    YouTubeTranscriptApi,
-)
+from youtube_transcript_api import NoTranscriptFound, TranscriptsDisabled, YouTubeTranscriptApi
 
 from voice_config import (
     AVAILABLE_VOICES,
@@ -148,9 +135,7 @@ def cleanup_stale_connections():
                 print(f"Cleaned up stale SSE connection: {conn_id}")
 
 
-def broadcast_to_connections(
-    event_type, data, session_filter=None, subscription_filter=None
-):
+def broadcast_to_connections(event_type, data, session_filter=None, subscription_filter=None):
     """Broadcast message to all matching connections"""
     cleanup_stale_connections()
 
@@ -161,10 +146,7 @@ def broadcast_to_connections(
                 continue
 
             # Filter by subscription if specified
-            if (
-                subscription_filter
-                and subscription_filter not in connection.subscriptions
-            ):
+            if subscription_filter and subscription_filter not in connection.subscriptions:
                 continue
 
             if not connection.send_message(event_type, data):
@@ -173,9 +155,7 @@ def broadcast_to_connections(
 
 
 # --- WEBSHARE PROXY CONFIGURATION ---
-WEBSHARE_PROXY_ENABLED = (
-    os.environ.get("WEBSHARE_PROXY_ENABLED", "false").lower() == "true"
-)
+WEBSHARE_PROXY_ENABLED = os.environ.get("WEBSHARE_PROXY_ENABLED", "false").lower() == "true"
 WEBSHARE_PROXY_HOST = os.environ.get("WEBSHARE_PROXY_HOST")
 WEBSHARE_PROXY_PORT = os.environ.get("WEBSHARE_PROXY_PORT")
 WEBSHARE_PROXY_USERNAME = os.environ.get("WEBSHARE_PROXY_USERNAME")
@@ -202,13 +182,10 @@ def get_proxy_config():
         return None
 
     proxy_url = (
-        f"http://{WEBSHARE_PROXY_USERNAME}:{WEBSHARE_PROXY_PASSWORD}"
-        f"@{WEBSHARE_PROXY_HOST}:{WEBSHARE_PROXY_PORT}"
+        f"http://{WEBSHARE_PROXY_USERNAME}:{WEBSHARE_PROXY_PASSWORD}" f"@{WEBSHARE_PROXY_HOST}:{WEBSHARE_PROXY_PORT}"
     )
     proxies = {"http": proxy_url, "https": proxy_url}
-    print(
-        f"✅ Using webshare proxy: {WEBSHARE_PROXY_USERNAME}@{WEBSHARE_PROXY_HOST}:{WEBSHARE_PROXY_PORT}"
-    )
+    print(f"✅ Using webshare proxy: {WEBSHARE_PROXY_USERNAME}@{WEBSHARE_PROXY_HOST}:{WEBSHARE_PROXY_PORT}")
     return proxies
 
 
@@ -392,9 +369,7 @@ def init_worker_system():
             # Start the worker system
             worker_manager.start()
 
-            print(
-                f"✅ Worker system initialized with {worker_manager.max_workers} worker threads"
-            )
+            print(f"✅ Worker system initialized with {worker_manager.max_workers} worker threads")
             return True
 
     except Exception as e:
@@ -456,14 +431,10 @@ TTS_VOICE = os.environ.get("TTS_VOICE", "en-US-Chirp3-HD-Zephyr")
 # Configure Flask session
 if LOGIN_ENABLED:
     if not SESSION_SECRET_KEY:
-        print(
-            "Warning: SESSION_SECRET_KEY not set. Using auto-generated key (not recommended for production)"
-        )
+        print("Warning: SESSION_SECRET_KEY not set. Using auto-generated key (not recommended for production)")
         SESSION_SECRET_KEY = os.urandom(24).hex()
     if not LOGIN_CODE:
-        print(
-            "Warning: LOGIN_CODE not set. Login functionality will not work properly."
-        )
+        print("Warning: LOGIN_CODE not set. Login functionality will not work properly.")
 
 app.secret_key = SESSION_SECRET_KEY if SESSION_SECRET_KEY else os.urandom(24)
 
@@ -539,21 +510,15 @@ openai_client = None
 # Initialize Google APIs
 if google_api_key and not os.environ.get("TESTING"):
     try:
-        tts_client = texttospeech.TextToSpeechClient(
-            client_options=ClientOptions(api_key=google_api_key)
-        )
+        tts_client = texttospeech.TextToSpeechClient(client_options=ClientOptions(api_key=google_api_key))
         genai.configure(api_key=google_api_key)
         youtube = create_youtube_client_with_timeout(google_api_key, timeout=30)
-        gemini_model = genai.GenerativeModel(
-            model_name="gemini-2.5-flash-preview-05-20"
-        )
+        gemini_model = genai.GenerativeModel(model_name="gemini-2.5-flash-preview-05-20")
         print("✅ Google APIs initialized successfully")
     except Exception as e:
         print(f"Warning: Could not configure Google APIs. Error: {e}")
 elif not google_api_key and not os.environ.get("TESTING"):
-    print(
-        "Warning: GOOGLE_API_KEY environment variable is not set. Google services will be unavailable."
-    )
+    print("Warning: GOOGLE_API_KEY environment variable is not set. Google services will be unavailable.")
 
 # Initialize OpenAI API
 if openai_api_key and not os.environ.get("TESTING"):
@@ -563,17 +528,13 @@ if openai_api_key and not os.environ.get("TESTING"):
     except Exception as e:
         print(f"Warning: Could not configure OpenAI API. Error: {e}")
 elif not openai_api_key and not os.environ.get("TESTING"):
-    print(
-        "Warning: OPENAI_API_KEY environment variable is not set. OpenAI models will be unavailable."
-    )
+    print("Warning: OPENAI_API_KEY environment variable is not set. OpenAI models will be unavailable.")
 
 # For testing, create clients even without API keys
 if os.environ.get("TESTING"):
     try:
         if not gemini_model:
-            gemini_model = genai.GenerativeModel(
-                model_name="gemini-2.5-flash-preview-05-20"
-            )
+            gemini_model = genai.GenerativeModel(model_name="gemini-2.5-flash-preview-05-20")
         if not openai_client:
             openai_client = openai.OpenAI(api_key="test-key")
     except Exception:
@@ -743,18 +704,14 @@ def get_video_details(video_ids, max_retries=3):
                 snippet = item.get("snippet", {})
                 details[item["id"]] = {
                     "title": snippet.get("title", "Unknown Title"),
-                    "thumbnail_url": snippet.get("thumbnails", {})
-                    .get("medium", {})
-                    .get("url"),
+                    "thumbnail_url": snippet.get("thumbnails", {}).get("medium", {}).get("url"),
                 }
             return details
 
         except (socket.timeout, TimeoutError, OSError) as e:
             retry_count += 1
             if retry_count > max_retries:
-                print(
-                    f"Max retries ({max_retries}) exceeded for video details. Error: {e}"
-                )
+                print(f"Max retries ({max_retries}) exceeded for video details. Error: {e}")
                 return {}
 
             # Exponential backoff with jitter
@@ -770,15 +727,11 @@ def get_video_details(video_ids, max_retries=3):
             if e.resp.status in [500, 502, 503, 504]:  # Server errors
                 retry_count += 1
                 if retry_count > max_retries:
-                    print(
-                        f"Max retries ({max_retries}) exceeded for video details. HTTP Error: {e}"
-                    )
+                    print(f"Max retries ({max_retries}) exceeded for video details. HTTP Error: {e}")
                     return {}
 
                 delay = base_delay * (2 ** (retry_count - 1))
-                print(
-                    f"HTTP {e.resp.status} error (attempt {retry_count}/{max_retries}). Retrying in {delay:.1f}s..."
-                )
+                print(f"HTTP {e.resp.status} error (attempt {retry_count}/{max_retries}). Retrying in {delay:.1f}s...")
                 time.sleep(delay)
             else:
                 # For other HTTP errors, don't retry
@@ -878,21 +831,13 @@ def get_transcript(video_id):
     proxies = get_proxy_config()
 
     try:
-        transcript_list = YouTubeTranscriptApi.get_transcript(
-            video_id, languages=["en", "en-US"], proxies=proxies
-        )
+        transcript_list = YouTubeTranscriptApi.get_transcript(video_id, languages=["en", "en-US"], proxies=proxies)
         transcript_text = " ".join([d["text"] for d in transcript_list])
-        return (
-            (transcript_text, None)
-            if transcript_text.strip()
-            else (None, "Transcript was found but it is empty.")
-        )
+        return (transcript_text, None) if transcript_text.strip() else (None, "Transcript was found but it is empty.")
     except NoTranscriptFound:
         try:
             transcript_list = (
-                YouTubeTranscriptApi.list_transcripts(video_id, proxies=proxies)
-                .find_transcript(["en"])
-                .fetch()
+                YouTubeTranscriptApi.list_transcripts(video_id, proxies=proxies).find_transcript(["en"]).fetch()
             )
             transcript_text = " ".join([d["text"] for d in transcript_list])
             return (
@@ -1100,9 +1045,7 @@ def require_auth(f):
             ]
 
             # Special handling for settings: GET requests should redirect, POST should return JSON
-            is_settings_post = (
-                request.path.startswith("/settings") and request.method == "POST"
-            )
+            is_settings_post = request.path.startswith("/settings") and request.method == "POST"
 
             is_api_request = (
                 request.content_type == "application/json"
@@ -1172,9 +1115,7 @@ def login():
         return jsonify({"error": "Login system is disabled"}), 404
 
     # Get client IP address
-    client_ip = request.environ.get(
-        "HTTP_X_FORWARDED_FOR", request.environ.get("REMOTE_ADDR", "127.0.0.1")
-    )
+    client_ip = request.environ.get("HTTP_X_FORWARDED_FOR", request.environ.get("REMOTE_ADDR", "127.0.0.1"))
     if "," in client_ip:
         client_ip = client_ip.split(",")[0].strip()
 
@@ -1283,12 +1224,8 @@ def sse_events():
     connection_id = str(uuid.uuid4())
 
     # Get client information for security and tracking
-    session_id = (
-        session.get("session_id") or session.sid if hasattr(session, "sid") else None
-    )
-    client_ip = request.environ.get(
-        "HTTP_X_FORWARDED_FOR", request.environ.get("REMOTE_ADDR", "127.0.0.1")
-    )
+    session_id = session.get("session_id") or session.sid if hasattr(session, "sid") else None
+    client_ip = request.environ.get("HTTP_X_FORWARDED_FOR", request.environ.get("REMOTE_ADDR", "127.0.0.1"))
     if "," in client_ip:
         client_ip = client_ip.split(",")[0].strip()
 
@@ -1309,9 +1246,7 @@ def sse_events():
     with sse_connection_lock:
         sse_connections[connection_id] = connection
 
-    print(
-        f"New SSE connection established: {connection_id} from {client_ip} (Session: {session_id})"
-    )
+    print(f"New SSE connection established: {connection_id} from {client_ip} (Session: {session_id})")
 
     def generate():
         """Generator function for SSE stream"""
@@ -1386,9 +1321,7 @@ def sse_status():
                 }
             )
 
-    return jsonify(
-        {"total_connections": len(sse_connections), "connections": connection_info}
-    )
+    return jsonify({"total_connections": len(sse_connections), "connections": connection_info})
 
 
 @app.route("/events/broadcast", methods=["POST"])
@@ -1516,9 +1449,7 @@ def get_cached_summaries():
         }
         for video_id, d in summary_cache.items()
     ]
-    cached_list.sort(
-        key=lambda x: x.get("summarized_at", "1970-01-01T00:00:00.000000"), reverse=True
-    )
+    cached_list.sort(key=lambda x: x.get("summarized_at", "1970-01-01T00:00:00.000000"), reverse=True)
 
     total = len(cached_list)
 
@@ -1589,9 +1520,7 @@ def search_summaries():
             )
 
     # Sort by date (most recent first)
-    results.sort(
-        key=lambda x: x.get("summarized_at", "1970-01-01T00:00:00.000000"), reverse=True
-    )
+    results.sort(key=lambda x: x.get("summarized_at", "1970-01-01T00:00:00.000000"), reverse=True)
 
     return jsonify(results)
 
@@ -1643,9 +1572,7 @@ def debug_transcript():
     }
 
     if transcript:
-        result["transcript_preview"] = (
-            transcript[:200] + "..." if len(transcript) > 200 else transcript
-        )
+        result["transcript_preview"] = transcript[:200] + "..." if len(transcript) > 200 else transcript
 
     return jsonify(result)
 
@@ -1676,9 +1603,7 @@ def debug_model():
         }
 
         if summary:
-            result["summary_preview"] = (
-                summary[:200] + "..." if len(summary) > 200 else summary
-            )
+            result["summary_preview"] = summary[:200] + "..." if len(summary) > 200 else summary
 
         return jsonify(result)
 
@@ -1717,28 +1642,15 @@ def summarize_links():
         if model_key not in AVAILABLE_MODELS:
             available_models = list(AVAILABLE_MODELS.keys())
             return (
-                jsonify(
-                    {
-                        "error": f"Unsupported model: {model_key}. Available models: {available_models}"
-                    }
-                ),
+                jsonify({"error": f"Unsupported model: {model_key}. Available models: {available_models}"}),
                 400,
             )
 
         # Get session ID for SSE notifications
-        session_id = (
-            session.get("session_id") or session.sid
-            if hasattr(session, "sid")
-            else None
-        )
+        session_id = session.get("session_id") or session.sid if hasattr(session, "sid") else None
 
         # Send initial progress notification
-        total_items = sum(
-            1
-            for url in urls
-            for _ in [get_playlist_id(url)]
-            if _ is None or get_video_id(url)
-        )
+        total_items = sum(1 for url in urls for _ in [get_playlist_id(url)] if _ is None or get_video_id(url))
         if any(get_playlist_id(url) for url in urls):
             # If there are playlists, we'll update the count as we discover videos
             broadcast_to_connections(
@@ -1781,9 +1693,7 @@ def summarize_links():
                             }
                         )
                         continue
-                    pl_meta_request = youtube.playlists().list(
-                        part="snippet", id=playlist_id
-                    )
+                    pl_meta_request = youtube.playlists().list(part="snippet", id=playlist_id)
                     pl_meta_response = pl_meta_request.execute()
                     if not pl_meta_response.get("items"):
                         results.append(
@@ -1827,9 +1737,9 @@ def summarize_links():
                     for index, item in enumerate(playlist_items):
                         snippet = item.get("snippet", {})
                         vid_id = snippet.get("resourceId", {}).get("videoId")
-                        vid_title, thumbnail_url = snippet.get(
-                            "title", "Unknown Title"
-                        ), snippet.get("thumbnails", {}).get("medium", {}).get("url")
+                        vid_title, thumbnail_url = snippet.get("title", "Unknown Title"), snippet.get(
+                            "thumbnails", {}
+                        ).get("medium", {}).get("url")
 
                         # Send progress update for current video
                         broadcast_to_connections(
@@ -1892,11 +1802,7 @@ def summarize_links():
                             continue
 
                         transcript, err = get_transcript(vid_id)
-                        summary, err = (
-                            (None, err)
-                            if err
-                            else generate_summary(transcript, vid_title, model_key)
-                        )
+                        summary, err = (None, err) if err else generate_summary(transcript, vid_title, model_key)
 
                         if summary and not err:
                             audio_filename = f"{hashlib.sha256(summary.encode('utf-8')).hexdigest()}.mp3"
@@ -2010,16 +1916,10 @@ def summarize_links():
                 try:
                     thumbnail_url = details.get("thumbnail_url")
                     transcript, err = get_transcript(video_id)
-                    summary, err = (
-                        (None, err)
-                        if err
-                        else generate_summary(transcript, title, model_key)
-                    )
+                    summary, err = (None, err) if err else generate_summary(transcript, title, model_key)
 
                     if summary and not err:
-                        audio_filename = (
-                            f"{hashlib.sha256(summary.encode('utf-8')).hexdigest()}.mp3"
-                        )
+                        audio_filename = f"{hashlib.sha256(summary.encode('utf-8')).hexdigest()}.mp3"
                         # --- MODIFICATION START ---
                         video_url = f"https://www.youtube.com/watch?v={video_id}"
                         summary_cache[video_id] = {
@@ -2093,9 +1993,7 @@ def summarize_links():
         return jsonify(results)
     except Exception as e:
         # Catch-all exception handler for the entire endpoint
-        app.logger.error(
-            f"Unhandled exception in /summarize: {str(e)}\n{traceback.format_exc()}"
-        )
+        app.logger.error(f"Unhandled exception in /summarize: {str(e)}\n{traceback.format_exc()}")
         return (
             jsonify(
                 {
@@ -2130,9 +2028,7 @@ def summarize_async():
             return jsonify({"error": "No URLs provided"}), 400
 
         # Parse URLs
-        urls = [
-            url.strip() for url in urls_input.replace("\n", " ").split() if url.strip()
-        ]
+        urls = [url.strip() for url in urls_input.replace("\n", " ").split() if url.strip()]
 
         if not urls:
             return jsonify({"error": "No valid URLs provided"}), 400
@@ -2148,9 +2044,7 @@ def summarize_async():
 
             if video_id:
                 # Single video job
-                job = create_video_job(
-                    url=url, model_key=model_key, session_id=session_id
-                )
+                job = create_video_job(url=url, model_key=model_key, session_id=session_id)
 
                 if worker_manager.submit_job(job):
                     job_ids.append(job.job_id)
@@ -2158,9 +2052,7 @@ def summarize_async():
             elif playlist_id:
                 # Playlist job - for now, just create with empty video list
                 # This should be enhanced to fetch actual video IDs from the playlist
-                job = create_playlist_job(
-                    url=url, video_ids=[], model_key=model_key, session_id=session_id
-                )
+                job = create_playlist_job(url=url, video_ids=[], model_key=model_key, session_id=session_id)
 
                 if worker_manager.submit_job(job):
                     job_ids.append(job.job_id)
@@ -2245,9 +2137,7 @@ def speak():
     if should_cleanup_cache(AUDIO_CACHE_DIR):
         cleanup_result = cleanup_audio_cache(AUDIO_CACHE_DIR)
         size_mb = cleanup_result["size_freed"] / 1024 / 1024
-        print(
-            f"Cache cleanup: removed {cleanup_result['cleaned']} files, freed {size_mb:.1f}MB"
-        )
+        print(f"Cache cleanup: removed {cleanup_result['cleaned']} files, freed {size_mb:.1f}MB")
 
     # Use optimized cache key generation
     cache_key = get_optimized_cache_key(voice_id, text_to_speak)
@@ -2279,13 +2169,9 @@ def speak():
         voice = texttospeech.VoiceSelectionParams(
             language_code=voice_config["language_code"], name=voice_config["name"]
         )
-        audio_config = texttospeech.AudioConfig(
-            audio_encoding=texttospeech.AudioEncoding.MP3
-        )
+        audio_config = texttospeech.AudioConfig(audio_encoding=texttospeech.AudioEncoding.MP3)
 
-        response = tts_client.synthesize_speech(
-            input=synthesis_input, voice=voice, audio_config=audio_config
-        )
+        response = tts_client.synthesize_speech(input=synthesis_input, voice=voice, audio_config=audio_config)
 
         with open(filepath, "wb") as f:
             f.write(response.audio_content)
@@ -2373,9 +2259,7 @@ def manual_cache_cleanup():
                 "cleaned_files": cleanup_result["cleaned"],
                 "size_freed_mb": round(cleanup_result["size_freed"] / 1024 / 1024, 2),
                 "remaining_files": cleanup_result["remaining_files"],
-                "remaining_size_mb": round(
-                    cleanup_result["remaining_size"] / 1024 / 1024, 2
-                ),
+                "remaining_size_mb": round(cleanup_result["remaining_size"] / 1024 / 1024, 2),
             }
         )
     except Exception as e:
@@ -2442,13 +2326,9 @@ def preview_voice():
         voice = texttospeech.VoiceSelectionParams(
             language_code=voice_config["language_code"], name=voice_config["name"]
         )
-        audio_config = texttospeech.AudioConfig(
-            audio_encoding=texttospeech.AudioEncoding.MP3
-        )
+        audio_config = texttospeech.AudioConfig(audio_encoding=texttospeech.AudioEncoding.MP3)
 
-        response = tts_client.synthesize_speech(
-            input=synthesis_input, voice=voice, audio_config=audio_config
-        )
+        response = tts_client.synthesize_speech(input=synthesis_input, voice=voice, audio_config=audio_config)
 
         # Cache the result
         with open(filepath, "wb") as f:
@@ -2473,9 +2353,7 @@ def preview_voice():
                 language_code=fallback_config["language_code"],
                 name=fallback_config["name"],
             )
-            fallback_audio_config = texttospeech.AudioConfig(
-                audio_encoding=texttospeech.AudioEncoding.MP3
-            )
+            fallback_audio_config = texttospeech.AudioConfig(audio_encoding=texttospeech.AudioEncoding.MP3)
 
             response = tts_client.synthesize_speech(
                 input=synthesis_input,
@@ -2614,11 +2492,7 @@ def update_settings():
         updated_vars = {}
         for form_key, env_key in allowed_vars.items():
             if form_key in data:
-                value = (
-                    data[form_key].strip()
-                    if isinstance(data[form_key], str)
-                    else str(data[form_key])
-                )
+                value = data[form_key].strip() if isinstance(data[form_key], str) else str(data[form_key])
 
                 # Sanitize settings input to prevent XSS
                 value = html.escape(value)
@@ -2631,11 +2505,7 @@ def update_settings():
                 ]:
                     if value and not value.isdigit():
                         return (
-                            jsonify(
-                                {
-                                    "error": f"Invalid value for {form_key}: must be a number"
-                                }
-                            ),
+                            jsonify({"error": f"Invalid value for {form_key}: must be a number"}),
                             400,
                         )
 
@@ -2655,17 +2525,13 @@ def update_settings():
         MAX_LOGIN_ATTEMPTS = int(os.environ.get("MAX_LOGIN_ATTEMPTS", "5"))
         LOCKOUT_DURATION = int(os.environ.get("LOCKOUT_DURATION", "15"))
 
-        WEBSHARE_PROXY_ENABLED = (
-            os.environ.get("WEBSHARE_PROXY_ENABLED", "false").lower() == "true"
-        )
+        WEBSHARE_PROXY_ENABLED = os.environ.get("WEBSHARE_PROXY_ENABLED", "false").lower() == "true"
         WEBSHARE_PROXY_HOST = os.environ.get("WEBSHARE_PROXY_HOST")
         WEBSHARE_PROXY_PORT = os.environ.get("WEBSHARE_PROXY_PORT")
         WEBSHARE_PROXY_USERNAME = os.environ.get("WEBSHARE_PROXY_USERNAME")
         WEBSHARE_PROXY_PASSWORD = os.environ.get("WEBSHARE_PROXY_PASSWORD")
 
-        DATA_DIR = os.environ.get(
-            "DATA_DIR", "data" if os.path.exists("/.dockerenv") else "."
-        )
+        DATA_DIR = os.environ.get("DATA_DIR", "data" if os.path.exists("/.dockerenv") else ".")
         TTS_VOICE = os.environ.get("TTS_VOICE", "en-US-Chirp3-HD-Zephyr")
 
         # Update Flask secret key if SESSION_SECRET_KEY changed
@@ -2680,16 +2546,10 @@ def update_settings():
             # Reinitialize Google APIs if key was updated
             if "GOOGLE_API_KEY" in updated_vars and google_api_key:
                 try:
-                    tts_client = texttospeech.TextToSpeechClient(
-                        client_options=ClientOptions(api_key=google_api_key)
-                    )
+                    tts_client = texttospeech.TextToSpeechClient(client_options=ClientOptions(api_key=google_api_key))
                     genai.configure(api_key=google_api_key)
-                    youtube = create_youtube_client_with_timeout(
-                        google_api_key, timeout=30
-                    )
-                    gemini_model = genai.GenerativeModel(
-                        model_name="gemini-2.5-flash-preview-05-20"
-                    )
+                    youtube = create_youtube_client_with_timeout(google_api_key, timeout=30)
+                    gemini_model = genai.GenerativeModel(model_name="gemini-2.5-flash-preview-05-20")
                     print("✅ Google APIs reinitialized successfully")
                 except Exception as e:
                     print(f"Warning: Could not reinitialize Google APIs. Error: {e}")
@@ -2709,11 +2569,7 @@ def update_settings():
             {
                 "success": True,
                 "message": f"Settings updated successfully! {len(updated_vars)} variables updated."
-                + (
-                    " Saved to .env file."
-                    if save_success
-                    else " Warning: Could not save to .env file."
-                ),
+                + (" Saved to .env file." if save_success else " Warning: Could not save to .env file."),
                 "updated_variables": list(updated_vars.keys()),
                 "env_file_saved": save_success,
             }
@@ -2773,9 +2629,7 @@ def not_found(e):
     ]
     if any(request.path.startswith(path) for path in api_paths):
         return (
-            jsonify(
-                {"error": "Endpoint not found", "message": str(e), "path": request.path}
-            ),
+            jsonify({"error": "Endpoint not found", "message": str(e), "path": request.path}),
             404,
         )
     return e

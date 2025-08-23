@@ -81,9 +81,7 @@ class JobStateManager:
         # Load existing state from disk
         self._load_state()
 
-        logger.info(
-            f"JobStateManager initialized with {len(self.state_cache)} cached jobs"
-        )
+        logger.info(f"JobStateManager initialized with {len(self.state_cache)} cached jobs")
 
     def _load_state(self) -> None:
         """Load job state from persistence file."""
@@ -95,22 +93,14 @@ class JobStateManager:
                 # Convert datetime strings back to datetime objects
                 for job_id, job_data in data.items():
                     if "created_at" in job_data and job_data["created_at"]:
-                        job_data["created_at"] = datetime.fromisoformat(
-                            job_data["created_at"]
-                        )
+                        job_data["created_at"] = datetime.fromisoformat(job_data["created_at"])
                     if "updated_at" in job_data and job_data["updated_at"]:
-                        job_data["updated_at"] = datetime.fromisoformat(
-                            job_data["updated_at"]
-                        )
+                        job_data["updated_at"] = datetime.fromisoformat(job_data["updated_at"])
                     if "completed_at" in job_data and job_data["completed_at"]:
-                        job_data["completed_at"] = datetime.fromisoformat(
-                            job_data["completed_at"]
-                        )
+                        job_data["completed_at"] = datetime.fromisoformat(job_data["completed_at"])
 
                 self.state_cache = data
-                logger.info(
-                    f"Loaded {len(self.state_cache)} jobs from {self.persistence_file}"
-                )
+                logger.info(f"Loaded {len(self.state_cache)} jobs from {self.persistence_file}")
             else:
                 logger.info(f"No existing state file found at {self.persistence_file}")
         except Exception as e:
@@ -127,9 +117,7 @@ class JobStateManager:
 
                 # Convert datetime objects to ISO strings
                 for date_field in ["created_at", "updated_at", "completed_at"]:
-                    if date_field in job_copy and isinstance(
-                        job_copy[date_field], datetime
-                    ):
+                    if date_field in job_copy and isinstance(job_copy[date_field], datetime):
                         job_copy[date_field] = job_copy[date_field].isoformat()
 
                 serializable_state[job_id] = job_copy
@@ -224,9 +212,7 @@ class JobStateManager:
                 return job_data.copy()
             return None
 
-    def get_all_jobs(
-        self, status_filter: Optional[JobStatus] = None
-    ) -> List[Dict[str, Any]]:
+    def get_all_jobs(self, status_filter: Optional[JobStatus] = None) -> List[Dict[str, Any]]:
         """
         Get all jobs, optionally filtered by status.
 
@@ -276,14 +262,10 @@ class JobStateManager:
         """
         with self.lock:
             if job_id in self.state_cache:
-                self.state_cache[job_id]["retry_count"] = (
-                    self.state_cache[job_id].get("retry_count", 0) + 1
-                )
+                self.state_cache[job_id]["retry_count"] = self.state_cache[job_id].get("retry_count", 0) + 1
                 self.state_cache[job_id]["updated_at"] = datetime.now()
                 retry_count = self.state_cache[job_id]["retry_count"]
-                logger.debug(
-                    f"Incremented retry count for job {job_id} to {retry_count}"
-                )
+                logger.debug(f"Incremented retry count for job {job_id} to {retry_count}")
                 self._save_state()
                 return retry_count
             return 0
@@ -301,11 +283,7 @@ class JobStateManager:
                 JobStatus.IN_PROGRESS.value,
                 JobStatus.RETRY.value,
             }
-            return sum(
-                1
-                for job_data in self.state_cache.values()
-                if job_data["status"] in active_statuses
-            )
+            return sum(1 for job_data in self.state_cache.values() if job_data["status"] in active_statuses)
 
     def _cleanup_if_needed(self) -> None:
         """Trigger cleanup if enough time has passed."""

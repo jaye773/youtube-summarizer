@@ -4,13 +4,9 @@ Integration test for voice model selection feature
 Tests the complete end-to-end user experience
 """
 
-import json
 import os
 import tempfile
-import time
 from pathlib import Path
-
-import requests
 
 # Set testing mode
 os.environ["TESTING"] = "true"
@@ -54,7 +50,7 @@ def test_settings_persistence():
 
     try:
         # Import voice config to test
-        from voice_config import AVAILABLE_VOICES, DEFAULT_VOICE, validate_voice_name
+        from voice_config import DEFAULT_VOICE, validate_voice_name
 
         # Test default voice is valid
         assert validate_voice_name(DEFAULT_VOICE), f"Default voice {DEFAULT_VOICE} is invalid"
@@ -239,10 +235,10 @@ def test_error_handling():
         print("✅ Invalid voice ID handled correctly")
 
         # Test validation function
-        assert validate_voice_name("en-US-Chirp3-HD-Zephyr") == True
-        assert validate_voice_name("invalid-voice") == False
-        assert validate_voice_name("") == False
-        assert validate_voice_name(None) == False
+        assert validate_voice_name("en-US-Chirp3-HD-Zephyr") is True
+        assert validate_voice_name("invalid-voice") is False
+        assert validate_voice_name("") is False
+        assert validate_voice_name(None) is False
         print("✅ Voice validation function works correctly")
 
         # Test edge cases
@@ -258,7 +254,7 @@ def test_error_handling():
         for case in edge_cases:
             try:
                 result = validate_voice_name(case)
-                assert result == False, f"Edge case {case} should return False"
+                assert result is False, f"Edge case {case} should return False"
             except (TypeError, AttributeError):
                 # Expected for wrong types
                 pass

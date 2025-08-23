@@ -165,7 +165,9 @@ class TestWorkerSystemUnavailable:
             response_data = response.get_json()
             if response_data and "error" in response_data:
                 # Should suggest fallback to sync processing
-                assert any(word in response_data["error"].lower() for word in ["synchronous", "sync", "direct", "fallback"])
+                assert any(
+                    word in response_data["error"].lower() for word in ["synchronous", "sync", "direct", "fallback"]
+                )
         else:
             # Skip this check if we get auth redirects
             pass

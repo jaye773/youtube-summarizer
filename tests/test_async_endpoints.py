@@ -96,9 +96,7 @@ def sample_playlist_data():
 class TestAsyncJobSubmission:
     """Test the /summarize_async endpoint for job submission."""
 
-    def test_submit_video_job_success(
-        self, client, mock_worker_system, sample_job_data
-    ):
+    def test_submit_video_job_success(self, client, mock_worker_system, sample_job_data):
         """Test successful video job submission."""
         # Mock job creation and submission
         job_id = str(uuid.uuid4())
@@ -113,9 +111,7 @@ class TestAsyncJobSubmission:
         mock_worker_system["worker_manager"].submit_job.return_value = job_id
         mock_worker_system["job_state_manager"].get_job_status.return_value = mock_job.to_dict()
 
-        response = client.post(
-            "/summarize_async", json=sample_job_data, content_type="application/json"
-        )
+        response = client.post("/summarize_async", json=sample_job_data, content_type="application/json")
 
         assert response.status_code == 200  # OK
         response_data = response.get_json()
@@ -124,9 +120,7 @@ class TestAsyncJobSubmission:
         assert response_data["success"] is True
         assert "message" in response_data
 
-    def test_submit_playlist_job_success(
-        self, client, mock_worker_system, sample_playlist_data
-    ):
+    def test_submit_playlist_job_success(self, client, mock_worker_system, sample_playlist_data):
         """Test successful playlist job submission."""
         job_id = str(uuid.uuid4())
         mock_job = ProcessingJob(
@@ -161,9 +155,7 @@ class TestAsyncJobSubmission:
             "model": "gemini-2.5-flash",
         }
 
-        response = client.post(
-            "/summarize_async", json=invalid_data, content_type="application/json"
-        )
+        response = client.post("/summarize_async", json=invalid_data, content_type="application/json")
 
         # The app currently accepts invalid URLs and lets the worker handle validation
         assert response.status_code == 200
@@ -178,9 +170,7 @@ class TestAsyncJobSubmission:
             # Missing ai_provider and model
         }
 
-        response = client.post(
-            "/summarize_async", json=incomplete_data, content_type="application/json"
-        )
+        response = client.post("/summarize_async", json=incomplete_data, content_type="application/json")
 
         assert response.status_code == 400
         response_data = response.get_json()
@@ -194,9 +184,7 @@ class TestAsyncJobSubmission:
             "model": "some-model",
         }
 
-        response = client.post(
-            "/summarize_async", json=invalid_data, content_type="application/json"
-        )
+        response = client.post("/summarize_async", json=invalid_data, content_type="application/json")
 
         # The app currently accepts any provider and lets the worker handle validation
         assert response.status_code == 200
@@ -215,17 +203,11 @@ class TestAsyncJobSubmission:
 
             assert response.status_code == 302  # Redirects to sync endpoint
 
-    def test_submit_job_worker_manager_error(
-        self, client, mock_worker_system, sample_job_data
-    ):
+    def test_submit_job_worker_manager_error(self, client, mock_worker_system, sample_job_data):
         """Test job submission when worker manager raises an error."""
-        mock_worker_system["worker_manager"].submit_job.side_effect = Exception(
-            "Worker error"
-        )
+        mock_worker_system["worker_manager"].submit_job.side_effect = Exception("Worker error")
 
-        response = client.post(
-            "/summarize_async", json=sample_job_data, content_type="application/json"
-        )
+        response = client.post("/summarize_async", json=sample_job_data, content_type="application/json")
 
         # Worker manager exceptions result in 500 error
         assert response.status_code == 500
@@ -243,9 +225,7 @@ class TestAsyncJobSubmission:
         job_id = str(uuid.uuid4())
         mock_worker_system["worker_manager"].submit_job.return_value = True
 
-        response = client.post(
-            "/summarize_async", json=custom_data, content_type="application/json"
-        )
+        response = client.post("/summarize_async", json=custom_data, content_type="application/json")
 
         assert response.status_code == 200
         response_data = response.get_json()
@@ -314,7 +294,7 @@ class TestJobStatusEndpoint:
                 "summary": "Test summary",
                 "title": "Test Video",
                 "video_id": "test123",
-            }
+            },
         }
 
         mock_worker_system["job_state_manager"].get_job_status.return_value = mock_status
@@ -401,7 +381,7 @@ class TestJobListingEndpoint:
             "job_type": "video",
             "status": "pending",
             "created_at": "2023-01-01T00:00:00.000000",
-            "data": {"url": "test1"}
+            "data": {"url": "test1"},
         }
 
         job2 = {
@@ -409,7 +389,7 @@ class TestJobListingEndpoint:
             "job_type": "playlist",
             "status": "in_progress",
             "created_at": "2023-01-01T01:00:00.000000",
-            "data": {"url": "test2"}
+            "data": {"url": "test2"},
         }
 
         mock_worker_system["job_state_manager"].get_all_jobs.return_value = [
@@ -455,7 +435,7 @@ class TestJobListingEndpoint:
                 "job_type": "video",
                 "status": "pending",
                 "created_at": f"2023-01-01T0{i%10}:00:00.000000",
-                "data": {"url": f"test{i}"}
+                "data": {"url": f"test{i}"},
             }
             jobs.append(job)
 
@@ -506,9 +486,7 @@ class TestSSEEndpoint:
     def test_sse_connection_with_client_id(self, client, mock_worker_system):
         """Test SSE connection with client ID parameter."""
         client_id = str(uuid.uuid4())
-        response = client.get(
-            f"/events?client_id={client_id}", headers={"Accept": "text/event-stream"}
-        )
+        response = client.get(f"/events?client_id={client_id}", headers={"Accept": "text/event-stream"})
 
         assert response.status_code in [200, 404]
 
@@ -567,9 +545,7 @@ class TestJobCancellation:
 class TestRateLimiting:
     """Test rate limiting on async endpoints."""
 
-    def test_job_submission_rate_limiting(
-        self, client, mock_worker_system, sample_job_data
-    ):
+    def test_job_submission_rate_limiting(self, client, mock_worker_system, sample_job_data):
         """Test rate limiting on job submission."""
         # Submit multiple jobs rapidly
         responses = []
@@ -712,18 +688,14 @@ class TestErrorScenarios:
             "large_field": "x" * 10000,  # Very large field
         }
 
-        response = client.post(
-            "/summarize_async", json=large_data, content_type="application/json"
-        )
+        response = client.post("/summarize_async", json=large_data, content_type="application/json")
 
         # Should handle large payloads appropriately
         assert response.status_code in [202, 400, 413]
 
     def test_database_connection_error(self, client, mock_worker_system):
         """Test handling of database/state manager errors."""
-        mock_worker_system["job_state_manager"].get_job.side_effect = Exception(
-            "Database error"
-        )
+        mock_worker_system["job_state_manager"].get_job.side_effect = Exception("Database error")
 
         job_id = str(uuid.uuid4())
         response = client.get(f"/jobs/{job_id}/status")

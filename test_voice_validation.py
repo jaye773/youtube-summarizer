@@ -4,15 +4,13 @@ Comprehensive validation tests for voice model selection feature
 Tests API endpoints, settings integration, UX flow, and edge cases
 """
 
-import hashlib
 import json
 import os
 import sys
 import tempfile
 import time
 import unittest
-from pathlib import Path
-from unittest.mock import MagicMock, Mock, patch
+from unittest.mock import Mock, patch
 
 # Set testing mode before imports
 os.environ["TESTING"] = "true"
@@ -25,9 +23,7 @@ from voice_config import (
     get_fallback_voice,
     get_optimized_cache_key,
     get_sample_text,
-    get_voice_config,
     get_voice_with_fallback,
-    validate_voice_name,
 )
 
 
@@ -460,7 +456,6 @@ class TestPerformanceAndReliability(VoiceValidationTestCase):
         mock_tts_client.synthesize_speech.return_value = mock_response
 
         import threading
-        import time
 
         results = []
 

@@ -41,9 +41,7 @@ class SSEConnection:
             subscriptions: Set of event types this client is subscribed to
         """
         self.client_id = client_id
-        self.queue = queue.Queue(
-            maxsize=1000
-        )  # Limit queue size to prevent memory issues
+        self.queue = queue.Queue(maxsize=1000)  # Limit queue size to prevent memory issues
         self.created_at = datetime.now()
         self.last_activity = datetime.now()
         self.subscriptions = subscriptions or {
@@ -54,9 +52,7 @@ class SSEConnection:
         self.is_active = True
         self._lock = threading.Lock()
 
-        logger.info(
-            f"SSE connection created for client {client_id} with subscriptions: {self.subscriptions}"
-        )
+        logger.info(f"SSE connection created for client {client_id} with subscriptions: {self.subscriptions}")
 
     def send_event(self, event_type: str, data: Dict[str, Any]) -> bool:
         """
@@ -85,9 +81,7 @@ class SSEConnection:
                 logger.debug(f"Event queued for client {self.client_id}: {event_type}")
                 return True
         except queue.Full:
-            logger.warning(
-                f"Event queue full for client {self.client_id}, dropping event"
-            )
+            logger.warning(f"Event queue full for client {self.client_id}, dropping event")
             return False
         except Exception as e:
             logger.error(f"Error queuing event for client {self.client_id}: {e}")
@@ -121,11 +115,7 @@ class SSEConnection:
 
         except queue.Empty:
             # Send heartbeat if no events
-            events.append(
-                self._format_sse_event(
-                    "ping", {"timestamp": datetime.now().isoformat()}
-                )
-            )
+            events.append(self._format_sse_event("ping", {"timestamp": datetime.now().isoformat()}))
 
         return events
 
@@ -207,9 +197,7 @@ class SSEManager:
             f"SSE Manager initialized with max_connections={max_connections}, heartbeat_interval={heartbeat_interval}s"
         )
 
-    def add_connection(
-        self, client_id: str = None, subscriptions: Set[str] = None
-    ) -> SSEConnection:
+    def add_connection(self, client_id: str = None, subscriptions: Set[str] = None) -> SSEConnection:
         """
         Register a new SSE connection.
 
@@ -229,9 +217,7 @@ class SSEManager:
         with self._lock:
             # Check connection limit
             if len(self.connections) >= self.max_connections:
-                raise RuntimeError(
-                    f"Maximum connections limit reached ({self.max_connections})"
-                )
+                raise RuntimeError(f"Maximum connections limit reached ({self.max_connections})")
 
             # Remove existing connection if client reconnects
             if client_id in self.connections:
@@ -253,9 +239,7 @@ class SSEManager:
                 },
             )
 
-            logger.info(
-                f"SSE connection added: {client_id} (total: {len(self.connections)})"
-            )
+            logger.info(f"SSE connection added: {client_id} (total: {len(self.connections)})")
             return connection
 
     def remove_connection(self, client_id: str) -> bool:
@@ -273,9 +257,7 @@ class SSEManager:
                 connection = self.connections[client_id]
                 connection.close()
                 del self.connections[client_id]
-                logger.info(
-                    f"SSE connection removed: {client_id} (remaining: {len(self.connections)})"
-                )
+                logger.info(f"SSE connection removed: {client_id} (remaining: {len(self.connections)})")
                 return True
             return False
 
@@ -465,9 +447,7 @@ class SSEManager:
         def needs_heartbeat(conn: SSEConnection) -> bool:
             return conn.idle_seconds > (self.heartbeat_interval * 0.8)
 
-        result = self.broadcast_event(
-            "ping", heartbeat_data, filter_func=needs_heartbeat
-        )
+        result = self.broadcast_event("ping", heartbeat_data, filter_func=needs_heartbeat)
 
         if result["sent"] > 0:
             logger.debug(f"Sent heartbeat to {result['sent']} connections")
@@ -533,9 +513,7 @@ def format_summary_complete_event(
     }
 
 
-def format_system_event(
-    message: str, level: str = "info", data: Dict[str, Any] = None
-) -> Dict[str, Any]:
+def format_system_event(message: str, level: str = "info", data: Dict[str, Any] = None) -> Dict[str, Any]:
     """
     Format a system event.
 

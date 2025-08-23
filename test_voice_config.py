@@ -4,8 +4,7 @@ Test script for voice configuration functionality
 Run this to validate the voice model selection feature
 """
 
-import json
-import os
+
 import sys
 
 from voice_config import (
@@ -80,8 +79,8 @@ def test_voice_functions():
     print(f"✅ Voices organized by tier: {', '.join([f'{k}({len(v)})' for k,v in tiers.items()])}")
 
     # Test validate_voice_name
-    assert validate_voice_name("en-US-Chirp3-HD-Zephyr") == True
-    assert validate_voice_name("invalid-voice") == False
+    assert validate_voice_name("en-US-Chirp3-HD-Zephyr") is True
+    assert validate_voice_name("invalid-voice") is False
     print("✅ Voice validation works")
 
     # Test sample text
@@ -161,7 +160,7 @@ def main():
         print("\nVoice Model Selection Feature Summary:")
         print(f"- Total voices available: {len(AVAILABLE_VOICES)}")
         print(f"- Default voice: {DEFAULT_VOICE}")
-        print(f"- Quality tiers: Premium (3), High (4), Standard (3)")
+        print("- Quality tiers: Premium (3), High (4), Standard (3)")
         print("- Ready for production use!")
 
         return 0

@@ -91,9 +91,7 @@ class ErrorHandler:
         # Error pattern matching for classification
         self._error_patterns = self._initialize_error_patterns()
 
-        logger.info(
-            "ErrorHandler initialized with retry policies for all error categories"
-        )
+        logger.info("ErrorHandler initialized with retry policies for all error categories")
 
     def _initialize_retry_policies(self) -> Dict[ErrorCategory, RetryPolicy]:
         """Initialize retry policies for each error category."""
@@ -266,9 +264,7 @@ class ErrorHandler:
             ],
         }
 
-    def classify_error(
-        self, error: Exception, context: Optional[Dict[str, Any]] = None
-    ) -> ErrorCategory:
+    def classify_error(self, error: Exception, context: Optional[Dict[str, Any]] = None) -> ErrorCategory:
         """
         Classify an error into a category based on error message and context.
 
@@ -291,9 +287,7 @@ class ErrorHandler:
         for category, patterns in self._error_patterns.items():
             for pattern in patterns:
                 if pattern.lower() in error_message or pattern.lower() in error_type:
-                    logger.debug(
-                        f"Classified error as {category.value}: matched pattern '{pattern}'"
-                    )
+                    logger.debug(f"Classified error as {category.value}: matched pattern '{pattern}'")
                     return category
 
         # Special handling for common exception types
@@ -392,9 +386,7 @@ class ErrorHandler:
         # Ensure non-negative delay
         return max(0.0, delay)
 
-    def _update_error_stats(
-        self, category: ErrorCategory, retry_eligible: bool
-    ) -> None:
+    def _update_error_stats(self, category: ErrorCategory, retry_eligible: bool) -> None:
         """Update internal error statistics."""
         category_key = category.value
         self._error_stats[category_key] = self._error_stats.get(category_key, 0) + 1
@@ -408,10 +400,7 @@ class ErrorHandler:
         job_id = error_info.metadata.get("job_id", "unknown")
         retry_count = error_info.metadata.get("retry_count", 0)
 
-        base_message = (
-            f"Job {job_id} failed with {error_info.category.value}: "
-            f"{error_info.message[:200]}"
-        )
+        base_message = f"Job {job_id} failed with {error_info.category.value}: " f"{error_info.message[:200]}"
 
         if error_info.retry_eligible:
             logger.warning(
@@ -422,10 +411,7 @@ class ErrorHandler:
             if error_info.category == ErrorCategory.VALIDATION:
                 logger.error(f"{base_message} | Not retryable - validation error")
             else:
-                logger.error(
-                    f"{base_message} | Max retries exceeded "
-                    f"({retry_count}/{error_info.max_retries})"
-                )
+                logger.error(f"{base_message} | Max retries exceeded " f"({retry_count}/{error_info.max_retries})")
 
         # Log full exception details at debug level
         logger.debug(f"Full error details for job {job_id}", exc_info=original_error)
@@ -445,9 +431,7 @@ class ErrorHandler:
 
         return error_info.timestamp + timedelta(seconds=error_info.retry_delay)
 
-    def should_retry_now(
-        self, error_info: ErrorInfo, current_time: Optional[datetime] = None
-    ) -> bool:
+    def should_retry_now(self, error_info: ErrorInfo, current_time: Optional[datetime] = None) -> bool:
         """
         Check if a job should be retried now.
 
@@ -503,13 +487,8 @@ class ErrorHandler:
             }
 
         # Find most common errors
-        sorted_errors = sorted(
-            category_counts.items(), key=lambda x: x[1], reverse=True
-        )
-        stats["most_common_errors"] = [
-            {"category": category, "count": count}
-            for category, count in sorted_errors[:5]
-        ]
+        sorted_errors = sorted(category_counts.items(), key=lambda x: x[1], reverse=True)
+        stats["most_common_errors"] = [{"category": category, "count": count} for category, count in sorted_errors[:5]]
 
         return stats
 
