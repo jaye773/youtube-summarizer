@@ -56,12 +56,12 @@ class SSEConnection:
         self.last_activity = self.created_at
         self.is_active = True
         self.subscriptions = set()  # Track what types of events this connection wants
-    
+
     def send_message(self, event_type, data, event_id=None, retry=None):
         """Add message to connection's queue"""
         if not self.is_active:
             return False
-        
+
         try:
             message = {
                 'event': event_type,
@@ -76,7 +76,7 @@ class SSEConnection:
         except:
             self.is_active = False
             return False
-    
+
     def get_messages(self, timeout=30):
         """Generator that yields messages from queue"""
         while self.is_active:
@@ -94,7 +94,7 @@ class SSEConnection:
                     'id': str(uuid.uuid4()),
                     'timestamp': datetime.now(timezone.utc).isoformat()
                 }
-    
+
     def close(self):
         """Close the connection gracefully"""
         self.is_active = False
@@ -104,13 +104,13 @@ class SSEConnection:
 def cleanup_stale_connections():
     """Remove connections that haven't been active for more than 5 minutes"""
     cutoff_time = datetime.now(timezone.utc) - timedelta(minutes=5)
-    
+
     with sse_connection_lock:
         stale_connections = [
             conn_id for conn_id, conn in sse_connections.items()
             if conn.last_activity < cutoff_time or not conn.is_active
         ]
-        
+
         for conn_id in stale_connections:
             connection = sse_connections.pop(conn_id, None)
             if connection:
@@ -121,17 +121,17 @@ def cleanup_stale_connections():
 def broadcast_to_connections(event_type, data, session_filter=None, subscription_filter=None):
     """Broadcast message to all matching connections"""
     cleanup_stale_connections()
-    
+
     with sse_connection_lock:
         for conn_id, connection in list(sse_connections.items()):
             # Filter by session if specified
             if session_filter and connection.session_id != session_filter:
                 continue
-            
+
             # Filter by subscription if specified
             if subscription_filter and subscription_filter not in connection.subscriptions:
                 continue
-            
+
             if not connection.send_message(event_type, data):
                 # Connection is dead, remove it
                 sse_connections.pop(conn_id, None)
@@ -297,19 +297,19 @@ new_sse_manager = None
 def init_worker_system():
     """Initialize the async worker system"""
     global worker_manager, job_state_manager, new_sse_manager
-    
+
     if not WORKER_SYSTEM_AVAILABLE:
         print("⚠️ Worker system not available - running in synchronous mode only")
         return False
-        
+
     try:
         if worker_manager is None:
             print("🚀 Initializing async worker system...")
-            
+
             # Initialize managers
             job_state_manager = JobStateManager()
             new_sse_manager = get_sse_manager()
-            
+
             # Initialize worker manager
             max_workers = int(os.environ.get("WORKER_THREADS", "3"))
             worker_manager = WorkerManager(
@@ -317,7 +317,7 @@ def init_worker_system():
                 max_queue_size=int(os.environ.get("WORKER_MAX_QUEUE_SIZE", "100")),
                 rate_limit_per_minute=int(os.environ.get("WORKER_RATE_LIMIT", "60"))
             )
-            
+
             # Set up app context functions in the worker manager
             # (These will be passed to worker threads to avoid circular imports)
             worker_manager.set_app_functions({
@@ -335,13 +335,13 @@ def init_worker_system():
                 "get_videos_from_playlist": get_videos_from_playlist,
                 "sse_manager": new_sse_manager
             })
-            
+
             # Start the worker system
             worker_manager.start()
-            
+
             print(f"✅ Worker system initialized with {worker_manager.max_workers} worker threads")
             return True
-            
+
     except Exception as e:
         print(f"❌ Failed to initialize worker system: {e}")
         print("   Falling back to synchronous processing only")
@@ -622,10 +622,10 @@ def create_youtube_client_with_timeout(api_key, timeout=30):
     """Create a YouTube API client with custom timeout settings"""
     # Create an httplib2 instance with timeout
     http = httplib2.Http(timeout=timeout)
-    
+
     # Set socket timeout as well for extra safety
     socket.setdefaulttimeout(timeout)
-    
+
     # Build the YouTube client with the configured http instance
     return build("youtube", "v3", developerKey=api_key, http=http)
 
@@ -650,11 +650,11 @@ def get_video_id(url):
 def get_video_details(video_ids, max_retries=3):
     """
     Get video details from YouTube API with retry logic for timeout errors.
-    
+
     Args:
         video_ids: List of video IDs to fetch details for
         max_retries: Maximum number of retry attempts (default: 3)
-    
+
     Returns:
         Dictionary of video details or empty dict on failure
     """
@@ -662,15 +662,15 @@ def get_video_details(video_ids, max_retries=3):
     if not youtube:
         print("YouTube API client not initialized")
         return {}
-    
+
     retry_count = 0
     base_delay = 1  # Start with 1 second delay
-    
+
     while retry_count <= max_retries:
         try:
             request = youtube.videos().list(part="snippet", id=",".join(video_ids))
             response = request.execute()
-            
+
             for item in response.get("items", []):
                 snippet = item.get("snippet", {})
                 details[item["id"]] = {
@@ -678,18 +678,18 @@ def get_video_details(video_ids, max_retries=3):
                     "thumbnail_url": snippet.get("thumbnails", {}).get("medium", {}).get("url"),
                 }
             return details
-            
+
         except (socket.timeout, TimeoutError, OSError) as e:
             retry_count += 1
             if retry_count > max_retries:
                 print(f"Max retries ({max_retries}) exceeded for video details. Error: {e}")
                 return {}
-            
+
             # Exponential backoff with jitter
             delay = base_delay * (2 ** (retry_count - 1)) + (0.1 * retry_count)
             print(f"Timeout error fetching video details (attempt {retry_count}/{max_retries}). Retrying in {delay:.1f}s...")
             time.sleep(delay)
-            
+
         except HttpError as e:
             # For HTTP errors, check if it's a temporary issue
             if e.resp.status in [500, 502, 503, 504]:  # Server errors
@@ -697,7 +697,7 @@ def get_video_details(video_ids, max_retries=3):
                 if retry_count > max_retries:
                     print(f"Max retries ({max_retries}) exceeded for video details. HTTP Error: {e}")
                     return {}
-                
+
                 delay = base_delay * (2 ** (retry_count - 1))
                 print(f"HTTP {e.resp.status} error (attempt {retry_count}/{max_retries}). Retrying in {delay:.1f}s...")
                 time.sleep(delay)
@@ -705,35 +705,35 @@ def get_video_details(video_ids, max_retries=3):
                 # For other HTTP errors, don't retry
                 print(f"Error fetching video details: {e}")
                 return {}
-                
+
         except Exception as e:
             print(f"Unexpected error fetching video details: {e}")
             return {}
-    
+
     return {}
 
 
 def get_videos_from_playlist(playlist_id, max_retries=3):
     """
     Get videos from a YouTube playlist with retry logic for timeout errors.
-    
+
     Args:
         playlist_id: YouTube playlist ID
         max_retries: Maximum number of retry attempts (default: 3)
-    
+
     Returns:
         Tuple of (video_items list, error message)
     """
     if not youtube:
         return None, "YouTube API client not initialized"
-    
+
     video_items = []
     next_page_token = None
-    
+
     while True:
         retry_count = 0
         base_delay = 1
-        
+
         while retry_count <= max_retries:
             try:
                 pl_request = youtube.playlistItems().list(
@@ -746,37 +746,37 @@ def get_videos_from_playlist(playlist_id, max_retries=3):
                 video_items.extend(pl_response.get("items", []))
                 next_page_token = pl_response.get("nextPageToken")
                 break  # Success, exit retry loop
-                
+
             except (socket.timeout, TimeoutError, OSError) as e:
                 retry_count += 1
                 if retry_count > max_retries:
                     return None, f"Timeout error fetching playlist after {max_retries} retries: {e}"
-                
+
                 # Exponential backoff with jitter
                 delay = base_delay * (2 ** (retry_count - 1)) + (0.1 * retry_count)
                 print(f"Timeout error fetching playlist (attempt {retry_count}/{max_retries}). Retrying in {delay:.1f}s...")
                 time.sleep(delay)
-                
+
             except HttpError as e:
                 # For HTTP errors, check if it's a temporary issue
                 if e.resp.status in [500, 502, 503, 504]:  # Server errors
                     retry_count += 1
                     if retry_count > max_retries:
                         return None, f"Server error fetching playlist after {max_retries} retries: {e}"
-                    
+
                     delay = base_delay * (2 ** (retry_count - 1))
                     print(f"HTTP {e.resp.status} error (attempt {retry_count}/{max_retries}). Retrying in {delay:.1f}s...")
                     time.sleep(delay)
                 else:
                     # For other HTTP errors (like 403, 404), don't retry
                     return None, f"Could not fetch playlist. Is it public? Error: {e}"
-                    
+
             except Exception as e:
                 return None, f"Unexpected error fetching playlist: {e}"
-        
+
         if not next_page_token:
             break
-            
+
     return video_items, None
 
 
@@ -1158,28 +1158,28 @@ def sse_events():
     """Server-Sent Events endpoint for real-time notifications"""
     # Generate unique connection ID
     connection_id = str(uuid.uuid4())
-    
+
     # Get client information for security and tracking
     session_id = session.get("session_id") or session.sid if hasattr(session, 'sid') else None
     client_ip = request.environ.get("HTTP_X_FORWARDED_FOR", request.environ.get("REMOTE_ADDR", "127.0.0.1"))
     if "," in client_ip:
         client_ip = client_ip.split(",")[0].strip()
-    
+
     # Get subscription preferences from query parameters
     subscriptions = request.args.get("subscribe", "").split(",")
     subscriptions = {sub.strip() for sub in subscriptions if sub.strip()}
     if not subscriptions:
         subscriptions = {"summary_complete", "summary_progress", "system"}  # Default subscriptions
-    
+
     # Create and register the connection
     connection = SSEConnection(connection_id, session_id, client_ip)
     connection.subscriptions = subscriptions
-    
+
     with sse_connection_lock:
         sse_connections[connection_id] = connection
-    
+
     print(f"New SSE connection established: {connection_id} from {client_ip} (Session: {session_id})")
-    
+
     def generate():
         """Generator function for SSE stream"""
         try:
@@ -1189,7 +1189,7 @@ def sse_events():
                 "message": "Connected to notification stream",
                 "subscriptions": list(subscriptions)
             }, event_id=connection_id)
-            
+
             # Stream messages from the connection's queue
             for message in connection.get_messages():
                 if not connection.is_active:
@@ -1200,7 +1200,7 @@ def sse_events():
                     message["id"],
                     message.get("retry")
                 )
-                
+
         except GeneratorExit:
             # Client disconnected
             print(f"SSE connection closed by client: {connection_id}")
@@ -1212,7 +1212,7 @@ def sse_events():
                 sse_connections.pop(connection_id, None)
             connection.close()
             print(f"SSE connection cleaned up: {connection_id}")
-    
+
     # Return SSE response with proper headers
     return Response(
         generate(),
@@ -1232,7 +1232,7 @@ def sse_events():
 def sse_status():
     """Get information about active SSE connections"""
     cleanup_stale_connections()
-    
+
     with sse_connection_lock:
         connection_info = []
         for conn_id, conn in sse_connections.items():
@@ -1246,7 +1246,7 @@ def sse_status():
                 "subscriptions": list(conn.subscriptions),
                 "queue_size": conn.message_queue.qsize()
             })
-    
+
     return jsonify({
         "total_connections": len(sse_connections),
         "connections": connection_info
@@ -1261,30 +1261,30 @@ def sse_broadcast():
         data = request.get_json()
         if not data:
             return jsonify({"error": "Invalid JSON in request body"}), 400
-        
+
         event_type = data.get("event_type", "test")
         message_data = data.get("data", {})
         session_filter = data.get("session_filter")
         subscription_filter = data.get("subscription_filter")
-        
+
         # Validate event type
         allowed_events = ["test", "system", "summary_complete", "summary_progress", "admin"]
         if event_type not in allowed_events:
             return jsonify({"error": f"Invalid event type. Allowed: {allowed_events}"}), 400
-        
+
         broadcast_to_connections(
-            event_type, 
-            message_data, 
+            event_type,
+            message_data,
             session_filter=session_filter,
             subscription_filter=subscription_filter
         )
-        
+
         return jsonify({
             "success": True,
             "message": f"Broadcasted {event_type} event",
             "total_connections": len(sse_connections)
         })
-        
+
     except Exception as e:
         return jsonify({"error": f"Broadcast failed: {str(e)}"}), 500
 
@@ -1292,25 +1292,25 @@ def sse_broadcast():
 def format_sse_message(event_type, data, event_id=None, retry=None):
     """Format data as Server-Sent Events message"""
     lines = []
-    
+
     if event_id:
         lines.append(f"id: {event_id}")
-    
+
     if retry:
         lines.append(f"retry: {retry}")
-    
+
     lines.append(f"event: {event_type}")
-    
+
     # Handle data formatting
     if isinstance(data, (dict, list)):
         data_str = json.dumps(data)
     else:
         data_str = str(data)
-    
+
     # Split multi-line data properly
     for line in data_str.split('\n'):
         lines.append(f"data: {line}")
-    
+
     lines.append("")  # Empty line to end the message
     return "\n".join(lines) + "\n"
 
@@ -1545,7 +1545,7 @@ def summarize_links():
 
         # Get session ID for SSE notifications
         session_id = session.get("session_id") or session.sid if hasattr(session, 'sid') else None
-        
+
         # Send initial progress notification
         total_items = sum(1 for url in urls for _ in [get_playlist_id(url)] if _ is None or get_video_id(url))
         if any(get_playlist_id(url) for url in urls):
@@ -1558,7 +1558,7 @@ def summarize_links():
             }, session_filter=session_id, subscription_filter="summary_progress")
         else:
             broadcast_to_connections("summary_progress", {
-                "status": "starting", 
+                "status": "starting",
                 "message": f"Starting to process {total_items} videos",
                 "progress": 0,
                 "total": total_items
@@ -1606,7 +1606,7 @@ def summarize_links():
 
                     playlist_summaries = []
                     total_videos = len(playlist_items)
-                    
+
                     # Update total count now that we know playlist size
                     broadcast_to_connections("summary_progress", {
                         "status": "processing",
@@ -1615,7 +1615,7 @@ def summarize_links():
                         "total": processed_count + total_videos,
                         "current_playlist": playlist_title
                     }, session_filter=session_id, subscription_filter="summary_progress")
-                    
+
                     for index, item in enumerate(playlist_items):
                         snippet = item.get("snippet", {})
                         vid_id = snippet.get("resourceId", {}).get("videoId")
@@ -1663,7 +1663,7 @@ def summarize_links():
                                     "error": None,
                                 }
                             )
-                            
+
                             # Send completion notification for cached video
                             broadcast_to_connections("summary_complete", {
                                 "video_id": vid_id,
@@ -1691,7 +1691,7 @@ def summarize_links():
                             }
                             # --- MODIFICATION END ---
                             save_summary_cache(summary_cache)
-                            
+
                             # Send completion notification for new summary
                             broadcast_to_connections("summary_complete", {
                                 "video_id": vid_id,
@@ -1700,7 +1700,7 @@ def summarize_links():
                                 "model_used": model_key,
                                 "playlist": playlist_title
                             }, session_filter=session_id, subscription_filter="summary_complete")
-                            
+
                         playlist_summaries.append(
                             {
                                 "video_id": vid_id,
@@ -1711,7 +1711,7 @@ def summarize_links():
                                 "error": err,
                             }
                         )
-                    
+
                     processed_count += total_videos
                     results.append(
                         {
@@ -1732,11 +1732,11 @@ def summarize_links():
 
             elif video_id:
                 processed_count += 1
-                
+
                 # Send progress notification for single video
                 details = get_video_details([video_id]).get(video_id, {})
                 title = details.get("title", "Unknown Video")
-                
+
                 broadcast_to_connections("summary_progress", {
                     "status": "processing",
                     "message": f"Processing: {title[:50]}{'...' if len(title) > 50 else ''}",
@@ -1747,7 +1747,7 @@ def summarize_links():
                         "title": title
                     }
                 }, session_filter=session_id, subscription_filter="summary_progress")
-                
+
                 if video_id in summary_cache:
                     cached_item = summary_cache[video_id]
                     results.append(
@@ -1761,7 +1761,7 @@ def summarize_links():
                             "error": None,
                         }
                     )
-                    
+
                     # Send completion notification for cached video
                     broadcast_to_connections("summary_complete", {
                         "video_id": video_id,
@@ -1790,7 +1790,7 @@ def summarize_links():
                         }
                         # --- MODIFICATION END ---
                         save_summary_cache(summary_cache)
-                        
+
                         # Send completion notification for new summary
                         broadcast_to_connections("summary_complete", {
                             "video_id": video_id,
@@ -1798,7 +1798,7 @@ def summarize_links():
                             "source": "generated",
                             "model_used": model_key
                         }, session_filter=session_id, subscription_filter="summary_complete")
-                        
+
                     results.append(
                         {
                             "type": "video",
@@ -1827,7 +1827,7 @@ def summarize_links():
                         "error": "Invalid or unsupported YouTube URL.",
                     }
                 )
-        
+
         # Send final completion notification
         broadcast_to_connections("summary_progress", {
             "status": "completed",
@@ -1836,7 +1836,7 @@ def summarize_links():
             "total": processed_count,
             "results_count": len(results)
         }, session_filter=session_id, subscription_filter="summary_progress")
-        
+
         return jsonify(results)
     except Exception as e:
         # Catch-all exception handler for the entire endpoint
@@ -1862,33 +1862,33 @@ def summarize_async():
     if not WORKER_SYSTEM_AVAILABLE or worker_manager is None:
         # Fall back to synchronous processing
         return redirect(url_for('summarize'))
-    
+
     try:
         data = request.get_json()
         if not data:
             return jsonify({"error": "Invalid JSON in request body"}), 400
-        
+
         urls_input = data.get("urls", "").strip()
         model_key = data.get("model", "gemini-2.5-flash")
-        
+
         if not urls_input:
             return jsonify({"error": "No URLs provided"}), 400
-        
+
         # Parse URLs
         urls = [url.strip() for url in urls_input.replace('\n', ' ').split() if url.strip()]
-        
+
         if not urls:
             return jsonify({"error": "No valid URLs provided"}), 400
-        
+
         # Submit jobs to worker queue
         job_ids = []
         session_id = session.get('session_id', str(uuid.uuid4()))
         session['session_id'] = session_id
-        
+
         for url in urls:
             video_id = extract_video_id(url)
             playlist_id = extract_playlist_id(url)
-            
+
             if video_id:
                 # Single video job
                 job = create_video_job(
@@ -1897,10 +1897,10 @@ def summarize_async():
                     session_id=session_id,
                     priority=JobPriority.HIGH
                 )
-                
+
                 if worker_manager.submit_job(job):
                     job_ids.append(job.job_id)
-                    
+
             elif playlist_id:
                 # Playlist job
                 job = create_playlist_job(
@@ -1909,20 +1909,20 @@ def summarize_async():
                     session_id=session_id,
                     priority=JobPriority.MEDIUM
                 )
-                
+
                 if worker_manager.submit_job(job):
                     job_ids.append(job.job_id)
-        
+
         if not job_ids:
             return jsonify({"error": "Failed to submit any jobs"}), 500
-        
+
         return jsonify({
             "success": True,
             "message": f"Submitted {len(job_ids)} jobs for processing",
             "job_ids": job_ids,
             "session_id": session_id
         })
-        
+
     except Exception as e:
         app.logger.error(f"Error in summarize_async: {e}")
         return jsonify({"error": str(e)}), 500
@@ -1934,14 +1934,14 @@ def get_job_status(job_id):
     """Get job status and progress"""
     if not WORKER_SYSTEM_AVAILABLE or job_state_manager is None:
         return jsonify({"error": "Worker system not available"}), 503
-    
+
     try:
         status = job_state_manager.get_job_status(job_id)
         if status is None:
             return jsonify({"error": "Job not found"}), 404
-        
+
         return jsonify(status)
-        
+
     except Exception as e:
         app.logger.error(f"Error getting job status: {e}")
         return jsonify({"error": str(e)}), 500
@@ -1953,20 +1953,20 @@ def list_jobs():
     """List all jobs with optional filtering"""
     if not WORKER_SYSTEM_AVAILABLE or job_state_manager is None:
         return jsonify({"jobs": []})
-    
+
     try:
         status_filter = request.args.get("status")
         limit = min(int(request.args.get("limit", 50)), 100)
         session_id = session.get('session_id')
-        
+
         jobs = job_state_manager.get_all_jobs(
             status_filter=status_filter,
             session_filter=session_id,
             limit=limit
         )
-        
+
         return jsonify({"jobs": jobs})
-        
+
     except Exception as e:
         app.logger.error(f"Error listing jobs: {e}")
         return jsonify({"error": str(e)}), 500
@@ -2527,12 +2527,12 @@ import atexit
 def cleanup_worker_system():
     """Cleanup function for application shutdown"""
     global worker_manager, new_sse_manager
-    
+
     if worker_manager:
         print("🔄 Shutting down worker system gracefully...")
         worker_manager.stop()
         print("✅ Worker system shutdown complete")
-    
+
     if new_sse_manager:
         print("🔄 Shutting down SSE manager...")
         new_sse_manager.shutdown()

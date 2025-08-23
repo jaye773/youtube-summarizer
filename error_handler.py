@@ -27,7 +27,7 @@ try:
 except ImportError:
     # Fallback definition for standalone testing
     from enum import Enum
-    
+
     class JobStatus(Enum):
         PENDING = "pending"
         IN_PROGRESS = "in_progress"
@@ -77,7 +77,7 @@ class RetryPolicy:
 class ErrorHandler:
     """
     Comprehensive error handling and retry logic for async job processing.
-    
+
     Classifies errors into categories and applies appropriate retry strategies
     with exponential backoff and jitter for optimal retry patterns.
     """
@@ -86,10 +86,10 @@ class ErrorHandler:
         """Initialize the Error Handler with default retry policies."""
         self._error_stats: Dict[str, int] = {}
         self._retry_policies = self._initialize_retry_policies()
-        
+
         # Error pattern matching for classification
         self._error_patterns = self._initialize_error_patterns()
-        
+
         logger.info("ErrorHandler initialized with retry policies for all error categories")
 
     def _initialize_retry_policies(self) -> Dict[ErrorCategory, RetryPolicy]:
@@ -104,7 +104,7 @@ class ErrorHandler:
                 jitter=True,
                 retry_eligible=True
             ),
-            
+
             # API rate limiting - aggressive retries with longer delays
             ErrorCategory.API_RATE_LIMIT: RetryPolicy(
                 max_retries=5,
@@ -114,7 +114,7 @@ class ErrorHandler:
                 jitter=True,
                 retry_eligible=True
             ),
-            
+
             # API quota - minimal retries (needs user intervention)
             ErrorCategory.API_QUOTA: RetryPolicy(
                 max_retries=1,
@@ -124,7 +124,7 @@ class ErrorHandler:
                 jitter=False,
                 retry_eligible=True
             ),
-            
+
             # Network errors - moderate retries
             ErrorCategory.NETWORK: RetryPolicy(
                 max_retries=4,
@@ -134,7 +134,7 @@ class ErrorHandler:
                 jitter=True,
                 retry_eligible=True
             ),
-            
+
             # Model processing errors - limited retries
             ErrorCategory.MODEL_ERROR: RetryPolicy(
                 max_retries=2,
@@ -144,7 +144,7 @@ class ErrorHandler:
                 jitter=True,
                 retry_eligible=True
             ),
-            
+
             # System errors - moderate retries
             ErrorCategory.SYSTEM_ERROR: RetryPolicy(
                 max_retries=3,
@@ -154,7 +154,7 @@ class ErrorHandler:
                 jitter=True,
                 retry_eligible=True
             ),
-            
+
             # Validation errors - no retries (user input issue)
             ErrorCategory.VALIDATION: RetryPolicy(
                 max_retries=0,
@@ -164,7 +164,7 @@ class ErrorHandler:
                 jitter=False,
                 retry_eligible=False
             ),
-            
+
             # Timeout errors - moderate retries
             ErrorCategory.TIMEOUT: RetryPolicy(
                 max_retries=3,
@@ -174,7 +174,7 @@ class ErrorHandler:
                 jitter=True,
                 retry_eligible=True
             ),
-            
+
             # Unknown errors - conservative retries
             ErrorCategory.UNKNOWN: RetryPolicy(
                 max_retries=2,
@@ -191,14 +191,14 @@ class ErrorHandler:
         return {
             ErrorCategory.TRANSCRIPT: [
                 "transcript not available",
-                "subtitles not available", 
+                "subtitles not available",
                 "transcript fetch failed",
                 "youtube transcript error",
                 "captions disabled",
                 "no transcript found",
                 "transcript unavailable"
             ],
-            
+
             ErrorCategory.API_RATE_LIMIT: [
                 "rate limit exceeded",
                 "too many requests",
@@ -209,7 +209,7 @@ class ErrorHandler:
                 "429",  # HTTP status code
                 "rate limited"
             ],
-            
+
             ErrorCategory.API_QUOTA: [
                 "quota exceeded",
                 "billing quota exceeded",
@@ -218,7 +218,7 @@ class ErrorHandler:
                 "insufficient quota",
                 "quota limit reached"
             ],
-            
+
             ErrorCategory.NETWORK: [
                 "connection error",
                 "network error",
@@ -231,7 +231,7 @@ class ErrorHandler:
                 "ssl error",
                 "certificate error"
             ],
-            
+
             ErrorCategory.MODEL_ERROR: [
                 "model error",
                 "processing failed",
@@ -243,7 +243,7 @@ class ErrorHandler:
                 "content filter",
                 "safety filter"
             ],
-            
+
             ErrorCategory.SYSTEM_ERROR: [
                 "internal server error",
                 "system error",
@@ -256,7 +256,7 @@ class ErrorHandler:
                 "500",  # HTTP status code
                 "503"   # Service unavailable
             ],
-            
+
             ErrorCategory.VALIDATION: [
                 "invalid url",
                 "invalid input",
@@ -267,7 +267,7 @@ class ErrorHandler:
                 "missing required",
                 "400"  # HTTP status code
             ],
-            
+
             ErrorCategory.TIMEOUT: [
                 "timeout",
                 "deadline exceeded",
@@ -279,8 +279,8 @@ class ErrorHandler:
         }
 
     def classify_error(
-        self, 
-        error: Exception, 
+        self,
+        error: Exception,
         context: Optional[Dict[str, Any]] = None
     ) -> ErrorCategory:
         """
@@ -295,7 +295,7 @@ class ErrorHandler:
         """
         error_message = str(error).lower()
         error_type = type(error).__name__.lower()
-        
+
         # Check context for additional clues
         if context:
             context_str = str(context).lower()
@@ -322,9 +322,9 @@ class ErrorHandler:
         return ErrorCategory.UNKNOWN
 
     def handle_error(
-        self, 
-        error: Exception, 
-        job_id: str, 
+        self,
+        error: Exception,
+        job_id: str,
         retry_count: int = 0,
         context: Optional[Dict[str, Any]] = None
     ) -> ErrorInfo:
@@ -342,16 +342,16 @@ class ErrorHandler:
         """
         # Classify the error
         category = self.classify_error(error, context)
-        
+
         # Get retry policy for this category
         policy = self._retry_policies[category]
-        
+
         # Determine if retry is eligible
         retry_eligible = (
-            policy.retry_eligible and 
+            policy.retry_eligible and
             retry_count < policy.max_retries
         )
-        
+
         # Calculate retry delay with exponential backoff
         retry_delay = 0.0
         if retry_eligible:
@@ -384,8 +384,8 @@ class ErrorHandler:
         return error_info
 
     def _calculate_retry_delay(
-        self, 
-        policy: RetryPolicy, 
+        self,
+        policy: RetryPolicy,
         retry_count: int
     ) -> float:
         """
@@ -400,28 +400,28 @@ class ErrorHandler:
         """
         # Exponential backoff: base_delay * (multiplier ^ retry_count)
         delay = policy.base_delay * (policy.backoff_multiplier ** retry_count)
-        
+
         # Cap at maximum delay
         delay = min(delay, policy.max_delay)
-        
+
         # Add jitter if enabled (±25% random variation)
         if policy.jitter:
             jitter_range = delay * 0.25
             jitter = random.uniform(-jitter_range, jitter_range)
             delay += jitter
-            
+
         # Ensure non-negative delay
         return max(0.0, delay)
 
     def _update_error_stats(
-        self, 
-        category: ErrorCategory, 
+        self,
+        category: ErrorCategory,
         retry_eligible: bool
     ) -> None:
         """Update internal error statistics."""
         category_key = category.value
         self._error_stats[category_key] = self._error_stats.get(category_key, 0) + 1
-        
+
         if retry_eligible:
             retry_key = f"{category_key}_retries"
             self._error_stats[retry_key] = self._error_stats.get(retry_key, 0) + 1
@@ -430,12 +430,12 @@ class ErrorHandler:
         """Log error information with appropriate severity level."""
         job_id = error_info.metadata.get('job_id', 'unknown')
         retry_count = error_info.metadata.get('retry_count', 0)
-        
+
         base_message = (
             f"Job {job_id} failed with {error_info.category.value}: "
             f"{error_info.message[:200]}"
         )
-        
+
         if error_info.retry_eligible:
             logger.warning(
                 f"{base_message} | Retry {retry_count + 1}/{error_info.max_retries} "
@@ -454,7 +454,7 @@ class ErrorHandler:
         logger.debug(f"Full error details for job {job_id}", exc_info=original_error)
 
     def get_next_retry_time(
-        self, 
+        self,
         error_info: ErrorInfo
     ) -> Optional[datetime]:
         """
@@ -468,12 +468,12 @@ class ErrorHandler:
         """
         if not error_info.retry_eligible:
             return None
-            
+
         return error_info.timestamp + timedelta(seconds=error_info.retry_delay)
 
     def should_retry_now(
-        self, 
-        error_info: ErrorInfo, 
+        self,
+        error_info: ErrorInfo,
         current_time: Optional[datetime] = None
     ) -> bool:
         """
@@ -488,10 +488,10 @@ class ErrorHandler:
         """
         if not error_info.retry_eligible:
             return False
-            
+
         current_time = current_time or datetime.now()
         next_retry_time = self.get_next_retry_time(error_info)
-        
+
         return next_retry_time is not None and current_time >= next_retry_time
 
     def get_error_statistics(self) -> Dict[str, Any]:
@@ -511,7 +511,7 @@ class ErrorHandler:
         # Group by category and calculate retry stats
         category_counts = {}
         category_retries = {}
-        
+
         for key, count in self._error_stats.items():
             if key.endswith('_retries'):
                 category = key.replace('_retries', '')
@@ -523,7 +523,7 @@ class ErrorHandler:
         for category_name in category_counts:
             total_errors = category_counts[category_name]
             total_retries = category_retries.get(category_name, 0)
-            
+
             stats['by_category'][category_name] = {
                 'total_errors': total_errors,
                 'total_retries': total_retries,
@@ -532,12 +532,12 @@ class ErrorHandler:
 
         # Find most common errors
         sorted_errors = sorted(
-            category_counts.items(), 
-            key=lambda x: x[1], 
+            category_counts.items(),
+            key=lambda x: x[1],
             reverse=True
         )
         stats['most_common_errors'] = [
-            {'category': category, 'count': count} 
+            {'category': category, 'count': count}
             for category, count in sorted_errors[:5]
         ]
 
@@ -549,8 +549,8 @@ class ErrorHandler:
         self._error_stats.clear()
 
     def update_retry_policy(
-        self, 
-        category: ErrorCategory, 
+        self,
+        category: ErrorCategory,
         policy: RetryPolicy
     ) -> None:
         """

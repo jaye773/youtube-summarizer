@@ -40,7 +40,7 @@ class TestJobStateManager(unittest.TestCase):
         self.test_dir = tempfile.mkdtemp()
         self.test_file = os.path.join(self.test_dir, "test_job_state.json")
         self.manager = JobStateManager(persistence_file=self.test_file)
-        
+
         # Test job data
         self.sample_job_id = "test_job_123"
         self.sample_job_data = {
@@ -59,7 +59,7 @@ class TestJobStateManager(unittest.TestCase):
         """Test that JobStateManager creates necessary directories on init."""
         nested_path = os.path.join(self.test_dir, "nested", "deep", "job_state.json")
         manager = JobStateManager(persistence_file=nested_path)
-        
+
         self.assertTrue(os.path.exists(os.path.dirname(nested_path)))
         self.assertIsInstance(manager.state_cache, dict)
 
@@ -67,15 +67,15 @@ class TestJobStateManager(unittest.TestCase):
         """Test basic save and load operations with simple job data."""
         # Add a job and update its state
         self.manager.update_job_progress(
-            self.sample_job_id, 
-            0.5, 
-            JobStatus.IN_PROGRESS, 
+            self.sample_job_id,
+            0.5,
+            JobStatus.IN_PROGRESS,
             "Processing transcript"
         )
-        
+
         # Create new manager instance to test loading
         new_manager = JobStateManager(persistence_file=self.test_file)
-        
+
         # Verify state was loaded correctly
         job_status = new_manager.get_job_status(self.sample_job_id)
         self.assertIsNotNone(job_status)
@@ -87,19 +87,19 @@ class TestJobStateManager(unittest.TestCase):
         """Test that datetime objects are properly serialized/deserialized."""
         # Add job with various timestamps
         self.manager.update_job_progress(self.sample_job_id, 0.3, JobStatus.IN_PROGRESS)
-        
+
         # Complete the job (adds completed_at timestamp)
         self.manager.update_job_progress(
-            self.sample_job_id, 
-            1.0, 
+            self.sample_job_id,
+            1.0,
             JobStatus.COMPLETED,
             "Job completed successfully"
         )
-        
+
         # Create new manager to test deserialization
         new_manager = JobStateManager(persistence_file=self.test_file)
         job_status = new_manager.get_job_status(self.sample_job_id)
-        
+
         # Verify all timestamps are datetime objects
         self.assertIsInstance(job_status['created_at'], datetime)
         self.assertIsInstance(job_status['updated_at'], datetime)
@@ -110,11 +110,11 @@ class TestJobStateManager(unittest.TestCase):
         # Write invalid JSON to the file
         with open(self.test_file, 'w') as f:
             f.write("invalid json content {{{")
-        
+
         # Should handle corruption gracefully and start with empty state
         manager = JobStateManager(persistence_file=self.test_file)
         self.assertEqual(len(manager.state_cache), 0)
-        
+
         # Should still be able to add new jobs
         manager.update_job_progress("new_job", 0.1, JobStatus.PENDING)
         self.assertEqual(len(manager.state_cache), 1)
@@ -124,7 +124,7 @@ class TestJobStateManager(unittest.TestCase):
     def test_atomic_file_operations(self, mock_replace):
         """Test that state saves use atomic file operations."""
         self.manager.update_job_progress(self.sample_job_id, 0.5, JobStatus.IN_PROGRESS)
-        
+
         # Verify atomic rename was called
         mock_replace.assert_called_once()
         args = mock_replace.call_args[0]
@@ -136,7 +136,7 @@ class TestJobStateManager(unittest.TestCase):
         """Test handling of file permission errors during save operations."""
         # Make directory read-only to simulate permission errors
         os.chmod(self.test_dir, 0o444)
-        
+
         try:
             self.manager.update_job_progress(self.sample_job_id, 0.5, JobStatus.IN_PROGRESS)
             # Should log error but not crash
@@ -152,34 +152,34 @@ class TestJobStateManager(unittest.TestCase):
         # Test invalid progress values
         with self.assertRaises(ValueError):
             self.manager.update_job_progress(self.sample_job_id, -0.1)
-        
+
         with self.assertRaises(ValueError):
             self.manager.update_job_progress(self.sample_job_id, 1.1)
-        
+
         # Test valid boundary values
         self.manager.update_job_progress(self.sample_job_id, 0.0)
         self.manager.update_job_progress(self.sample_job_id, 1.0)
-        
+
         job_status = self.manager.get_job_status(self.sample_job_id)
         self.assertEqual(job_status['progress'], 1.0)
 
     def test_job_status_transitions(self):
         """Test proper job status transitions and timestamp updates."""
         start_time = datetime.now()
-        
+
         # Create job (PENDING)
         self.manager.update_job_progress(self.sample_job_id, 0.0, JobStatus.PENDING)
         job = self.manager.get_job_status(self.sample_job_id)
         self.assertEqual(job['status'], JobStatus.PENDING.value)
         # Check if completed_at key exists, should be None
         self.assertIsNone(job.get('completed_at'))
-        
+
         # Start processing (IN_PROGRESS)
         self.manager.update_job_progress(self.sample_job_id, 0.3, JobStatus.IN_PROGRESS)
         job = self.manager.get_job_status(self.sample_job_id)
         self.assertEqual(job['status'], JobStatus.IN_PROGRESS.value)
         self.assertGreater(job['updated_at'], start_time)
-        
+
         # Complete job (COMPLETED)
         self.manager.update_job_progress(self.sample_job_id, 1.0, JobStatus.COMPLETED)
         job = self.manager.get_job_status(self.sample_job_id)
@@ -191,7 +191,7 @@ class TestJobStateManager(unittest.TestCase):
         """Test that new jobs are initialized with correct default values."""
         self.manager.update_job_progress(self.sample_job_id, 0.2)
         job = self.manager.get_job_status(self.sample_job_id)
-        
+
         self.assertEqual(job['job_id'], self.sample_job_id)
         self.assertEqual(job['status'], JobStatus.PENDING.value)
         self.assertEqual(job['progress'], 0.2)
@@ -210,7 +210,7 @@ class TestJobStateManager(unittest.TestCase):
             message="Generating summary",
             error="Rate limit warning"
         )
-        
+
         job = self.manager.get_job_status(self.sample_job_id)
         self.assertEqual(job['message'], "Generating summary")
         self.assertEqual(job['error'], "Rate limit warning")
@@ -224,11 +224,11 @@ class TestJobStateManager(unittest.TestCase):
         """Test that returned job status is a copy to prevent external modification."""
         self.manager.update_job_progress(self.sample_job_id, 0.5, JobStatus.IN_PROGRESS)
         job_status = self.manager.get_job_status(self.sample_job_id)
-        
+
         # Modify the returned dict
         job_status['progress'] = 0.9
         job_status['status'] = JobStatus.COMPLETED.value
-        
+
         # Original should be unchanged
         original_status = self.manager.get_job_status(self.sample_job_id)
         self.assertEqual(original_status['progress'], 0.5)
@@ -241,7 +241,7 @@ class TestJobStateManager(unittest.TestCase):
         num_threads = 10
         updates_per_thread = 20
         job_ids = [f"job_{i}" for i in range(num_threads)]
-        
+
         def update_job(job_id: str, thread_index: int):
             """Update job progress multiple times."""
             for update_count in range(updates_per_thread):
@@ -255,21 +255,21 @@ class TestJobStateManager(unittest.TestCase):
                 )
                 # Small delay to encourage race conditions
                 time.sleep(0.001)
-        
+
         # Start all threads
         threads = []
         for i, job_id in enumerate(job_ids):
             thread = threading.Thread(target=update_job, args=(job_id, i))
             threads.append(thread)
             thread.start()
-        
+
         # Wait for all threads to complete
         for thread in threads:
             thread.join()
-        
+
         # Verify all jobs were created and completed properly
         self.assertEqual(len(self.manager.state_cache), num_threads)
-        
+
         for job_id in job_ids:
             job = self.manager.get_job_status(job_id)
             self.assertIsNotNone(job)
@@ -279,7 +279,7 @@ class TestJobStateManager(unittest.TestCase):
     def test_concurrent_state_persistence(self):
         """Test that concurrent operations maintain state consistency."""
         num_operations = 20  # Reduced to avoid file system race conditions
-        
+
         def rapid_updates(thread_id):
             """Perform rapid job updates."""
             for i in range(num_operations):
@@ -287,23 +287,23 @@ class TestJobStateManager(unittest.TestCase):
                 self.manager.update_job_progress(job_id, 0.5, JobStatus.IN_PROGRESS)
                 # Small delay to reduce file system contention
                 time.sleep(0.002)
-        
+
         # Run multiple threads doing rapid updates
         threads = []
         for thread_id in range(3):
             thread = threading.Thread(target=rapid_updates, args=(thread_id,))
             threads.append(thread)
             thread.start()
-        
+
         for thread in threads:
             thread.join()
-        
+
         # Verify state consistency - should have 3 * num_operations jobs
         expected_jobs = 3 * num_operations
         actual_jobs = len(self.manager.state_cache)
-        self.assertEqual(actual_jobs, expected_jobs, 
+        self.assertEqual(actual_jobs, expected_jobs,
                         f"Expected {expected_jobs} jobs, got {actual_jobs}")
-        
+
         # Create new manager to test persistence consistency
         # Wait a moment for file system operations to complete
         time.sleep(0.1)
@@ -316,23 +316,23 @@ class TestJobStateManager(unittest.TestCase):
         """Test that read operations don't block each other but write operations are exclusive."""
         read_results = []
         write_completed = threading.Event()
-        
+
         def long_write_operation():
             """Simulate a long write operation."""
             with self.manager.lock:
                 time.sleep(0.1)  # Hold lock for 100ms
                 self.manager.state_cache["write_job"] = {"status": "completed"}
             write_completed.set()
-        
+
         def read_operation(result_list):
             """Perform read operation."""
             status = self.manager.get_job_status("nonexistent")
             result_list.append(("read", datetime.now()))
-        
+
         # Start write operation
         write_thread = threading.Thread(target=long_write_operation)
         write_thread.start()
-        
+
         # Start multiple read operations shortly after
         time.sleep(0.01)  # Ensure write starts first
         read_threads = []
@@ -340,12 +340,12 @@ class TestJobStateManager(unittest.TestCase):
             thread = threading.Thread(target=read_operation, args=(read_results,))
             read_threads.append(thread)
             thread.start()
-        
+
         # Wait for all operations to complete
         write_thread.join()
         for thread in read_threads:
             thread.join()
-        
+
         # Verify write completed before reads could proceed
         self.assertTrue(write_completed.is_set())
         self.assertEqual(len(read_results), 5)
@@ -356,14 +356,14 @@ class TestJobStateManager(unittest.TestCase):
         """Test getting all jobs without status filter."""
         job_ids = ["job_1", "job_2", "job_3"]
         statuses = [JobStatus.PENDING, JobStatus.IN_PROGRESS, JobStatus.COMPLETED]
-        
+
         for job_id, status in zip(job_ids, statuses):
             progress = 1.0 if status == JobStatus.COMPLETED else 0.5
             self.manager.update_job_progress(job_id, progress, status)
-        
+
         all_jobs = self.manager.get_all_jobs()
         self.assertEqual(len(all_jobs), 3)
-        
+
         # Should be sorted by creation time (newest first)
         job_ids_returned = [job['job_id'] for job in all_jobs]
         self.assertEqual(job_ids_returned, list(reversed(job_ids)))
@@ -375,16 +375,16 @@ class TestJobStateManager(unittest.TestCase):
         self.manager.update_job_progress("active_job", 0.5, JobStatus.IN_PROGRESS)
         self.manager.update_job_progress("done_job", 1.0, JobStatus.COMPLETED)
         self.manager.update_job_progress("failed_job", 0.3, JobStatus.FAILED)
-        
+
         # Test filtering
         pending_jobs = self.manager.get_all_jobs(JobStatus.PENDING)
         self.assertEqual(len(pending_jobs), 1)
         self.assertEqual(pending_jobs[0]['job_id'], "pending_job")
-        
+
         active_jobs = self.manager.get_all_jobs(JobStatus.IN_PROGRESS)
         self.assertEqual(len(active_jobs), 1)
         self.assertEqual(active_jobs[0]['job_id'], "active_job")
-        
+
         completed_jobs = self.manager.get_all_jobs(JobStatus.COMPLETED)
         self.assertEqual(len(completed_jobs), 1)
         self.assertEqual(completed_jobs[0]['job_id'], "done_job")
@@ -392,17 +392,17 @@ class TestJobStateManager(unittest.TestCase):
     def test_delete_job(self):
         """Test job deletion functionality."""
         self.manager.update_job_progress(self.sample_job_id, 0.5, JobStatus.IN_PROGRESS)
-        
+
         # Verify job exists
         self.assertIsNotNone(self.manager.get_job_status(self.sample_job_id))
-        
+
         # Delete job
         result = self.manager.delete_job(self.sample_job_id)
         self.assertTrue(result)
-        
+
         # Verify job is gone
         self.assertIsNone(self.manager.get_job_status(self.sample_job_id))
-        
+
         # Deleting non-existent job should return False
         result = self.manager.delete_job("nonexistent_job")
         self.assertFalse(result)
@@ -410,22 +410,22 @@ class TestJobStateManager(unittest.TestCase):
     def test_retry_count_management(self):
         """Test retry count increment functionality."""
         self.manager.update_job_progress(self.sample_job_id, 0.2, JobStatus.PENDING)
-        
+
         # Initial retry count should be 0
         job = self.manager.get_job_status(self.sample_job_id)
         self.assertEqual(job['retry_count'], 0)
-        
+
         # Increment retry count
         new_count = self.manager.increment_retry_count(self.sample_job_id)
         self.assertEqual(new_count, 1)
-        
+
         job = self.manager.get_job_status(self.sample_job_id)
         self.assertEqual(job['retry_count'], 1)
-        
+
         # Increment again
         new_count = self.manager.increment_retry_count(self.sample_job_id)
         self.assertEqual(new_count, 2)
-        
+
         # Non-existent job should return 0
         count = self.manager.increment_retry_count("nonexistent")
         self.assertEqual(count, 0)
@@ -433,17 +433,17 @@ class TestJobStateManager(unittest.TestCase):
     def test_active_job_count(self):
         """Test active job count calculation."""
         self.assertEqual(self.manager.get_active_job_count(), 0)
-        
+
         # Add jobs with various statuses
         self.manager.update_job_progress("pending_job", 0.0, JobStatus.PENDING)
         self.assertEqual(self.manager.get_active_job_count(), 1)
-        
+
         self.manager.update_job_progress("active_job", 0.5, JobStatus.IN_PROGRESS)
         self.assertEqual(self.manager.get_active_job_count(), 2)
-        
+
         self.manager.update_job_progress("retry_job", 0.2, JobStatus.RETRY)
         self.assertEqual(self.manager.get_active_job_count(), 3)
-        
+
         # Completed and failed jobs shouldn't count as active
         self.manager.update_job_progress("done_job", 1.0, JobStatus.COMPLETED)
         self.manager.update_job_progress("failed_job", 0.3, JobStatus.FAILED)
@@ -458,17 +458,17 @@ class TestJobStateManager(unittest.TestCase):
             base_time = datetime(2024, 1, 1, 12, 0, 0)
             mock_datetime.now.return_value = base_time
             mock_datetime.min = datetime.min
-            
+
             # Create manager - should set last_cleanup to base_time
             manager = JobStateManager(persistence_file=self.test_file)
-            
+
             # Add a job - should not trigger cleanup (within interval)
             manager.update_job_progress("job1", 0.5, JobStatus.IN_PROGRESS)
-            
+
             # Advance time by less than cleanup interval (1 hour)
             mock_datetime.now.return_value = base_time + timedelta(minutes=30)
             manager.update_job_progress("job2", 0.5, JobStatus.IN_PROGRESS)
-            
+
             # Advance time beyond cleanup interval
             mock_datetime.now.return_value = base_time + timedelta(hours=2)
             with patch.object(manager, '_cleanup_old_jobs') as mock_cleanup:
@@ -482,29 +482,29 @@ class TestJobStateManager(unittest.TestCase):
             old_time = datetime(2024, 1, 1, 12, 0, 0)
             recent_time = datetime(2024, 1, 2, 12, 0, 0)  # 24 hours later
             now_time = datetime(2024, 1, 3, 12, 0, 0)    # 48 hours later
-            
+
             mock_datetime.now.return_value = old_time
-            
+
             # Create old completed job
             self.manager.update_job_progress("old_completed", 1.0, JobStatus.COMPLETED)
-            
+
             # Create old failed job
             self.manager.update_job_progress("old_failed", 0.3, JobStatus.FAILED)
-            
+
             # Advance time for recent job
             mock_datetime.now.return_value = recent_time
-            
+
             # Create recent job
             self.manager.update_job_progress("recent_job", 1.0, JobStatus.COMPLETED)
-            
+
             # Create old but still active job
             mock_datetime.now.return_value = old_time
             self.manager.update_job_progress("old_active", 0.5, JobStatus.IN_PROGRESS)
-            
+
             # Trigger cleanup from future time
             mock_datetime.now.return_value = now_time
             cleaned_count = self.manager.force_cleanup()
-            
+
             # Should clean up old completed and failed jobs, but not recent or active
             self.assertEqual(cleaned_count, 2)
             self.assertIsNone(self.manager.get_job_status("old_completed"))
@@ -517,18 +517,18 @@ class TestJobStateManager(unittest.TestCase):
         with patch('job_state.datetime') as mock_datetime:
             old_time = datetime(2024, 1, 1, 12, 0, 0)
             now_time = datetime(2024, 1, 10, 12, 0, 0)  # 9 days later
-            
+
             mock_datetime.now.return_value = old_time
-            
+
             # Create very old active jobs
             self.manager.update_job_progress("old_pending", 0.0, JobStatus.PENDING)
             self.manager.update_job_progress("old_in_progress", 0.5, JobStatus.IN_PROGRESS)
             self.manager.update_job_progress("old_retry", 0.2, JobStatus.RETRY)
-            
+
             # Trigger cleanup from far future
             mock_datetime.now.return_value = now_time
             cleaned_count = self.manager.force_cleanup()
-            
+
             # No active jobs should be cleaned up
             self.assertEqual(cleaned_count, 0)
             self.assertIsNotNone(self.manager.get_job_status("old_pending"))
@@ -540,7 +540,7 @@ class TestJobStateManager(unittest.TestCase):
     def test_get_statistics_empty_state(self):
         """Test statistics with no jobs."""
         stats = self.manager.get_statistics()
-        
+
         expected_stats = {
             'total_jobs': 0,
             'by_status': {},
@@ -551,7 +551,7 @@ class TestJobStateManager(unittest.TestCase):
             'oldest_job': None,
             'newest_job': None
         }
-        
+
         self.assertEqual(stats, expected_stats)
 
     def test_get_statistics_with_jobs(self):
@@ -566,28 +566,28 @@ class TestJobStateManager(unittest.TestCase):
             ("job6", 0.5, JobStatus.FAILED),
             ("job7", 0.2, JobStatus.RETRY)
         ]
-        
+
         for job_id, progress, status in jobs_data:
             self.manager.update_job_progress(job_id, progress, status)
-        
+
         stats = self.manager.get_statistics()
-        
+
         self.assertEqual(stats['total_jobs'], 7)
         self.assertEqual(stats['active_jobs'], 4)  # PENDING, IN_PROGRESS(2), RETRY
         self.assertEqual(stats['completed_jobs'], 2)
         self.assertEqual(stats['failed_jobs'], 1)
-        
+
         # Check status breakdown
         self.assertEqual(stats['by_status'][JobStatus.PENDING.value], 1)
         self.assertEqual(stats['by_status'][JobStatus.IN_PROGRESS.value], 2)
         self.assertEqual(stats['by_status'][JobStatus.COMPLETED.value], 2)
         self.assertEqual(stats['by_status'][JobStatus.FAILED.value], 1)
         self.assertEqual(stats['by_status'][JobStatus.RETRY.value], 1)
-        
+
         # Check average progress: (0.0 + 0.3 + 0.7 + 1.0 + 1.0 + 0.5 + 0.2) / 7 = 3.7/7
         expected_avg = 3.7 / 7
         self.assertAlmostEqual(stats['avg_progress'], expected_avg, places=3)
-        
+
         # Check timestamp fields are present
         self.assertIsNotNone(stats['oldest_job'])
         self.assertIsNotNone(stats['newest_job'])
@@ -598,39 +598,39 @@ class TestJobStateManager(unittest.TestCase):
     def test_large_number_of_jobs_memory_usage(self):
         """Test memory behavior with a large number of jobs."""
         import tracemalloc
-        
+
         tracemalloc.start()
-        
+
         # Add many jobs to test memory usage
         num_jobs = 1000
         for i in range(num_jobs):
             job_id = f"bulk_job_{i}"
             progress = (i % 100) / 100.0
             status = JobStatus.COMPLETED if i % 3 == 0 else JobStatus.IN_PROGRESS
-            
+
             self.manager.update_job_progress(
-                job_id, 
-                progress, 
+                job_id,
+                progress,
                 status,
                 message=f"Processing job {i}",
                 error=None if i % 10 != 0 else f"Error in job {i}"
             )
-        
+
         # Get memory usage
         current, peak = tracemalloc.get_traced_memory()
         tracemalloc.stop()
-        
+
         # Verify all jobs exist
         self.assertEqual(len(self.manager.state_cache), num_jobs)
-        
+
         # Memory usage should be reasonable (less than 50MB for 1000 jobs)
         self.assertLess(peak / 1024 / 1024, 50, "Memory usage too high for 1000 jobs")
-        
+
         # Test that operations are still fast
         start_time = time.time()
         stats = self.manager.get_statistics()
         operation_time = time.time() - start_time
-        
+
         self.assertLess(operation_time, 1.0, "Statistics calculation too slow")
         self.assertEqual(stats['total_jobs'], num_jobs)
 
@@ -646,19 +646,19 @@ class TestJobStateManager(unittest.TestCase):
                 JobStatus.IN_PROGRESS,
                 message=f"Long message for job {i} " * 10  # Make messages longer
             )
-        
+
         # Test save performance
         start_time = time.time()
         self.manager._save_state()
         save_time = time.time() - start_time
-        
+
         self.assertLess(save_time, 5.0, "State save operation too slow")
-        
+
         # Test load performance
         start_time = time.time()
         new_manager = JobStateManager(persistence_file=self.test_file)
         load_time = time.time() - start_time
-        
+
         self.assertLess(load_time, 5.0, "State load operation too slow")
         self.assertEqual(len(new_manager.state_cache), num_jobs)
 
@@ -669,14 +669,14 @@ class TestJobStateManager(unittest.TestCase):
         # Add some jobs
         for i in range(5):
             self.manager.update_job_progress(f"job_{i}", 0.5, JobStatus.IN_PROGRESS)
-        
+
         self.assertEqual(len(self.manager.state_cache), 5)
-        
+
         # Reset state
         self.manager.reset_all_state()
-        
+
         self.assertEqual(len(self.manager.state_cache), 0)
-        
+
         # Verify persistence file was updated
         new_manager = JobStateManager(persistence_file=self.test_file)
         self.assertEqual(len(new_manager.state_cache), 0)
@@ -694,7 +694,7 @@ class TestJobStateManager(unittest.TestCase):
                 'retry_count': 0
                 # Missing datetime fields
             }
-        
+
         # Should handle missing fields gracefully
         job = self.manager.get_job_status("partial_job")
         self.assertIsNotNone(job)
@@ -706,24 +706,24 @@ class TestJobStateManager(unittest.TestCase):
         # Test initialization logging
         JobStateManager(persistence_file=self.test_file)
         mock_logger.info.assert_called()
-        
+
         # Test job update logging
         self.manager.update_job_progress(self.sample_job_id, 0.5, JobStatus.IN_PROGRESS)
         mock_logger.debug.assert_called()
-        
+
         # Test cleanup logging
         with patch('job_state.datetime') as mock_datetime:
             old_time = datetime(2024, 1, 1, 12, 0, 0)
             now_time = datetime(2024, 1, 10, 12, 0, 0)
-            
+
             mock_datetime.now.return_value = old_time
             self.manager.update_job_progress("cleanup_job", 1.0, JobStatus.COMPLETED)
-            
+
             mock_datetime.now.return_value = now_time
             self.manager.force_cleanup()
-            
+
         # Should have logged cleanup
-        cleanup_calls = [call for call in mock_logger.info.call_args_list 
+        cleanup_calls = [call for call in mock_logger.info.call_args_list
                         if 'Cleaned up' in str(call)]
         self.assertGreater(len(cleanup_calls), 0)
 

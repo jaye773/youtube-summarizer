@@ -57,7 +57,7 @@ logger = logging.getLogger(__name__)
 class JobStateManager:
     """
     Thread-safe job state management with disk persistence.
-    
+
     Manages job state, progress tracking, and automatic cleanup of old jobs.
     All operations are thread-safe using RLock for concurrent access.
     """
@@ -75,13 +75,13 @@ class JobStateManager:
         self._last_cleanup = datetime.now()
         self._cleanup_interval = timedelta(hours=1)  # Cleanup every hour
         self._job_retention = timedelta(hours=24)    # Keep jobs for 24 hours
-        
+
         # Ensure data directory exists
         os.makedirs(os.path.dirname(persistence_file), exist_ok=True)
-        
+
         # Load existing state from disk
         self._load_state()
-        
+
         logger.info(f"JobStateManager initialized with {len(self.state_cache)} cached jobs")
 
     def _load_state(self) -> None:
@@ -90,7 +90,7 @@ class JobStateManager:
             if os.path.exists(self.persistence_file):
                 with open(self.persistence_file, 'r', encoding='utf-8') as f:
                     data = json.load(f)
-                    
+
                 # Convert datetime strings back to datetime objects
                 for job_id, job_data in data.items():
                     if 'created_at' in job_data and job_data['created_at']:
@@ -99,7 +99,7 @@ class JobStateManager:
                         job_data['updated_at'] = datetime.fromisoformat(job_data['updated_at'])
                     if 'completed_at' in job_data and job_data['completed_at']:
                         job_data['completed_at'] = datetime.fromisoformat(job_data['completed_at'])
-                
+
                 self.state_cache = data
                 logger.info(f"Loaded {len(self.state_cache)} jobs from {self.persistence_file}")
             else:
@@ -115,30 +115,30 @@ class JobStateManager:
             serializable_state = {}
             for job_id, job_data in self.state_cache.items():
                 job_copy = job_data.copy()
-                
+
                 # Convert datetime objects to ISO strings
                 for date_field in ['created_at', 'updated_at', 'completed_at']:
                     if date_field in job_copy and isinstance(job_copy[date_field], datetime):
                         job_copy[date_field] = job_copy[date_field].isoformat()
-                
+
                 serializable_state[job_id] = job_copy
-            
+
             # Write to temporary file first, then rename for atomicity
             temp_file = f"{self.persistence_file}.tmp"
             with open(temp_file, 'w', encoding='utf-8') as f:
                 json.dump(serializable_state, f, indent=2, ensure_ascii=False)
-            
+
             # Atomic rename
             os.replace(temp_file, self.persistence_file)
             logger.debug(f"State saved to {self.persistence_file}")
-            
+
         except Exception as e:
             logger.error(f"Error saving state to {self.persistence_file}: {e}")
 
     def update_job_progress(
-        self, 
-        job_id: str, 
-        progress: float, 
+        self,
+        job_id: str,
+        progress: float,
         status: Optional[JobStatus] = None,
         message: Optional[str] = None,
         error: Optional[str] = None
@@ -174,13 +174,13 @@ class JobStateManager:
             job_data = self.state_cache[job_id]
             job_data['progress'] = progress
             job_data['updated_at'] = datetime.now()
-            
+
             if status:
                 job_data['status'] = status.value
-                
+
             if message:
                 job_data['message'] = message
-                
+
             if error:
                 job_data['error'] = error
 
@@ -192,7 +192,7 @@ class JobStateManager:
 
         # Save state to disk (outside the lock to avoid holding it too long)
         self._save_state()
-        
+
         # Trigger cleanup if it's time
         self._cleanup_if_needed()
 
@@ -228,7 +228,7 @@ class JobStateManager:
             for job_data in self.state_cache.values():
                 if status_filter is None or job_data['status'] == status_filter.value:
                     jobs.append(job_data.copy())
-            
+
             # Sort by creation time (newest first)
             jobs.sort(key=lambda x: x.get('created_at', datetime.min), reverse=True)
             return jobs
@@ -280,7 +280,7 @@ class JobStateManager:
         """
         with self.lock:
             active_statuses = {JobStatus.PENDING.value, JobStatus.IN_PROGRESS.value, JobStatus.RETRY.value}
-            return sum(1 for job_data in self.state_cache.values() 
+            return sum(1 for job_data in self.state_cache.values()
                       if job_data['status'] in active_statuses)
 
     def _cleanup_if_needed(self) -> None:
@@ -294,7 +294,7 @@ class JobStateManager:
         """Remove jobs older than retention period."""
         cutoff_time = datetime.now() - self._job_retention
         jobs_to_remove = []
-        
+
         with self.lock:
             for job_id, job_data in self.state_cache.items():
                 # Check completion time first, then creation time
@@ -351,11 +351,11 @@ class JobStateManager:
             # Count by status and calculate averages
             total_progress = 0.0
             creation_times = []
-            
+
             for job_data in self.state_cache.values():
                 status = job_data['status']
                 stats['by_status'][status] = stats['by_status'].get(status, 0) + 1
-                
+
                 if status in [JobStatus.PENDING.value, JobStatus.IN_PROGRESS.value, JobStatus.RETRY.value]:
                     stats['active_jobs'] += 1
                 elif status == JobStatus.COMPLETED.value:
@@ -364,12 +364,12 @@ class JobStateManager:
                     stats['failed_jobs'] += 1
 
                 total_progress += job_data.get('progress', 0.0)
-                
+
                 if 'created_at' in job_data and job_data['created_at']:
                     creation_times.append(job_data['created_at'])
 
             stats['avg_progress'] = total_progress / len(self.state_cache)
-            
+
             if creation_times:
                 stats['oldest_job'] = min(creation_times).isoformat()
                 stats['newest_job'] = max(creation_times).isoformat()

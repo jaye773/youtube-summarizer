@@ -41,14 +41,14 @@ def run_command(cmd, description):
     print(f"Running: {description}")
     print(f"Command: {' '.join(cmd)}")
     print('='*60)
-    
+
     start_time = time.time()
     result = subprocess.run(cmd, capture_output=False)
     end_time = time.time()
-    
+
     duration = end_time - start_time
     print(f"\nCompleted in {duration:.2f} seconds")
-    
+
     if result.returncode != 0:
         print(f"❌ {description} failed with exit code {result.returncode}")
         return False
@@ -66,96 +66,96 @@ def main():
     parser = argparse.ArgumentParser(
         description="Run integration tests for YouTube Summarizer async worker system"
     )
-    
+
     parser.add_argument(
         'suite',
         nargs='?',
         default='all',
-        choices=['all', 'app', 'endpoints', 'e2e', 'fallback', 'quick', 
+        choices=['all', 'app', 'endpoints', 'e2e', 'fallback', 'quick',
                 'performance', 'concurrent'],
         help='Test suite to run'
     )
-    
+
     parser.add_argument(
         '--verbose', '-v',
         action='store_true',
         help='Verbose output'
     )
-    
+
     parser.add_argument(
         '--coverage',
         action='store_true',
         help='Run with coverage reporting'
     )
-    
+
     parser.add_argument(
         '--parallel', '-n',
         type=int,
         default=1,
         help='Number of parallel test processes'
     )
-    
+
     parser.add_argument(
         '--no-slow',
         action='store_true',
         help='Skip slow tests'
     )
-    
+
     parser.add_argument(
         '--fail-fast',
         action='store_true',
         help='Stop on first failure'
     )
-    
+
     parser.add_argument(
         '--html-report',
         action='store_true',
         help='Generate HTML test report'
     )
-    
+
     args = parser.parse_args()
-    
+
     # Change to project directory
     project_root = Path(__file__).parent
     os.chdir(project_root)
-    
+
     # Build pytest command
     cmd = get_base_pytest_cmd()
-    
+
     # Add verbosity
     if args.verbose:
         cmd.extend(['-vvv'])
-    
+
     # Add coverage
     if args.coverage:
-        cmd.extend(['--cov=app', '--cov=worker_manager', '--cov=job_state', 
+        cmd.extend(['--cov=app', '--cov=worker_manager', '--cov=job_state',
                    '--cov=sse_manager', '--cov=job_models', '--cov-report=html',
                    '--cov-report=term'])
-    
+
     # Add parallel execution
     if args.parallel > 1:
         cmd.extend(['-n', str(args.parallel)])
-    
+
     # Add fail fast
     if args.fail_fast:
         cmd.extend(['-x'])
-    
+
     # Add HTML report
     if args.html_report:
         cmd.extend(['--html=reports/integration_test_report.html', '--self-contained-html'])
         # Create reports directory if it doesn't exist
         Path('reports').mkdir(exist_ok=True)
-    
+
     # Add slow test filtering
     if args.no_slow:
         cmd.extend(['-m', 'not slow'])
-    
+
     # Test suite selection
     suite_configs = {
         'all': {
             'files': [
                 'tests/test_app_integration.py',
-                'tests/test_async_endpoints.py', 
+                'tests/test_async_endpoints.py',
                 'tests/test_end_to_end.py',
                 'tests/test_fallback_scenarios.py'
             ],
@@ -195,15 +195,15 @@ def main():
             'description': 'Concurrent operation tests'
         }
     }
-    
+
     config = suite_configs[args.suite]
-    
+
     # Add test selection
     if 'files' in config:
         cmd.extend(config['files'])
     elif 'markers' in config:
         cmd.extend(['-m', ' and '.join(config['markers'])])
-    
+
     # Print test plan
     print("🧪 YouTube Summarizer Integration Test Runner")
     print("="*60)
@@ -212,10 +212,10 @@ def main():
     print(f"Parallel: {'Yes' if args.parallel > 1 else 'No'} ({args.parallel} processes)")
     print(f"HTML Report: {'Yes' if args.html_report else 'No'}")
     print(f"Skip Slow: {'Yes' if args.no_slow else 'No'}")
-    
+
     # Run tests
     success = run_command(cmd, f"Integration Tests - {config['description']}")
-    
+
     # Summary
     print(f"\n{'='*60}")
     if success:
@@ -227,9 +227,9 @@ def main():
     else:
         print("❌ Some tests failed!")
         sys.exit(1)
-    
+
     print("="*60)
-    
+
     return success
 
 
