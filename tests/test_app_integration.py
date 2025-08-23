@@ -261,7 +261,7 @@ class TestThreadingAndConcurrency:
         """Test handling of concurrent requests."""
         # Note: Flask test client is not thread-safe, so we'll test sequential requests
         # This still validates the app's ability to handle multiple requests
-        
+
         results = []
         for _ in range(5):
             response = client.get("/")
