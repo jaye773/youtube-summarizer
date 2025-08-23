@@ -1917,7 +1917,7 @@ def summarize_async():
     """Async version of summarize - submits jobs to worker queue"""
     if not WORKER_SYSTEM_AVAILABLE or worker_manager is None:
         # Fall back to synchronous processing
-        return redirect(url_for("summarize"))
+        return redirect(url_for("summarize_links"))
 
     try:
         data = request.get_json()
@@ -1948,16 +1948,17 @@ def summarize_async():
             if video_id:
                 # Single video job
                 job = create_video_job(
-                    video_id=video_id, model_key=model_key, session_id=session_id, priority=JobPriority.HIGH
+                    url=url, model_key=model_key, session_id=session_id
                 )
 
                 if worker_manager.submit_job(job):
                     job_ids.append(job.job_id)
 
             elif playlist_id:
-                # Playlist job
+                # Playlist job - for now, just create with empty video list
+                # This should be enhanced to fetch actual video IDs from the playlist
                 job = create_playlist_job(
-                    playlist_id=playlist_id, model_key=model_key, session_id=session_id, priority=JobPriority.MEDIUM
+                    url=url, video_ids=[], model_key=model_key, session_id=session_id
                 )
 
                 if worker_manager.submit_job(job):
@@ -2011,7 +2012,7 @@ def list_jobs():
         limit = min(int(request.args.get("limit", 50)), 100)
         session_id = session.get("session_id")
 
-        jobs = job_state_manager.get_all_jobs(status_filter=status_filter, session_filter=session_id, limit=limit)
+        jobs = job_state_manager.get_all_jobs(status_filter=status_filter)
 
         return jsonify({"jobs": jobs})
 

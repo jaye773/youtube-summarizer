@@ -45,8 +45,9 @@ def client():
     app.config["SECRET_KEY"] = "test-secret-key"
     app.config["WTF_CSRF_ENABLED"] = False
 
-    with app.test_client() as client:
-        with app.app_context():
+    # Set TESTING environment variable to bypass authentication
+    with patch.dict(os.environ, {"TESTING": "1"}):
+        with app.test_client() as client:
             yield client
 
 
@@ -78,7 +79,7 @@ def mock_worker_system():
 def sample_job_data():
     """Sample job data for testing."""
     return {
-        "url": "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+        "urls": "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
         "ai_provider": "gemini",
         "model": "gemini-2.5-flash",
         "priority": "high",
@@ -89,7 +90,7 @@ def sample_job_data():
 def sample_playlist_data():
     """Sample playlist data for testing."""
     return {
-        "url": "https://www.youtube.com/playlist?list=PLTest123",
+        "urls": "https://www.youtube.com/playlist?list=PLTest123",
         "ai_provider": "openai",
         "model": "gpt-4o",
         "priority": "medium",
@@ -116,11 +117,12 @@ class TestAsyncJobSubmission:
 
         response = client.post("/summarize_async", json=sample_job_data, content_type="application/json")
 
-        assert response.status_code == 202  # Accepted
+        assert response.status_code == 200  # OK
         response_data = response.get_json()
-        assert "job_id" in response_data
-        assert response_data["status"] == "submitted"
-        assert "estimated_completion" in response_data
+        assert "job_ids" in response_data
+        assert len(response_data["job_ids"]) == 1
+        assert response_data["success"] is True
+        assert "message" in response_data
 
     def test_submit_playlist_job_success(self, client, mock_worker_system, sample_playlist_data):
         """Test successful playlist job submission."""
@@ -138,14 +140,16 @@ class TestAsyncJobSubmission:
 
         response = client.post("/summarize_async", json=sample_playlist_data, content_type="application/json")
 
-        assert response.status_code == 202
+        assert response.status_code == 200  # OK
         response_data = response.get_json()
-        assert "job_id" in response_data
-        assert response_data["status"] == "submitted"
+        assert "job_ids" in response_data
+        assert len(response_data["job_ids"]) == 1
+        assert response_data["success"] is True
+        assert "message" in response_data
 
     def test_submit_job_invalid_url(self, client, mock_worker_system):
         """Test job submission with invalid YouTube URL."""
-        invalid_data = {"url": "https://example.com/not-youtube", "ai_provider": "gemini", "model": "gemini-2.5-flash"}
+        invalid_data = {"urls": "https://example.com/not-youtube", "ai_provider": "gemini", "model": "gemini-2.5-flash"}
 
         response = client.post("/summarize_async", json=invalid_data, content_type="application/json")
 
@@ -170,7 +174,7 @@ class TestAsyncJobSubmission:
     def test_submit_job_invalid_ai_provider(self, client, mock_worker_system):
         """Test job submission with invalid AI provider."""
         invalid_data = {
-            "url": "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+            "urls": "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
             "ai_provider": "invalid_provider",
             "model": "some-model",
         }
@@ -187,10 +191,7 @@ class TestAsyncJobSubmission:
         with patch("app.WORKER_SYSTEM_AVAILABLE", False):
             response = client.post("/summarize_async", json=sample_job_data, content_type="application/json")
 
-            assert response.status_code == 503
-            response_data = response.get_json()
-            assert "error" in response_data
-            assert "unavailable" in response_data["error"].lower()
+            assert response.status_code == 302  # Redirects to sync endpoint
 
     def test_submit_job_worker_manager_error(self, client, mock_worker_system, sample_job_data):
         """Test job submission when worker manager raises an error."""

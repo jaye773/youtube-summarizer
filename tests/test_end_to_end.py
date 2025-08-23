@@ -50,8 +50,9 @@ def client():
     # Set up test cache directory
     app.config["CACHE_DIR"] = tempfile.mkdtemp()
 
-    with app.test_client() as client:
-        with app.app_context():
+    # Set TESTING environment variable to bypass authentication
+    with patch.dict(os.environ, {"TESTING": "1"}):
+        with app.test_client() as client:
             yield client
 
 
