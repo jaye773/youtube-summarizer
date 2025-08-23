@@ -113,7 +113,7 @@ class TestWorkerSystemUnavailable:
         response = client.post("/summarize_async", json=job_data)
         # May get 302 redirect, 401 unauthorized, or 503 if worker system unavailable
         assert response.status_code in [503, 302, 401]
-        
+
         if response.status_code == 503:
             response_data = response.get_json()
             assert "error" in response_data
@@ -122,7 +122,7 @@ class TestWorkerSystemUnavailable:
     def test_job_listing_unavailable_graceful_response(self, client, unavailable_worker_system):
         """Test job listing endpoint when worker system unavailable."""
         response = client.get("/jobs")
-        # May get 302 redirect, 401 unauthorized, or 503 if worker system unavailable  
+        # May get 302 redirect, 401 unauthorized, or 503 if worker system unavailable
         assert response.status_code in [503, 302, 401]
 
         if response.status_code == 503:
@@ -159,7 +159,7 @@ class TestWorkerSystemUnavailable:
         }
 
         response = client.post("/summarize_async", json=job_data)
-        
+
         # If auth is enabled, we might get redirect/unauthorized responses
         if response.status_code == 503:
             response_data = response.get_json()
@@ -278,7 +278,7 @@ class TestExternalAPIFailures:
 class TestResourceExhaustionScenarios:
     """Test handling of resource exhaustion scenarios."""
 
-    # COMMENTED OUT: Test fails in suite due to resource/order dependencies  
+    # COMMENTED OUT: Test fails in suite due to resource/order dependencies
     def _test_memory_exhaustion_handling(self, client, failing_worker_system):
         """Test handling of memory exhaustion scenarios."""
         with patch("app.generate_summary") as mock_generate:
@@ -455,7 +455,7 @@ class TestDatabaseAndCacheFailures:
 class TestSSEConnectionFailures:
     """Test SSE connection failure scenarios."""
 
-    # COMMENTED OUT: SSE connection test with auth handling issues  
+    # COMMENTED OUT: SSE connection test with auth handling issues
     def _test_sse_connection_timeout(self, client):
         """Test SSE connection timeout handling."""
         with patch("app.WORKER_SYSTEM_AVAILABLE", True):
@@ -513,7 +513,7 @@ class TestSSEConnectionFailures:
 class TestAIProviderFailover:
     """Test AI provider failover scenarios."""
 
-    # COMMENTED OUT: AI provider failover test blocked by auth  
+    # COMMENTED OUT: AI provider failover test blocked by auth
     def _test_primary_provider_failure_fallback(self, client):
         """Test fallback to secondary AI provider when primary fails."""
         with patch("app.generate_summary") as mock_generate:

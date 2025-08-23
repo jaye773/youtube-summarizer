@@ -434,7 +434,7 @@ class TestJobListingEndpoint:
         """Test listing jobs with status filters."""
         # Mock filtered job results
         mock_worker_system["job_state_manager"].get_all_jobs.return_value = []
-        
+
         # Test filtering by status
         response = client.get("/jobs?status=pending")
         assert response.status_code == 200

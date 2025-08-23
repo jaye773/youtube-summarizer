@@ -279,7 +279,7 @@ class TestCompleteVideoWorkflow:
         assert final_status["status"] == "completed"
         assert final_status["result"]["summary"] == "Retry successful"
 
-    # COMMENTED OUT: Complex integration test with mocking issues - expects job_id but endpoints return 200/400  
+    # COMMENTED OUT: Complex integration test with mocking issues - expects job_id but endpoints return 200/400
     def _test_video_processing_timeout(self, client, full_worker_system):
         """Test handling of video processing timeout."""
         job_data = {
@@ -311,7 +311,7 @@ class TestCompleteVideoWorkflow:
 class TestCompletePlaylistWorkflow:
     """Test complete playlist processing workflows."""
 
-    # COMMENTED OUT: Complex integration test with mocking issues - expects 202 but endpoints return 400  
+    # COMMENTED OUT: Complex integration test with mocking issues - expects 202 but endpoints return 400
     def _test_playlist_processing_success_workflow(
         self, client, full_worker_system, mock_youtube_api, mock_ai_providers
     ):
