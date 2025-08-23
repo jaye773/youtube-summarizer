@@ -17,6 +17,7 @@ import logging
 import random
 from dataclasses import dataclass
 from datetime import datetime, timedelta
+from enum import Enum
 from typing import Any, Dict, List, Optional
 
 # Import job models once Module 1 is created
@@ -24,8 +25,6 @@ try:
     from job_models import JobStatus
 except ImportError:
     # Fallback definition for standalone testing
-    from enum import Enum
-
     class JobStatus(Enum):
         PENDING = "pending"
         IN_PROGRESS = "in_progress"
