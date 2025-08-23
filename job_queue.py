@@ -6,15 +6,14 @@ Handles job scheduling, priority ordering, and thread-safe operations.
 """
 
 import heapq
+import logging
 import threading
 import time
-import logging
 from collections import defaultdict, deque
-from datetime import datetime, timezone, timedelta
-from typing import Optional, List, Dict, Any, Callable, Set
+from datetime import datetime, timedelta, timezone
+from typing import Any, Callable, Dict, List, Optional, Set
 
-from job_models import ProcessingJob, JobStatus, JobPriority, JobType, WorkerMetrics
-
+from job_models import JobPriority, JobStatus, JobType, ProcessingJob, WorkerMetrics
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -43,10 +42,10 @@ class PriorityJobQueue:
 
         # Statistics tracking
         self._stats = {
-            'jobs_queued': 0,
-            'jobs_processed': 0,
-            'jobs_failed': 0,
-            'queue_created_at': datetime.now(timezone.utc)
+            "jobs_queued": 0,
+            "jobs_processed": 0,
+            "jobs_failed": 0,
+            "queue_created_at": datetime.now(timezone.utc),
         }
 
         # Priority counters
@@ -94,20 +93,23 @@ class PriorityJobQueue:
             self._job_dict[job.job_id] = job
 
             # Update statistics
-            self._stats['jobs_queued'] += 1
+            self._stats["jobs_queued"] += 1
             self._priority_counts[job.priority] += 1
 
             # Add to recent jobs history
-            self._recent_jobs.append({
-                'job_id': job.job_id,
-                'job_type': job.job_type.value,
-                'priority': job.priority.value,
-                'queued_at': datetime.now(timezone.utc).isoformat(),
-                'action': 'queued'
-            })
+            self._recent_jobs.append(
+                {
+                    "job_id": job.job_id,
+                    "job_type": job.job_type.value,
+                    "priority": job.priority.value,
+                    "queued_at": datetime.now(timezone.utc).isoformat(),
+                    "action": "queued",
+                }
+            )
 
-            logger.info(f"Queued job {job.job_id} with priority {job.priority.name} "
-                       f"(queue size: {len(self._queue)})")
+            logger.info(
+                f"Queued job {job.job_id} with priority {job.priority.name} " f"(queue size: {len(self._queue)})"
+            )
             return True
 
     def get(self, timeout: Optional[float] = None) -> Optional[ProcessingJob]:
@@ -140,17 +142,21 @@ class PriorityJobQueue:
                         del self._priority_counts[job.priority]
 
                     # Add to recent jobs history
-                    self._recent_jobs.append({
-                        'job_id': job.job_id,
-                        'job_type': job.job_type.value,
-                        'priority': job.priority.value,
-                        'dequeued_at': datetime.now(timezone.utc).isoformat(),
-                        'action': 'dequeued',
-                        'wait_time': time.time() - timestamp
-                    })
+                    self._recent_jobs.append(
+                        {
+                            "job_id": job.job_id,
+                            "job_type": job.job_type.value,
+                            "priority": job.priority.value,
+                            "dequeued_at": datetime.now(timezone.utc).isoformat(),
+                            "action": "dequeued",
+                            "wait_time": time.time() - timestamp,
+                        }
+                    )
 
-                    logger.info(f"Dequeued job {job.job_id} with priority {job.priority.name} "
-                               f"(queue size: {len(self._queue)})")
+                    logger.info(
+                        f"Dequeued job {job.job_id} with priority {job.priority.name} "
+                        f"(queue size: {len(self._queue)})"
+                    )
                     return job
 
             # Check timeout
@@ -191,13 +197,15 @@ class PriorityJobQueue:
             # We don't rebuild the heap for efficiency
 
             # Add to recent jobs history
-            self._recent_jobs.append({
-                'job_id': job_id,
-                'job_type': job.job_type.value,
-                'priority': job.priority.value,
-                'removed_at': datetime.now(timezone.utc).isoformat(),
-                'action': 'removed'
-            })
+            self._recent_jobs.append(
+                {
+                    "job_id": job_id,
+                    "job_type": job.job_type.value,
+                    "priority": job.priority.value,
+                    "removed_at": datetime.now(timezone.utc).isoformat(),
+                    "action": "removed",
+                }
+            )
 
             logger.info(f"Removed job {job_id} from queue")
             return True
@@ -284,15 +292,15 @@ class PriorityJobQueue:
             priority_breakdown = dict(self._priority_counts)
 
             return {
-                'current_size': current_size,
-                'max_size': self.max_size,
-                'is_full': current_size >= self.max_size,
-                'priority_breakdown': {p.name: count for p, count in priority_breakdown.items()},
-                'total_jobs_queued': self._stats['jobs_queued'],
-                'total_jobs_processed': self._stats['jobs_processed'],
-                'total_jobs_failed': self._stats['jobs_failed'],
-                'queue_created_at': self._stats['queue_created_at'].isoformat(),
-                'recent_activity': list(self._recent_jobs)[-10:]  # Last 10 activities
+                "current_size": current_size,
+                "max_size": self.max_size,
+                "is_full": current_size >= self.max_size,
+                "priority_breakdown": {p.name: count for p, count in priority_breakdown.items()},
+                "total_jobs_queued": self._stats["jobs_queued"],
+                "total_jobs_processed": self._stats["jobs_processed"],
+                "total_jobs_failed": self._stats["jobs_failed"],
+                "queue_created_at": self._stats["queue_created_at"].isoformat(),
+                "recent_activity": list(self._recent_jobs)[-10:],  # Last 10 activities
             }
 
     def get_waiting_time_estimate(self, priority: JobPriority) -> float:
@@ -343,8 +351,7 @@ class JobScheduler:
     Provides additional features like job batching, rate limiting, and metrics.
     """
 
-    def __init__(self, max_queue_size: int = 1000,
-                 rate_limit_per_minute: int = 60):
+    def __init__(self, max_queue_size: int = 1000, rate_limit_per_minute: int = 60):
         """
         Initialize job scheduler.
 
@@ -365,8 +372,9 @@ class JobScheduler:
         # Metrics
         self.metrics = WorkerMetrics()
 
-        logger.info(f"Initialized JobScheduler with queue_size={max_queue_size}, "
-                   f"rate_limit={rate_limit_per_minute}/min")
+        logger.info(
+            f"Initialized JobScheduler with queue_size={max_queue_size}, " f"rate_limit={rate_limit_per_minute}/min"
+        )
 
     def submit_job(self, job: ProcessingJob, client_ip: str = None) -> tuple[bool, str]:
         """
@@ -444,8 +452,8 @@ class JobScheduler:
             Dictionary with queue status information
         """
         stats = self.queue.get_stats()
-        stats['scheduler_metrics'] = self.metrics.to_dict()
-        stats['rate_limit_per_minute'] = self.rate_limit_per_minute
+        stats["scheduler_metrics"] = self.metrics.to_dict()
+        stats["rate_limit_per_minute"] = self.rate_limit_per_minute
         return stats
 
     def add_completion_callback(self, callback: Callable[[ProcessingJob], None]):

@@ -18,17 +18,17 @@ import logging
 import os
 import threading
 import time
-from datetime import datetime, timedelta
-from typing import Dict, Any, Optional, List
 from dataclasses import asdict
+from datetime import datetime, timedelta
+from typing import Any, Dict, List, Optional
 
 # Import job models once Module 1 is created
 try:
-    from job_models import JobStatus, JobPriority, ProcessingJob
+    from job_models import JobPriority, JobStatus, ProcessingJob
 except ImportError:
     # Fallback definitions for standalone testing
-    from enum import Enum
     from dataclasses import dataclass
+    from enum import Enum
 
     class JobStatus(Enum):
         PENDING = "pending"
@@ -50,6 +50,7 @@ except ImportError:
         data: Dict[str, Any]
         status: JobStatus = JobStatus.PENDING
         created_at: datetime = None
+
 
 logger = logging.getLogger(__name__)
 
@@ -74,7 +75,7 @@ class JobStateManager:
         self.lock = threading.RLock()
         self._last_cleanup = datetime.now()
         self._cleanup_interval = timedelta(hours=1)  # Cleanup every hour
-        self._job_retention = timedelta(hours=24)    # Keep jobs for 24 hours
+        self._job_retention = timedelta(hours=24)  # Keep jobs for 24 hours
 
         # Ensure data directory exists
         os.makedirs(os.path.dirname(persistence_file), exist_ok=True)
@@ -88,17 +89,17 @@ class JobStateManager:
         """Load job state from persistence file."""
         try:
             if os.path.exists(self.persistence_file):
-                with open(self.persistence_file, 'r', encoding='utf-8') as f:
+                with open(self.persistence_file, "r", encoding="utf-8") as f:
                     data = json.load(f)
 
                 # Convert datetime strings back to datetime objects
                 for job_id, job_data in data.items():
-                    if 'created_at' in job_data and job_data['created_at']:
-                        job_data['created_at'] = datetime.fromisoformat(job_data['created_at'])
-                    if 'updated_at' in job_data and job_data['updated_at']:
-                        job_data['updated_at'] = datetime.fromisoformat(job_data['updated_at'])
-                    if 'completed_at' in job_data and job_data['completed_at']:
-                        job_data['completed_at'] = datetime.fromisoformat(job_data['completed_at'])
+                    if "created_at" in job_data and job_data["created_at"]:
+                        job_data["created_at"] = datetime.fromisoformat(job_data["created_at"])
+                    if "updated_at" in job_data and job_data["updated_at"]:
+                        job_data["updated_at"] = datetime.fromisoformat(job_data["updated_at"])
+                    if "completed_at" in job_data and job_data["completed_at"]:
+                        job_data["completed_at"] = datetime.fromisoformat(job_data["completed_at"])
 
                 self.state_cache = data
                 logger.info(f"Loaded {len(self.state_cache)} jobs from {self.persistence_file}")
@@ -117,7 +118,7 @@ class JobStateManager:
                 job_copy = job_data.copy()
 
                 # Convert datetime objects to ISO strings
-                for date_field in ['created_at', 'updated_at', 'completed_at']:
+                for date_field in ["created_at", "updated_at", "completed_at"]:
                     if date_field in job_copy and isinstance(job_copy[date_field], datetime):
                         job_copy[date_field] = job_copy[date_field].isoformat()
 
@@ -125,7 +126,7 @@ class JobStateManager:
 
             # Write to temporary file first, then rename for atomicity
             temp_file = f"{self.persistence_file}.tmp"
-            with open(temp_file, 'w', encoding='utf-8') as f:
+            with open(temp_file, "w", encoding="utf-8") as f:
                 json.dump(serializable_state, f, indent=2, ensure_ascii=False)
 
             # Atomic rename
@@ -141,7 +142,7 @@ class JobStateManager:
         progress: float,
         status: Optional[JobStatus] = None,
         message: Optional[str] = None,
-        error: Optional[str] = None
+        error: Optional[str] = None,
     ) -> None:
         """
         Update job progress and status in a thread-safe manner.
@@ -160,33 +161,33 @@ class JobStateManager:
             # Initialize job state if it doesn't exist
             if job_id not in self.state_cache:
                 self.state_cache[job_id] = {
-                    'job_id': job_id,
-                    'status': JobStatus.PENDING.value,
-                    'progress': 0.0,
-                    'created_at': datetime.now(),
-                    'updated_at': datetime.now(),
-                    'message': None,
-                    'error': None,
-                    'retry_count': 0
+                    "job_id": job_id,
+                    "status": JobStatus.PENDING.value,
+                    "progress": 0.0,
+                    "created_at": datetime.now(),
+                    "updated_at": datetime.now(),
+                    "message": None,
+                    "error": None,
+                    "retry_count": 0,
                 }
 
             # Update job state
             job_data = self.state_cache[job_id]
-            job_data['progress'] = progress
-            job_data['updated_at'] = datetime.now()
+            job_data["progress"] = progress
+            job_data["updated_at"] = datetime.now()
 
             if status:
-                job_data['status'] = status.value
+                job_data["status"] = status.value
 
             if message:
-                job_data['message'] = message
+                job_data["message"] = message
 
             if error:
-                job_data['error'] = error
+                job_data["error"] = error
 
             # Mark completion time
             if status == JobStatus.COMPLETED or status == JobStatus.FAILED:
-                job_data['completed_at'] = datetime.now()
+                job_data["completed_at"] = datetime.now()
 
             logger.debug(f"Updated job {job_id}: progress={progress}, status={status}")
 
@@ -226,11 +227,11 @@ class JobStateManager:
         with self.lock:
             jobs = []
             for job_data in self.state_cache.values():
-                if status_filter is None or job_data['status'] == status_filter.value:
+                if status_filter is None or job_data["status"] == status_filter.value:
                     jobs.append(job_data.copy())
 
             # Sort by creation time (newest first)
-            jobs.sort(key=lambda x: x.get('created_at', datetime.min), reverse=True)
+            jobs.sort(key=lambda x: x.get("created_at", datetime.min), reverse=True)
             return jobs
 
     def delete_job(self, job_id: str) -> bool:
@@ -263,9 +264,9 @@ class JobStateManager:
         """
         with self.lock:
             if job_id in self.state_cache:
-                self.state_cache[job_id]['retry_count'] = self.state_cache[job_id].get('retry_count', 0) + 1
-                self.state_cache[job_id]['updated_at'] = datetime.now()
-                retry_count = self.state_cache[job_id]['retry_count']
+                self.state_cache[job_id]["retry_count"] = self.state_cache[job_id].get("retry_count", 0) + 1
+                self.state_cache[job_id]["updated_at"] = datetime.now()
+                retry_count = self.state_cache[job_id]["retry_count"]
                 logger.debug(f"Incremented retry count for job {job_id} to {retry_count}")
                 self._save_state()
                 return retry_count
@@ -280,8 +281,7 @@ class JobStateManager:
         """
         with self.lock:
             active_statuses = {JobStatus.PENDING.value, JobStatus.IN_PROGRESS.value, JobStatus.RETRY.value}
-            return sum(1 for job_data in self.state_cache.values()
-                      if job_data['status'] in active_statuses)
+            return sum(1 for job_data in self.state_cache.values() if job_data["status"] in active_statuses)
 
     def _cleanup_if_needed(self) -> None:
         """Trigger cleanup if enough time has passed."""
@@ -298,10 +298,10 @@ class JobStateManager:
         with self.lock:
             for job_id, job_data in self.state_cache.items():
                 # Check completion time first, then creation time
-                check_time = job_data.get('completed_at') or job_data.get('created_at')
+                check_time = job_data.get("completed_at") or job_data.get("created_at")
                 if check_time and check_time < cutoff_time:
                     # Only cleanup completed or failed jobs
-                    status = job_data.get('status')
+                    status = job_data.get("status")
                     if status in [JobStatus.COMPLETED.value, JobStatus.FAILED.value]:
                         jobs_to_remove.append(job_id)
 
@@ -335,14 +335,14 @@ class JobStateManager:
         """
         with self.lock:
             stats = {
-                'total_jobs': len(self.state_cache),
-                'by_status': {},
-                'active_jobs': 0,
-                'completed_jobs': 0,
-                'failed_jobs': 0,
-                'avg_progress': 0.0,
-                'oldest_job': None,
-                'newest_job': None
+                "total_jobs": len(self.state_cache),
+                "by_status": {},
+                "active_jobs": 0,
+                "completed_jobs": 0,
+                "failed_jobs": 0,
+                "avg_progress": 0.0,
+                "oldest_job": None,
+                "newest_job": None,
             }
 
             if not self.state_cache:
@@ -353,26 +353,26 @@ class JobStateManager:
             creation_times = []
 
             for job_data in self.state_cache.values():
-                status = job_data['status']
-                stats['by_status'][status] = stats['by_status'].get(status, 0) + 1
+                status = job_data["status"]
+                stats["by_status"][status] = stats["by_status"].get(status, 0) + 1
 
                 if status in [JobStatus.PENDING.value, JobStatus.IN_PROGRESS.value, JobStatus.RETRY.value]:
-                    stats['active_jobs'] += 1
+                    stats["active_jobs"] += 1
                 elif status == JobStatus.COMPLETED.value:
-                    stats['completed_jobs'] += 1
+                    stats["completed_jobs"] += 1
                 elif status == JobStatus.FAILED.value:
-                    stats['failed_jobs'] += 1
+                    stats["failed_jobs"] += 1
 
-                total_progress += job_data.get('progress', 0.0)
+                total_progress += job_data.get("progress", 0.0)
 
-                if 'created_at' in job_data and job_data['created_at']:
-                    creation_times.append(job_data['created_at'])
+                if "created_at" in job_data and job_data["created_at"]:
+                    creation_times.append(job_data["created_at"])
 
-            stats['avg_progress'] = total_progress / len(self.state_cache)
+            stats["avg_progress"] = total_progress / len(self.state_cache)
 
             if creation_times:
-                stats['oldest_job'] = min(creation_times).isoformat()
-                stats['newest_job'] = max(creation_times).isoformat()
+                stats["oldest_job"] = min(creation_times).isoformat()
+                stats["newest_job"] = max(creation_times).isoformat()
 
             return stats
 

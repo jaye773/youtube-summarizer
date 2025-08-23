@@ -7,13 +7,21 @@ and factory function behavior with various inputs.
 """
 
 import uuid
-import pytest
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timedelta, timezone
 from unittest.mock import patch
 
+import pytest
+
 from job_models import (
-    JobStatus, JobPriority, JobType, ProcessingJob, JobResult, WorkerMetrics,
-    create_video_job, create_playlist_job, create_batch_job
+    JobPriority,
+    JobResult,
+    JobStatus,
+    JobType,
+    ProcessingJob,
+    WorkerMetrics,
+    create_batch_job,
+    create_playlist_job,
+    create_video_job,
 )
 
 
@@ -53,7 +61,7 @@ class TestProcessingJob:
             job_id="test-123",
             job_type=JobType.VIDEO,
             priority=JobPriority.HIGH,
-            data={"url": "https://youtube.com/watch?v=test"}
+            data={"url": "https://youtube.com/watch?v=test"},
         )
 
         assert job.job_id == "test-123"
@@ -73,12 +81,7 @@ class TestProcessingJob:
 
     def test_job_auto_id_generation(self):
         """Test automatic job ID generation when not provided"""
-        job = ProcessingJob(
-            job_id="",
-            job_type=JobType.VIDEO,
-            priority=JobPriority.HIGH,
-            data={}
-        )
+        job = ProcessingJob(job_id="", job_type=JobType.VIDEO, priority=JobPriority.HIGH, data={})
 
         # Should generate a UUID
         assert job.job_id != ""
@@ -88,12 +91,7 @@ class TestProcessingJob:
 
     def test_total_steps_calculation_video(self):
         """Test total_steps calculation for video jobs"""
-        job = ProcessingJob(
-            job_id="test-video",
-            job_type=JobType.VIDEO,
-            priority=JobPriority.HIGH,
-            data={}
-        )
+        job = ProcessingJob(job_id="test-video", job_type=JobType.VIDEO, priority=JobPriority.HIGH, data={})
 
         assert job.total_steps == 3
 
@@ -103,7 +101,7 @@ class TestProcessingJob:
             job_id="test-playlist",
             job_type=JobType.PLAYLIST,
             priority=JobPriority.MEDIUM,
-            data={"video_ids": ["vid1", "vid2", "vid3", "vid4", "vid5"]}
+            data={"video_ids": ["vid1", "vid2", "vid3", "vid4", "vid5"]},
         )
 
         # 5 videos + 2 overhead steps
@@ -115,19 +113,14 @@ class TestProcessingJob:
             job_id="test-batch",
             job_type=JobType.BATCH,
             priority=JobPriority.LOW,
-            data={"urls": ["url1", "url2", "url3"]}
+            data={"urls": ["url1", "url2", "url3"]},
         )
 
         assert job.total_steps == 3
 
     def test_update_progress_basic(self):
         """Test basic progress update functionality"""
-        job = ProcessingJob(
-            job_id="test-progress",
-            job_type=JobType.VIDEO,
-            priority=JobPriority.HIGH,
-            data={}
-        )
+        job = ProcessingJob(job_id="test-progress", job_type=JobType.VIDEO, priority=JobPriority.HIGH, data={})
 
         job.update_progress(0.5, "Halfway done")
 
@@ -136,12 +129,7 @@ class TestProcessingJob:
 
     def test_update_progress_with_increment(self):
         """Test progress update with step increment"""
-        job = ProcessingJob(
-            job_id="test-increment",
-            job_type=JobType.VIDEO,
-            priority=JobPriority.HIGH,
-            data={}
-        )
+        job = ProcessingJob(job_id="test-increment", job_type=JobType.VIDEO, priority=JobPriority.HIGH, data={})
         job.total_steps = 4
 
         job.update_progress(0.25, "First step", increment=True)
@@ -155,12 +143,7 @@ class TestProcessingJob:
 
     def test_update_progress_bounds(self):
         """Test progress update bounds checking (0.0 to 1.0)"""
-        job = ProcessingJob(
-            job_id="test-bounds",
-            job_type=JobType.VIDEO,
-            priority=JobPriority.HIGH,
-            data={}
-        )
+        job = ProcessingJob(job_id="test-bounds", job_type=JobType.VIDEO, priority=JobPriority.HIGH, data={})
 
         # Test upper bound
         job.update_progress(1.5)
@@ -172,12 +155,7 @@ class TestProcessingJob:
 
     def test_start_processing(self):
         """Test job start processing workflow"""
-        job = ProcessingJob(
-            job_id="test-start",
-            job_type=JobType.VIDEO,
-            priority=JobPriority.HIGH,
-            data={}
-        )
+        job = ProcessingJob(job_id="test-start", job_type=JobType.VIDEO, priority=JobPriority.HIGH, data={})
 
         start_time_before = datetime.now(timezone.utc)
         job.start_processing("worker-1")
@@ -191,12 +169,7 @@ class TestProcessingJob:
 
     def test_complete_successfully(self):
         """Test successful job completion"""
-        job = ProcessingJob(
-            job_id="test-complete",
-            job_type=JobType.VIDEO,
-            priority=JobPriority.HIGH,
-            data={}
-        )
+        job = ProcessingJob(job_id="test-complete", job_type=JobType.VIDEO, priority=JobPriority.HIGH, data={})
 
         job.start_processing("worker-1")
 
@@ -213,12 +186,7 @@ class TestProcessingJob:
 
     def test_fail_with_error_no_retry(self):
         """Test job failure without retry option"""
-        job = ProcessingJob(
-            job_id="test-fail-no-retry",
-            job_type=JobType.VIDEO,
-            priority=JobPriority.HIGH,
-            data={}
-        )
+        job = ProcessingJob(job_id="test-fail-no-retry", job_type=JobType.VIDEO, priority=JobPriority.HIGH, data={})
 
         job.start_processing("worker-1")
 
@@ -232,12 +200,7 @@ class TestProcessingJob:
 
     def test_fail_with_error_with_retry(self):
         """Test job failure with retry option"""
-        job = ProcessingJob(
-            job_id="test-fail-retry",
-            job_type=JobType.VIDEO,
-            priority=JobPriority.HIGH,
-            data={}
-        )
+        job = ProcessingJob(job_id="test-fail-retry", job_type=JobType.VIDEO, priority=JobPriority.HIGH, data={})
 
         job.start_processing("worker-1")
 
@@ -252,12 +215,7 @@ class TestProcessingJob:
 
     def test_fail_with_error_max_retries_reached(self):
         """Test job failure when max retries are reached"""
-        job = ProcessingJob(
-            job_id="test-max-retries",
-            job_type=JobType.VIDEO,
-            priority=JobPriority.HIGH,
-            data={}
-        )
+        job = ProcessingJob(job_id="test-max-retries", job_type=JobType.VIDEO, priority=JobPriority.HIGH, data={})
         job.max_retries = 2
         job.retry_count = 2  # Already at max retries
 
@@ -270,12 +228,7 @@ class TestProcessingJob:
 
     def test_reset_for_retry(self):
         """Test job reset for retry functionality"""
-        job = ProcessingJob(
-            job_id="test-reset",
-            job_type=JobType.VIDEO,
-            priority=JobPriority.HIGH,
-            data={}
-        )
+        job = ProcessingJob(job_id="test-reset", job_type=JobType.VIDEO, priority=JobPriority.HIGH, data={})
 
         # Simulate job processing and failure
         job.start_processing("worker-1")
@@ -293,12 +246,7 @@ class TestProcessingJob:
 
     def test_get_processing_time_completed(self):
         """Test processing time calculation for completed jobs"""
-        job = ProcessingJob(
-            job_id="test-timing",
-            job_type=JobType.VIDEO,
-            priority=JobPriority.HIGH,
-            data={}
-        )
+        job = ProcessingJob(job_id="test-timing", job_type=JobType.VIDEO, priority=JobPriority.HIGH, data={})
 
         # Mock specific times
         start_time = datetime.now(timezone.utc)
@@ -312,12 +260,7 @@ class TestProcessingJob:
 
     def test_get_processing_time_not_completed(self):
         """Test processing time for jobs that haven't completed"""
-        job = ProcessingJob(
-            job_id="test-no-timing",
-            job_type=JobType.VIDEO,
-            priority=JobPriority.HIGH,
-            data={}
-        )
+        job = ProcessingJob(job_id="test-no-timing", job_type=JobType.VIDEO, priority=JobPriority.HIGH, data={})
 
         assert job.get_processing_time() is None
 
@@ -326,12 +269,7 @@ class TestProcessingJob:
 
     def test_get_wait_time(self):
         """Test wait time calculation"""
-        job = ProcessingJob(
-            job_id="test-wait",
-            job_type=JobType.VIDEO,
-            priority=JobPriority.HIGH,
-            data={}
-        )
+        job = ProcessingJob(job_id="test-wait", job_type=JobType.VIDEO, priority=JobPriority.HIGH, data={})
 
         # Mock creation time to 10 seconds ago
         past_time = datetime.now(timezone.utc) - timedelta(seconds=10)
@@ -348,7 +286,7 @@ class TestProcessingJob:
             priority=JobPriority.HIGH,
             data={"url": "https://test.com"},
             client_id="client-123",
-            session_id="session-456"
+            session_id="session-456",
         )
 
         job_dict = job.to_dict()
@@ -387,7 +325,7 @@ class TestProcessingJob:
             "result": None,
             "worker_id": None,
             "client_id": "client-123",
-            "session_id": "session-456"
+            "session_id": "session-456",
         }
 
         job = ProcessingJob.from_dict(job_data)
@@ -409,7 +347,7 @@ class TestProcessingJob:
             priority=JobPriority.MEDIUM,
             data={"url": "https://test.com", "video_ids": ["1", "2", "3"]},
             client_id="client-roundtrip",
-            session_id="session-roundtrip"
+            session_id="session-roundtrip",
         )
 
         # Start and complete processing
@@ -443,7 +381,7 @@ class TestJobResult:
             job_type=JobType.VIDEO,
             success=True,
             data={"summary": "Test summary"},
-            processing_time=30.5
+            processing_time=30.5,
         )
 
         assert result.job_id == "test-result-123"
@@ -460,7 +398,7 @@ class TestJobResult:
             job_type=JobType.PLAYLIST,
             success=False,
             error="Network timeout",
-            processing_time=15.2
+            processing_time=15.2,
         )
 
         assert result.job_id == "test-fail-result"
@@ -473,11 +411,7 @@ class TestJobResult:
     def test_job_result_to_dict(self):
         """Test JobResult serialization"""
         result = JobResult(
-            job_id="dict-test",
-            job_type=JobType.BATCH,
-            success=True,
-            data={"results": [1, 2, 3]},
-            processing_time=45.7
+            job_id="dict-test", job_type=JobType.BATCH, success=True, data={"results": [1, 2, 3]}, processing_time=45.7
         )
 
         result_dict = result.to_dict()
@@ -717,12 +651,7 @@ class TestJobStatusTransitions:
 
     def test_complete_workflow_success(self):
         """Test complete successful job workflow"""
-        job = ProcessingJob(
-            job_id="workflow-success",
-            job_type=JobType.VIDEO,
-            priority=JobPriority.HIGH,
-            data={}
-        )
+        job = ProcessingJob(job_id="workflow-success", job_type=JobType.VIDEO, priority=JobPriority.HIGH, data={})
 
         # Initial state
         assert job.status == JobStatus.PENDING
@@ -737,12 +666,7 @@ class TestJobStatusTransitions:
 
     def test_complete_workflow_with_retry(self):
         """Test complete workflow with retry"""
-        job = ProcessingJob(
-            job_id="workflow-retry",
-            job_type=JobType.VIDEO,
-            priority=JobPriority.HIGH,
-            data={}
-        )
+        job = ProcessingJob(job_id="workflow-retry", job_type=JobType.VIDEO, priority=JobPriority.HIGH, data={})
 
         # Initial state
         assert job.status == JobStatus.PENDING
@@ -770,12 +694,7 @@ class TestJobStatusTransitions:
 
     def test_complete_workflow_final_failure(self):
         """Test workflow ending in final failure"""
-        job = ProcessingJob(
-            job_id="workflow-fail",
-            job_type=JobType.VIDEO,
-            priority=JobPriority.HIGH,
-            data={}
-        )
+        job = ProcessingJob(job_id="workflow-fail", job_type=JobType.VIDEO, priority=JobPriority.HIGH, data={})
         job.max_retries = 1  # Lower for testing
 
         # Process and fail twice
@@ -795,12 +714,7 @@ class TestJobStatusTransitions:
 
     def test_edge_case_transitions(self):
         """Test edge cases and boundary conditions"""
-        job = ProcessingJob(
-            job_id="edge-cases",
-            job_type=JobType.VIDEO,
-            priority=JobPriority.HIGH,
-            data={}
-        )
+        job = ProcessingJob(job_id="edge-cases", job_type=JobType.VIDEO, priority=JobPriority.HIGH, data={})
 
         # Test multiple progress updates
         job.start_processing("worker-1")

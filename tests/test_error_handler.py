@@ -18,19 +18,13 @@ import random
 import time
 import unittest
 from datetime import datetime, timedelta
-from typing import Dict, Any
-from unittest.mock import patch, MagicMock
+from typing import Any, Dict
+from unittest.mock import MagicMock, patch
 
 import pytest
 
 # Import the module under test
-from error_handler import (
-    ErrorHandler,
-    ErrorCategory,
-    ErrorInfo,
-    RetryPolicy,
-    JobStatus
-)
+from error_handler import ErrorCategory, ErrorHandler, ErrorInfo, JobStatus, RetryPolicy
 
 
 class TestErrorCategory(unittest.TestCase):
@@ -47,7 +41,7 @@ class TestErrorCategory(unittest.TestCase):
             ErrorCategory.SYSTEM_ERROR: "system_error",
             ErrorCategory.VALIDATION: "validation_error",
             ErrorCategory.TIMEOUT: "timeout_error",
-            ErrorCategory.UNKNOWN: "unknown_error"
+            ErrorCategory.UNKNOWN: "unknown_error",
         }
 
         for category, expected_value in expected_categories.items():
@@ -65,12 +59,7 @@ class TestRetryPolicy(unittest.TestCase):
     def test_retry_policy_creation(self):
         """Test creation of retry policy with all fields."""
         policy = RetryPolicy(
-            max_retries=3,
-            base_delay=10.0,
-            max_delay=300.0,
-            backoff_multiplier=2.0,
-            jitter=True,
-            retry_eligible=True
+            max_retries=3, base_delay=10.0, max_delay=300.0, backoff_multiplier=2.0, jitter=True, retry_eligible=True
         )
 
         self.assertEqual(policy.max_retries, 3)
@@ -96,7 +85,7 @@ class TestErrorInfo(unittest.TestCase):
             retry_eligible=True,
             retry_delay=30.0,
             max_retries=3,
-            metadata=metadata
+            metadata=metadata,
         )
 
         self.assertEqual(error_info.category, ErrorCategory.NETWORK)
@@ -170,8 +159,7 @@ class TestErrorHandler(unittest.TestCase):
         for error_message, expected_category in test_cases:
             error = Exception(error_message)
             category = self.handler.classify_error(error)
-            self.assertEqual(category, expected_category,
-                           f"Failed to classify: {error_message}")
+            self.assertEqual(category, expected_category, f"Failed to classify: {error_message}")
 
     def test_classify_api_rate_limit_errors(self):
         """Test classification of API rate limiting errors."""
@@ -187,8 +175,7 @@ class TestErrorHandler(unittest.TestCase):
         for error_message, expected_category in test_cases:
             error = Exception(error_message)
             category = self.handler.classify_error(error)
-            self.assertEqual(category, expected_category,
-                           f"Failed to classify: {error_message}")
+            self.assertEqual(category, expected_category, f"Failed to classify: {error_message}")
 
     def test_classify_network_errors(self):
         """Test classification of network-related errors."""
@@ -204,8 +191,7 @@ class TestErrorHandler(unittest.TestCase):
         for error_message, expected_category in test_cases:
             error = Exception(error_message)
             category = self.handler.classify_error(error)
-            self.assertEqual(category, expected_category,
-                           f"Failed to classify: {error_message}")
+            self.assertEqual(category, expected_category, f"Failed to classify: {error_message}")
 
     def test_classify_model_errors(self):
         """Test classification of AI model processing errors."""
@@ -220,8 +206,7 @@ class TestErrorHandler(unittest.TestCase):
         for error_message, expected_category in test_cases:
             error = Exception(error_message)
             category = self.handler.classify_error(error)
-            self.assertEqual(category, expected_category,
-                           f"Failed to classify: {error_message}")
+            self.assertEqual(category, expected_category, f"Failed to classify: {error_message}")
 
     def test_classify_system_errors(self):
         """Test classification of system and infrastructure errors."""
@@ -237,8 +222,7 @@ class TestErrorHandler(unittest.TestCase):
         for error_message, expected_category in test_cases:
             error = Exception(error_message)
             category = self.handler.classify_error(error)
-            self.assertEqual(category, expected_category,
-                           f"Failed to classify: {error_message}")
+            self.assertEqual(category, expected_category, f"Failed to classify: {error_message}")
 
     def test_classify_validation_errors(self):
         """Test classification of validation errors."""
@@ -254,8 +238,7 @@ class TestErrorHandler(unittest.TestCase):
         for error_message, expected_category in test_cases:
             error = Exception(error_message)
             category = self.handler.classify_error(error)
-            self.assertEqual(category, expected_category,
-                           f"Failed to classify: {error_message}")
+            self.assertEqual(category, expected_category, f"Failed to classify: {error_message}")
 
     def test_classify_timeout_errors(self):
         """Test classification of timeout errors."""
@@ -270,8 +253,11 @@ class TestErrorHandler(unittest.TestCase):
         for error_message, expected_categories in test_cases:
             error = Exception(error_message)
             category = self.handler.classify_error(error)
-            self.assertIn(category, expected_categories,
-                         f"Failed to classify '{error_message}' - got {category}, expected one of {expected_categories}")
+            self.assertIn(
+                category,
+                expected_categories,
+                f"Failed to classify '{error_message}' - got {category}, expected one of {expected_categories}",
+            )
 
     def test_classify_by_exception_type(self):
         """Test classification based on exception type names."""
@@ -334,8 +320,8 @@ class TestErrorHandler(unittest.TestCase):
         if error_info.category == ErrorCategory.NETWORK:
             self.assertTrue(error_info.retry_eligible)
             self.assertGreater(error_info.retry_delay, 0)
-        self.assertEqual(error_info.metadata['job_id'], self.test_job_id)
-        self.assertEqual(error_info.metadata['retry_count'], 0)
+        self.assertEqual(error_info.metadata["job_id"], self.test_job_id)
+        self.assertEqual(error_info.metadata["retry_count"], 0)
         self.assertIsInstance(error_info.timestamp, datetime)
 
     def test_handle_error_with_retry_count(self):
@@ -346,7 +332,7 @@ class TestErrorHandler(unittest.TestCase):
         error_info = self.handler.handle_error(error, self.test_job_id, retry_count)
 
         self.assertEqual(error_info.category, ErrorCategory.API_RATE_LIMIT)
-        self.assertEqual(error_info.metadata['retry_count'], retry_count)
+        self.assertEqual(error_info.metadata["retry_count"], retry_count)
         # Should still be retryable at retry 2 (max is 5 for rate limit)
         self.assertTrue(error_info.retry_eligible)
 
@@ -378,19 +364,14 @@ class TestErrorHandler(unittest.TestCase):
 
         error_info = self.handler.handle_error(error, self.test_job_id, context=context)
 
-        self.assertEqual(error_info.metadata['context'], context)
+        self.assertEqual(error_info.metadata["context"], context)
 
     # Retry Delay Calculation Tests
 
     def test_calculate_retry_delay_exponential_backoff(self):
         """Test exponential backoff calculation without jitter."""
         policy = RetryPolicy(
-            max_retries=5,
-            base_delay=10.0,
-            max_delay=1000.0,
-            backoff_multiplier=2.0,
-            jitter=False,
-            retry_eligible=True
+            max_retries=5, base_delay=10.0, max_delay=1000.0, backoff_multiplier=2.0, jitter=False, retry_eligible=True
         )
 
         # Test progression: 10, 20, 40, 80, 160
@@ -408,7 +389,7 @@ class TestErrorHandler(unittest.TestCase):
             max_delay=100.0,  # Low max to test capping
             backoff_multiplier=3.0,
             jitter=False,
-            retry_eligible=True
+            retry_eligible=True,
         )
 
         # After a few retries, should hit max_delay cap
@@ -418,12 +399,7 @@ class TestErrorHandler(unittest.TestCase):
     def test_calculate_retry_delay_with_jitter(self):
         """Test retry delay calculation with jitter enabled."""
         policy = RetryPolicy(
-            max_retries=3,
-            base_delay=100.0,
-            max_delay=1000.0,
-            backoff_multiplier=2.0,
-            jitter=True,
-            retry_eligible=True
+            max_retries=3, base_delay=100.0, max_delay=1000.0, backoff_multiplier=2.0, jitter=True, retry_eligible=True
         )
 
         # With jitter, delays should vary but stay within reasonable bounds
@@ -443,12 +419,7 @@ class TestErrorHandler(unittest.TestCase):
     def test_calculate_retry_delay_non_negative(self):
         """Test that retry delays are never negative."""
         policy = RetryPolicy(
-            max_retries=3,
-            base_delay=1.0,
-            max_delay=10.0,
-            backoff_multiplier=1.5,
-            jitter=True,
-            retry_eligible=True
+            max_retries=3, base_delay=1.0, max_delay=10.0, backoff_multiplier=1.5, jitter=True, retry_eligible=True
         )
 
         # Even with jitter, delay should never be negative
@@ -504,12 +475,7 @@ class TestErrorHandler(unittest.TestCase):
         """Test error statistics with no errors."""
         stats = self.handler.get_error_statistics()
 
-        expected_stats = {
-            'total_errors': 0,
-            'by_category': {},
-            'retry_stats': {},
-            'most_common_errors': []
-        }
+        expected_stats = {"total_errors": 0, "by_category": {}, "retry_stats": {}, "most_common_errors": []}
 
         self.assertEqual(stats, expected_stats)
 
@@ -537,18 +503,18 @@ class TestErrorHandler(unittest.TestCase):
 
         # The actual total might be higher due to retry statistics being tracked
         # Let's check that we handled at least 5 errors
-        self.assertGreaterEqual(stats['total_errors'], 5)
+        self.assertGreaterEqual(stats["total_errors"], 5)
 
         # Count actual categories returned
         unique_categories = set(cat.value for cat in error_categories)
-        self.assertGreaterEqual(len(stats['by_category']), 1)  # At least one category
+        self.assertGreaterEqual(len(stats["by_category"]), 1)  # At least one category
 
         # Find most common category from actual results
-        if stats['most_common_errors']:
-            most_common = stats['most_common_errors'][0]
-            self.assertIn('category', most_common)
-            self.assertIn('count', most_common)
-            self.assertGreater(most_common['count'], 0)
+        if stats["most_common_errors"]:
+            most_common = stats["most_common_errors"][0]
+            self.assertIn("category", most_common)
+            self.assertIn("count", most_common)
+            self.assertGreater(most_common["count"], 0)
 
     def test_reset_statistics(self):
         """Test statistics reset functionality."""
@@ -558,26 +524,21 @@ class TestErrorHandler(unittest.TestCase):
 
         # Verify statistics exist
         stats = self.handler.get_error_statistics()
-        self.assertGreater(stats['total_errors'], 0)
+        self.assertGreater(stats["total_errors"], 0)
 
         # Reset statistics
         self.handler.reset_statistics()
 
         # Verify statistics are cleared
         stats = self.handler.get_error_statistics()
-        self.assertEqual(stats['total_errors'], 0)
+        self.assertEqual(stats["total_errors"], 0)
 
     # Retry Policy Management Tests
 
     def test_update_retry_policy(self):
         """Test updating retry policy for a category."""
         custom_policy = RetryPolicy(
-            max_retries=10,
-            base_delay=5.0,
-            max_delay=500.0,
-            backoff_multiplier=1.5,
-            jitter=False,
-            retry_eligible=True
+            max_retries=10, base_delay=5.0, max_delay=500.0, backoff_multiplier=1.5, jitter=False, retry_eligible=True
         )
 
         self.handler.update_retry_policy(ErrorCategory.NETWORK, custom_policy)
@@ -645,7 +606,7 @@ class TestErrorHandler(unittest.TestCase):
         error = Exception("Test error")
         error_info = self.handler.handle_error(error, "")
 
-        self.assertEqual(error_info.metadata['job_id'], "")
+        self.assertEqual(error_info.metadata["job_id"], "")
 
     def test_classify_empty_error_message(self):
         """Test classification of error with empty message."""
@@ -692,7 +653,7 @@ class TestErrorHandler(unittest.TestCase):
         stats = self.handler.get_error_statistics()
         # Account for the fact that retryable errors also update retry statistics
         # so total may be higher than just the error count
-        self.assertGreaterEqual(stats['total_errors'], expected_total)
+        self.assertGreaterEqual(stats["total_errors"], expected_total)
 
     # Performance Tests
 
@@ -709,7 +670,7 @@ class TestErrorHandler(unittest.TestCase):
                 f"Rate limit exceeded {i}",
                 f"Model processing failed {i}",
                 f"Validation error {i}",
-                f"Unknown error {i}"
+                f"Unknown error {i}",
             ]
 
             for msg in error_messages:
@@ -731,13 +692,7 @@ class TestErrorHandler(unittest.TestCase):
 
         # Handle many errors with classifiable patterns
         num_errors = 500  # Reduced for faster test
-        error_patterns = [
-            "Network error",
-            "Rate limit exceeded",
-            "Model error",
-            "Validation error",
-            "Timeout error"
-        ]
+        error_patterns = ["Network error", "Rate limit exceeded", "Model error", "Validation error", "Timeout error"]
 
         for i in range(num_errors):
             pattern = error_patterns[i % len(error_patterns)]
@@ -757,7 +712,7 @@ class TestErrorHandler(unittest.TestCase):
         stats_time = time.time() - start_time
 
         self.assertLess(stats_time, 1.0, "Statistics calculation too slow")
-        self.assertEqual(stats['total_errors'], num_errors)
+        self.assertEqual(stats["total_errors"], num_errors)
 
     # Integration Tests
 
@@ -817,5 +772,5 @@ class TestErrorHandler(unittest.TestCase):
         self.assertGreater(rate_limit_info.max_retries, model_info.max_retries)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     unittest.main()

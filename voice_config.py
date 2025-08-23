@@ -12,7 +12,7 @@ AVAILABLE_VOICES = {
         "style": "narrative",
         "tier": "chirp3-hd",
         "description": "Premium AI voice, excellent for narration and storytelling",
-        "quality": "premium"
+        "quality": "premium",
     },
     "en-US-Chirp3-HD-Charon": {
         "name": "en-US-Chirp3-HD-Charon",
@@ -23,7 +23,7 @@ AVAILABLE_VOICES = {
         "style": "authoritative",
         "tier": "chirp3-hd",
         "description": "Premium AI voice with authoritative tone for professional content",
-        "quality": "premium"
+        "quality": "premium",
     },
     "en-US-Chirp3-HD-Leda": {
         "name": "en-US-Chirp3-HD-Leda",
@@ -34,7 +34,7 @@ AVAILABLE_VOICES = {
         "style": "versatile",
         "tier": "chirp3-hd",
         "description": "Premium AI voice, versatile and perfect for diverse content",
-        "quality": "premium"
+        "quality": "premium",
     },
     "en-US-Chirp3-HD-Aoede": {
         "name": "en-US-Chirp3-HD-Aoede",
@@ -45,9 +45,8 @@ AVAILABLE_VOICES = {
         "style": "smooth",
         "tier": "chirp3-hd",
         "description": "Premium AI voice with smooth delivery for educational content",
-        "quality": "premium"
+        "quality": "premium",
     },
-
     # Tier 2: Neural2 (High Quality)
     "en-US-Neural2-C": {
         "name": "en-US-Neural2-C",
@@ -58,7 +57,7 @@ AVAILABLE_VOICES = {
         "style": "storytelling",
         "tier": "neural2",
         "description": "Natural storytelling voice with warm delivery",
-        "quality": "high"
+        "quality": "high",
     },
     "en-US-Neural2-J": {
         "name": "en-US-Neural2-J",
@@ -69,7 +68,7 @@ AVAILABLE_VOICES = {
         "style": "professional",
         "tier": "neural2",
         "description": "Professional business tone, clear and confident",
-        "quality": "high"
+        "quality": "high",
     },
     "en-US-Neural2-F": {
         "name": "en-US-Neural2-F",
@@ -80,9 +79,8 @@ AVAILABLE_VOICES = {
         "style": "warm",
         "tier": "neural2",
         "description": "Warm, engaging delivery perfect for educational content",
-        "quality": "high"
+        "quality": "high",
     },
-
     # Tier 3: Studio & WaveNet (Standard Quality)
     "en-US-Studio-O": {
         "name": "en-US-Studio-O",
@@ -93,7 +91,7 @@ AVAILABLE_VOICES = {
         "style": "professional",
         "tier": "studio",
         "description": "Professional narrator with clear articulation",
-        "quality": "standard"
+        "quality": "standard",
     },
     "en-US-Wavenet-H": {
         "name": "en-US-Wavenet-H",
@@ -104,7 +102,7 @@ AVAILABLE_VOICES = {
         "style": "human-like",
         "tier": "wavenet",
         "description": "Human-like inflection with natural speech patterns",
-        "quality": "standard"
+        "quality": "standard",
     },
     "en-US-Wavenet-D": {
         "name": "en-US-Wavenet-D",
@@ -115,7 +113,7 @@ AVAILABLE_VOICES = {
         "style": "technical",
         "tier": "wavenet",
         "description": "Clear technical delivery, ideal for instructional content",
-        "quality": "standard"
+        "quality": "standard",
     },
     "en-GB-Neural2-A": {
         "name": "en-GB-Neural2-A",
@@ -126,8 +124,8 @@ AVAILABLE_VOICES = {
         "style": "professional",
         "tier": "neural2",
         "description": "British accent with professional tone",
-        "quality": "high"
-    }
+        "quality": "high",
+    },
 }
 
 # Default voice selection
@@ -135,24 +133,26 @@ DEFAULT_VOICE = "en-US-Chirp3-HD-Zephyr"
 
 # Cache configuration
 CACHE_CONFIG = {
-    "max_size_mb": 50,          # Maximum cache size in MB
-    "max_files": 100,           # Maximum number of cached files
-    "ttl_hours": 72,            # Time to live in hours
-    "cleanup_threshold": 0.8    # Cleanup when cache reaches 80% of max size
+    "max_size_mb": 50,  # Maximum cache size in MB
+    "max_files": 100,  # Maximum number of cached files
+    "ttl_hours": 72,  # Time to live in hours
+    "cleanup_threshold": 0.8,  # Cleanup when cache reaches 80% of max size
 }
 
 # Fallback chain for voice selection
 FALLBACK_VOICES = [
-    "en-US-Chirp3-HD-Zephyr",   # Premium default
-    "en-US-Neural2-C",          # High quality female
-    "en-US-Neural2-J",          # High quality male
-    "en-US-Studio-O",           # Standard female
-    "en-US-Wavenet-D"           # Standard male fallback
+    "en-US-Chirp3-HD-Zephyr",  # Premium default
+    "en-US-Neural2-C",  # High quality female
+    "en-US-Neural2-J",  # High quality male
+    "en-US-Studio-O",  # Standard female
+    "en-US-Wavenet-D",  # Standard male fallback
 ]
+
 
 def get_voice_config(voice_name):
     """Get voice configuration for a given voice name."""
     return AVAILABLE_VOICES.get(voice_name)
+
 
 def get_voice_with_fallback(preferred_voice):
     """Get voice configuration with fallback logic."""
@@ -171,14 +171,10 @@ def get_voice_with_fallback(preferred_voice):
 
     return None
 
+
 def get_voices_by_tier():
     """Get voices organized by quality tier."""
-    tiers = {
-        "chirp3-hd": [],
-        "neural2": [],
-        "studio": [],
-        "wavenet": []
-    }
+    tiers = {"chirp3-hd": [], "neural2": [], "studio": [], "wavenet": []}
 
     for voice in AVAILABLE_VOICES.values():
         tier = voice.get("tier", "other")
@@ -187,9 +183,11 @@ def get_voices_by_tier():
 
     return tiers
 
+
 def validate_voice_name(voice_name):
     """Validate if a voice name is supported."""
     return voice_name in AVAILABLE_VOICES
+
 
 def get_fallback_voice(failed_voice_id):
     """Get fallback voice when primary voice fails."""
@@ -209,12 +207,15 @@ def get_fallback_voice(failed_voice_id):
     # Last resort - return first available voice
     return list(AVAILABLE_VOICES.keys())[0] if AVAILABLE_VOICES else None
 
+
 def get_optimized_cache_key(voice_id, text):
     """Generate optimized cache key using fast hash algorithm."""
     import hashlib
+
     # Use blake2b for faster hashing than SHA256
-    text_hash = hashlib.blake2b(text.encode('utf-8'), digest_size=16).hexdigest()
+    text_hash = hashlib.blake2b(text.encode("utf-8"), digest_size=16).hexdigest()
     return f"{voice_id}_{text_hash}"
+
 
 def cleanup_audio_cache(cache_dir, config=None):
     """Clean up audio cache based on size and age limits."""
@@ -241,12 +242,7 @@ def cleanup_audio_cache(cache_dir, config=None):
         stat = file_path.stat()
         age = current_time - stat.st_mtime
 
-        cache_files.append({
-            "path": file_path,
-            "size": stat.st_size,
-            "age": age,
-            "mtime": stat.st_mtime
-        })
+        cache_files.append({"path": file_path, "size": stat.st_size, "age": age, "mtime": stat.st_mtime})
         total_size += stat.st_size
 
     files_to_delete = []
@@ -291,8 +287,9 @@ def cleanup_audio_cache(cache_dir, config=None):
         "size_freed": size_freed,
         "total_files": len(cache_files),
         "remaining_files": len(cache_files) - cleaned_files,
-        "remaining_size": total_size - size_freed
+        "remaining_size": total_size - size_freed,
     }
+
 
 def should_cleanup_cache(cache_dir, config=None):
     """Check if cache cleanup is needed."""
@@ -320,6 +317,7 @@ def should_cleanup_cache(cache_dir, config=None):
     file_ratio = file_count / max_files
 
     return size_ratio > cleanup_threshold or file_ratio > cleanup_threshold
+
 
 def get_sample_text():
     """Get sample text for voice preview."""

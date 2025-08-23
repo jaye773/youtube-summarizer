@@ -4,15 +4,17 @@ Integration test for voice model selection feature
 Tests the complete end-to-end user experience
 """
 
-import os
 import json
-import time
-import requests
+import os
 import tempfile
+import time
 from pathlib import Path
+
+import requests
 
 # Set testing mode
 os.environ["TESTING"] = "true"
+
 
 def test_voice_api_integration():
     """Test voice API endpoints work correctly"""
@@ -25,16 +27,16 @@ def test_voice_api_integration():
         print("✅ /api/voices endpoint structure validated")
 
         expected_voices = [
-            'en-US-Chirp3-HD-Zephyr',
-            'en-US-Chirp3-HD-Charon',
-            'en-US-Chirp3-HD-Leda',
-            'en-US-Neural2-C',
-            'en-US-Neural2-J',
-            'en-US-Neural2-F',
-            'en-US-Studio-O',
-            'en-US-Wavenet-H',
-            'en-US-Wavenet-D',
-            'en-GB-Neural2-A'
+            "en-US-Chirp3-HD-Zephyr",
+            "en-US-Chirp3-HD-Charon",
+            "en-US-Chirp3-HD-Leda",
+            "en-US-Neural2-C",
+            "en-US-Neural2-J",
+            "en-US-Neural2-F",
+            "en-US-Studio-O",
+            "en-US-Wavenet-H",
+            "en-US-Wavenet-D",
+            "en-GB-Neural2-A",
         ]
 
         print(f"✅ Expected voices available: {len(expected_voices)}")
@@ -44,6 +46,7 @@ def test_voice_api_integration():
         return False
 
     return True
+
 
 def test_settings_persistence():
     """Test voice settings persistence through environment variables"""
@@ -58,21 +61,21 @@ def test_settings_persistence():
         print(f"✅ Default voice {DEFAULT_VOICE} is valid")
 
         # Test environment variable handling
-        test_voice = 'en-US-Neural2-J'
-        original_voice = os.environ.get('TTS_VOICE')
+        test_voice = "en-US-Neural2-J"
+        original_voice = os.environ.get("TTS_VOICE")
 
         # Set new voice
-        os.environ['TTS_VOICE'] = test_voice
+        os.environ["TTS_VOICE"] = test_voice
 
         # Verify it's set
-        assert os.environ.get('TTS_VOICE') == test_voice
+        assert os.environ.get("TTS_VOICE") == test_voice
         print(f"✅ Environment variable TTS_VOICE successfully set to {test_voice}")
 
         # Restore original
         if original_voice:
-            os.environ['TTS_VOICE'] = original_voice
-        elif 'TTS_VOICE' in os.environ:
-            del os.environ['TTS_VOICE']
+            os.environ["TTS_VOICE"] = original_voice
+        elif "TTS_VOICE" in os.environ:
+            del os.environ["TTS_VOICE"]
 
     except Exception as e:
         print(f"❌ Settings persistence test failed: {e}")
@@ -80,23 +83,24 @@ def test_settings_persistence():
 
     return True
 
+
 def test_voice_fallback_scenarios():
     """Test voice fallback mechanisms"""
     print("\nTesting Voice Fallback Scenarios...")
 
     try:
-        from voice_config import get_voice_with_fallback, get_fallback_voice
+        from voice_config import get_fallback_voice, get_voice_with_fallback
 
         # Test 1: Valid voice
-        valid_voice = get_voice_with_fallback('en-US-Chirp3-HD-Zephyr')
+        valid_voice = get_voice_with_fallback("en-US-Chirp3-HD-Zephyr")
         assert valid_voice is not None
-        assert valid_voice['name'] == 'en-US-Chirp3-HD-Zephyr'
+        assert valid_voice["name"] == "en-US-Chirp3-HD-Zephyr"
         print("✅ Valid voice returns correctly")
 
         # Test 2: Invalid voice falls back
-        fallback_voice = get_voice_with_fallback('invalid-voice-id')
+        fallback_voice = get_voice_with_fallback("invalid-voice-id")
         assert fallback_voice is not None
-        assert fallback_voice['name'] in ['en-US-Chirp3-HD-Zephyr', 'en-US-Neural2-C']  # Should be in fallback chain
+        assert fallback_voice["name"] in ["en-US-Chirp3-HD-Zephyr", "en-US-Neural2-C"]  # Should be in fallback chain
         print(f"✅ Invalid voice falls back to {fallback_voice['name']}")
 
         # Test 3: None input falls back
@@ -105,9 +109,9 @@ def test_voice_fallback_scenarios():
         print(f"✅ None input falls back to {none_fallback['name']}")
 
         # Test 4: Fallback chain function
-        chain_fallback = get_fallback_voice('en-US-Chirp3-HD-Zephyr')
+        chain_fallback = get_fallback_voice("en-US-Chirp3-HD-Zephyr")
         assert chain_fallback is not None
-        assert chain_fallback != 'en-US-Chirp3-HD-Zephyr'  # Should be different
+        assert chain_fallback != "en-US-Chirp3-HD-Zephyr"  # Should be different
         print(f"✅ Fallback chain works: {chain_fallback}")
 
     except Exception as e:
@@ -116,16 +120,17 @@ def test_voice_fallback_scenarios():
 
     return True
 
+
 def test_audio_cache_functionality():
     """Test audio caching system"""
     print("\nTesting Audio Cache Functionality...")
 
     try:
-        from voice_config import get_optimized_cache_key, cleanup_audio_cache, should_cleanup_cache
+        from voice_config import cleanup_audio_cache, get_optimized_cache_key, should_cleanup_cache
 
         # Test cache key generation
-        voice_id = 'en-US-Chirp3-HD-Zephyr'
-        text = 'Test cache functionality'
+        voice_id = "en-US-Chirp3-HD-Zephyr"
+        text = "Test cache functionality"
 
         key1 = get_optimized_cache_key(voice_id, text)
         key2 = get_optimized_cache_key(voice_id, text)
@@ -148,8 +153,8 @@ def test_audio_cache_functionality():
 
             # Test cleanup function
             cleanup_result = cleanup_audio_cache(temp_dir)
-            assert 'cleaned' in cleanup_result
-            assert 'size_freed' in cleanup_result
+            assert "cleaned" in cleanup_result
+            assert "size_freed" in cleanup_result
             print(f"✅ Cache cleanup: {cleanup_result}")
 
     except Exception as e:
@@ -157,6 +162,7 @@ def test_audio_cache_functionality():
         return False
 
     return True
+
 
 def test_voice_configuration_validation():
     """Test voice configuration data validation"""
@@ -172,8 +178,17 @@ def test_voice_configuration_validation():
         print(f"✅ Voice count: {actual_count}")
 
         # Test voice structure
-        required_fields = ['name', 'display_name', 'language_code', 'gender',
-                          'accent', 'style', 'tier', 'description', 'quality']
+        required_fields = [
+            "name",
+            "display_name",
+            "language_code",
+            "gender",
+            "accent",
+            "style",
+            "tier",
+            "description",
+            "quality",
+        ]
 
         for voice_id, voice_data in AVAILABLE_VOICES.items():
             for field in required_fields:
@@ -184,7 +199,7 @@ def test_voice_configuration_validation():
 
         # Test tier organization
         tiers = get_voices_by_tier()
-        expected_tiers = ['chirp3-hd', 'neural2', 'studio', 'wavenet']
+        expected_tiers = ["chirp3-hd", "neural2", "studio", "wavenet"]
 
         for tier in expected_tiers:
             assert tier in tiers, f"Missing tier: {tier}"
@@ -195,10 +210,10 @@ def test_voice_configuration_validation():
         # Test quality distribution
         qualities = {}
         for voice in AVAILABLE_VOICES.values():
-            quality = voice['quality']
+            quality = voice["quality"]
             qualities[quality] = qualities.get(quality, 0) + 1
 
-        expected_qualities = ['premium', 'high', 'standard']
+        expected_qualities = ["premium", "high", "standard"]
         for quality in expected_qualities:
             assert quality in qualities, f"Missing quality tier: {quality}"
 
@@ -210,6 +225,7 @@ def test_voice_configuration_validation():
 
     return True
 
+
 def test_error_handling():
     """Test error handling scenarios"""
     print("\nTesting Error Handling...")
@@ -218,24 +234,24 @@ def test_error_handling():
         from voice_config import get_voice_config, validate_voice_name
 
         # Test invalid voice ID
-        invalid_voice = get_voice_config('completely-invalid-voice-id')
+        invalid_voice = get_voice_config("completely-invalid-voice-id")
         assert invalid_voice is None, "Invalid voice should return None"
         print("✅ Invalid voice ID handled correctly")
 
         # Test validation function
-        assert validate_voice_name('en-US-Chirp3-HD-Zephyr') == True
-        assert validate_voice_name('invalid-voice') == False
-        assert validate_voice_name('') == False
+        assert validate_voice_name("en-US-Chirp3-HD-Zephyr") == True
+        assert validate_voice_name("invalid-voice") == False
+        assert validate_voice_name("") == False
         assert validate_voice_name(None) == False
         print("✅ Voice validation function works correctly")
 
         # Test edge cases
         edge_cases = [
-            '',
+            "",
             None,
-            'en-US-Invalid',
-            'invalid-format',
-            'en-GB-NonExistent',
+            "en-US-Invalid",
+            "invalid-format",
+            "en-GB-NonExistent",
             123,  # Wrong type
         ]
 
@@ -255,6 +271,7 @@ def test_error_handling():
 
     return True
 
+
 def test_frontend_integration():
     """Test frontend integration points"""
     print("\nTesting Frontend Integration...")
@@ -270,12 +287,12 @@ def test_frontend_integration():
 
             # Check for voice selection elements
             voice_elements = [
-                'voice-option',
-                'preview-btn',
-                'tts_voice',
-                'voice-selection-group',
-                'selectVoice',
-                'previewVoice'
+                "voice-option",
+                "preview-btn",
+                "tts_voice",
+                "voice-selection-group",
+                "selectVoice",
+                "previewVoice",
             ]
 
             for element in voice_elements:
@@ -284,13 +301,7 @@ def test_frontend_integration():
             print("✅ Settings template has voice selection UI")
 
             # Check for accessibility features
-            accessibility_features = [
-                'role="radio"',
-                'aria-checked',
-                'aria-label',
-                'tabindex',
-                'sr-only'
-            ]
+            accessibility_features = ['role="radio"', "aria-checked", "aria-label", "tabindex", "sr-only"]
 
             for feature in accessibility_features:
                 assert feature in template_content, f"Missing accessibility feature: {feature}"
@@ -305,6 +316,7 @@ def test_frontend_integration():
         return False
 
     return True
+
 
 def run_integration_tests():
     """Run all integration tests"""
@@ -365,6 +377,8 @@ def run_integration_tests():
         print(f"\n❌ {failed} TESTS FAILED - REVIEW REQUIRED")
         return 1
 
+
 if __name__ == "__main__":
     import sys
+
     sys.exit(run_integration_tests())

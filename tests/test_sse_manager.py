@@ -30,8 +30,8 @@ import unittest
 import uuid
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timedelta
-from unittest.mock import MagicMock, Mock, patch, PropertyMock
-from typing import Dict, Any, List, Set
+from typing import Any, Dict, List, Set
+from unittest.mock import MagicMock, Mock, PropertyMock, patch
 
 import pytest
 from flask import Flask
@@ -40,13 +40,13 @@ from flask import Flask
 from sse_manager import (
     SSEConnection,
     SSEManager,
-    format_summary_progress_event,
+    _sse_manager_instance,
+    _sse_manager_lock,
     format_summary_complete_event,
+    format_summary_progress_event,
     format_system_event,
     get_sse_manager,
     shutdown_sse_manager,
-    _sse_manager_instance,
-    _sse_manager_lock
 )
 
 
@@ -56,13 +56,8 @@ class TestSSEConnection:
     def setup_method(self):
         """Set up test data for each test method."""
         self.test_client_id = "test_client_123"
-        self.test_subscriptions = {'summary_progress', 'system'}
-        self.test_event_data = {
-            'job_id': 'job_123',
-            'video_id': 'dQw4w9WgXcQ',
-            'progress': 0.5,
-            'status': 'processing'
-        }
+        self.test_subscriptions = {"summary_progress", "system"}
+        self.test_event_data = {"job_id": "job_123", "video_id": "dQw4w9WgXcQ", "progress": 0.5, "status": "processing"}
 
     def test_connection_initialization(self):
         """Test SSEConnection initialization with default and custom parameters."""
@@ -70,14 +65,14 @@ class TestSSEConnection:
         connection = SSEConnection(self.test_client_id)
 
         assert connection.client_id == self.test_client_id
-        assert connection.subscriptions == {'summary_progress', 'summary_complete', 'system'}
+        assert connection.subscriptions == {"summary_progress", "summary_complete", "system"}
         assert connection.is_active is True
         assert isinstance(connection.created_at, datetime)
         assert isinstance(connection.last_activity, datetime)
         assert connection.queue.maxsize == 1000
 
         # Test with custom subscriptions
-        custom_subs = {'custom_event', 'test_event'}
+        custom_subs = {"custom_event", "test_event"}
         connection = SSEConnection(self.test_client_id, custom_subs)
         assert connection.subscriptions == custom_subs
 
@@ -110,10 +105,10 @@ class TestSSEConnection:
 
     def test_send_event_success(self):
         """Test successful event queuing."""
-        connection = SSEConnection(self.test_client_id, {'summary_progress'})
+        connection = SSEConnection(self.test_client_id, {"summary_progress"})
 
         # Test sending subscribed event
-        result = connection.send_event('summary_progress', self.test_event_data)
+        result = connection.send_event("summary_progress", self.test_event_data)
         assert result is True
         assert connection.queue.qsize() == 1
 
@@ -121,27 +116,27 @@ class TestSSEConnection:
         events = connection.get_events(timeout=0.1)
         assert len(events) == 1
 
-        event_lines = events[0].strip().split('\n')
+        event_lines = events[0].strip().split("\n")
         assert event_lines[0] == "event: summary_progress"
         assert event_lines[1].startswith("data: ")
 
         # Parse event data
         event_data = json.loads(event_lines[1][6:])  # Remove "data: " prefix
-        assert event_data['job_id'] == self.test_event_data['job_id']
-        assert event_data['client_id'] == self.test_client_id
-        assert 'timestamp' in event_data
+        assert event_data["job_id"] == self.test_event_data["job_id"]
+        assert event_data["client_id"] == self.test_client_id
+        assert "timestamp" in event_data
 
     def test_send_event_subscription_filtering(self):
         """Test that events are filtered based on subscriptions."""
-        connection = SSEConnection(self.test_client_id, {'system'})
+        connection = SSEConnection(self.test_client_id, {"system"})
 
         # Test sending non-subscribed event
-        result = connection.send_event('summary_progress', self.test_event_data)
+        result = connection.send_event("summary_progress", self.test_event_data)
         assert result is False
         assert connection.queue.qsize() == 0
 
         # Test sending subscribed event
-        result = connection.send_event('system', {'message': 'test'})
+        result = connection.send_event("system", {"message": "test"})
         assert result is True
         assert connection.queue.qsize() == 1
 
@@ -150,7 +145,7 @@ class TestSSEConnection:
         connection = SSEConnection(self.test_client_id)
         connection.is_active = False
 
-        result = connection.send_event('summary_progress', self.test_event_data)
+        result = connection.send_event("summary_progress", self.test_event_data)
         assert result is False
         assert connection.queue.qsize() == 0
 
@@ -159,10 +154,10 @@ class TestSSEConnection:
         connection = SSEConnection(self.test_client_id)
 
         # Mock a full queue
-        with patch.object(connection.queue, 'put') as mock_put:
+        with patch.object(connection.queue, "put") as mock_put:
             mock_put.side_effect = queue.Full()
 
-            result = connection.send_event('summary_progress', self.test_event_data)
+            result = connection.send_event("summary_progress", self.test_event_data)
             assert result is False
 
     def test_send_event_exception_handling(self):
@@ -170,10 +165,10 @@ class TestSSEConnection:
         connection = SSEConnection(self.test_client_id)
 
         # Mock an exception during queue put
-        with patch.object(connection.queue, 'put') as mock_put:
+        with patch.object(connection.queue, "put") as mock_put:
             mock_put.side_effect = Exception("Test exception")
 
-            result = connection.send_event('summary_progress', self.test_event_data)
+            result = connection.send_event("summary_progress", self.test_event_data)
             assert result is False
 
     def test_get_events_with_data(self):
@@ -181,8 +176,8 @@ class TestSSEConnection:
         connection = SSEConnection(self.test_client_id)
 
         # Add multiple events
-        connection.send_event('summary_progress', {'progress': 0.3})
-        connection.send_event('summary_progress', {'progress': 0.7})
+        connection.send_event("summary_progress", {"progress": 0.3})
+        connection.send_event("summary_progress", {"progress": 0.7})
 
         events = connection.get_events(timeout=0.1)
         assert len(events) == 2
@@ -200,12 +195,12 @@ class TestSSEConnection:
         assert len(events) == 1
 
         # Should be a heartbeat event
-        event_lines = events[0].strip().split('\n')
+        event_lines = events[0].strip().split("\n")
         assert event_lines[0] == "event: ping"
 
         event_data = json.loads(event_lines[1][6:])
-        assert 'timestamp' in event_data
-        assert event_data['client_id'] == self.test_client_id
+        assert "timestamp" in event_data
+        assert event_data["client_id"] == self.test_client_id
 
     def test_get_events_immediate_availability(self):
         """Test getting multiple immediately available events."""
@@ -213,23 +208,23 @@ class TestSSEConnection:
 
         # Fill queue quickly
         for i in range(5):
-            connection.send_event('summary_progress', {'sequence': i})
+            connection.send_event("summary_progress", {"sequence": i})
 
         events = connection.get_events(timeout=1.0)
         assert len(events) == 5
 
         # Verify sequence
         for i, event in enumerate(events):
-            event_data = json.loads(event.split('\n')[1][6:])
-            assert event_data['sequence'] == i
+            event_data = json.loads(event.split("\n")[1][6:])
+            assert event_data["sequence"] == i
 
     def test_connection_close(self):
         """Test connection cleanup."""
         connection = SSEConnection(self.test_client_id)
 
         # Add some events
-        connection.send_event('summary_progress', self.test_event_data)
-        connection.send_event('system', {'message': 'test'})
+        connection.send_event("summary_progress", self.test_event_data)
+        connection.send_event("system", {"message": "test"})
         assert connection.queue.qsize() == 2
 
         # Close connection
@@ -239,19 +234,19 @@ class TestSSEConnection:
         assert connection.queue.qsize() == 0
 
         # Verify no more events can be sent
-        result = connection.send_event('summary_progress', self.test_event_data)
+        result = connection.send_event("summary_progress", self.test_event_data)
         assert result is False
 
     def test_format_sse_event(self):
         """Test SSE event formatting."""
         connection = SSEConnection(self.test_client_id)
 
-        event_type = 'test_event'
-        data = {'key': 'value', 'number': 42}
+        event_type = "test_event"
+        data = {"key": "value", "number": 42}
 
         formatted = connection._format_sse_event(event_type, data)
 
-        lines = formatted.split('\n')
+        lines = formatted.split("\n")
         assert lines[0] == f"event: {event_type}"
         assert lines[1].startswith("data: ")
         assert lines[2] == ""  # Empty line
@@ -259,10 +254,10 @@ class TestSSEConnection:
 
         # Parse data
         event_data = json.loads(lines[1][6:])
-        assert event_data['key'] == 'value'
-        assert event_data['number'] == 42
-        assert event_data['client_id'] == self.test_client_id
-        assert 'timestamp' in event_data
+        assert event_data["key"] == "value"
+        assert event_data["number"] == 42
+        assert event_data["client_id"] == self.test_client_id
+        assert "timestamp" in event_data
 
     def test_thread_safety(self):
         """Test thread-safe operations on SSEConnection."""
@@ -271,7 +266,7 @@ class TestSSEConnection:
         def send_events(start_num, count):
             """Send events from a thread."""
             for i in range(start_num, start_num + count):
-                connection.send_event('summary_progress', {'sequence': i})
+                connection.send_event("summary_progress", {"sequence": i})
 
         def receive_events():
             """Receive events from a thread."""
@@ -298,7 +293,7 @@ class TestSSEConnection:
 
         # Verify no deadlocks and connection is still functional
         assert connection.is_active
-        final_result = connection.send_event('summary_progress', {'final': True})
+        final_result = connection.send_event("summary_progress", {"final": True})
         assert final_result is True
 
 
@@ -309,11 +304,7 @@ class TestSSEManager:
         """Set up test data for each test method."""
         self.test_heartbeat_interval = 5
         self.test_max_connections = 10
-        self.test_event_data = {
-            'job_id': 'job_123',
-            'video_id': 'dQw4w9WgXcQ',
-            'progress': 0.5
-        }
+        self.test_event_data = {"job_id": "job_123", "video_id": "dQw4w9WgXcQ", "progress": 0.5}
 
     def teardown_method(self):
         """Clean up after each test."""
@@ -326,10 +317,7 @@ class TestSSEManager:
 
     def test_manager_initialization(self):
         """Test SSEManager initialization."""
-        manager = SSEManager(
-            heartbeat_interval=self.test_heartbeat_interval,
-            max_connections=self.test_max_connections
-        )
+        manager = SSEManager(heartbeat_interval=self.test_heartbeat_interval, max_connections=self.test_max_connections)
 
         assert manager.heartbeat_interval == self.test_heartbeat_interval
         assert manager.max_connections == self.test_max_connections
@@ -371,10 +359,10 @@ class TestSSEManager:
         else:
             # We should have the connected event
             assert "event: connected" in first_event
-            event_data = json.loads(first_event.split('\n')[1][6:])
-            assert event_data['connection_id'] == client_id
-            assert 'subscriptions' in event_data
-            assert 'server_time' in event_data
+            event_data = json.loads(first_event.split("\n")[1][6:])
+            assert event_data["connection_id"] == client_id
+            assert "subscriptions" in event_data
+            assert "server_time" in event_data
 
         manager.shutdown()
 
@@ -414,7 +402,7 @@ class TestSSEManager:
     def test_add_connection_with_custom_subscriptions(self):
         """Test adding connection with custom subscriptions."""
         manager = SSEManager()
-        custom_subs = {'custom_event', 'special_event'}
+        custom_subs = {"custom_event", "special_event"}
 
         connection = manager.add_connection("test_client", custom_subs)
         assert connection.subscriptions == custom_subs
@@ -468,9 +456,9 @@ class TestSSEManager:
         manager = SSEManager()
 
         # Add multiple connections with different subscriptions
-        conn1 = manager.add_connection("client1", {'summary_progress'})
-        conn2 = manager.add_connection("client2", {'summary_progress', 'system'})
-        conn3 = manager.add_connection("client3", {'system'})
+        conn1 = manager.add_connection("client1", {"summary_progress"})
+        conn2 = manager.add_connection("client2", {"summary_progress", "system"})
+        conn3 = manager.add_connection("client3", {"system"})
 
         # Clear connection confirmation events
         for conn in [conn1, conn2, conn3]:
@@ -482,18 +470,18 @@ class TestSSEManager:
         assert conn3.is_active
 
         # Broadcast summary_progress event
-        result = manager.broadcast_event('summary_progress', self.test_event_data)
+        result = manager.broadcast_event("summary_progress", self.test_event_data)
 
         # Check result details for debugging
         expected_sent = 2  # conn1 and conn2 should receive (both subscribed to summary_progress)
         expected_filtered = 0  # No filter applied
-        expected_failed = 0 if conn1.is_active and conn2.is_active else result['failed']
+        expected_failed = 0 if conn1.is_active and conn2.is_active else result["failed"]
 
-        assert result['sent'] == expected_sent, f"Expected {expected_sent} sent, got {result['sent']}. Result: {result}"
+        assert result["sent"] == expected_sent, f"Expected {expected_sent} sent, got {result['sent']}. Result: {result}"
         # Allow for connection failures due to timing issues
-        assert result['failed'] <= 1, f"Too many failures: {result}"
-        assert result['filtered'] == expected_filtered
-        assert result['total_connections'] == 3
+        assert result["failed"] <= 1, f"Too many failures: {result}"
+        assert result["filtered"] == expected_filtered
+        assert result["total_connections"] == 3
 
         # Verify events were received
         events1 = conn1.get_events(timeout=0.1)
@@ -516,9 +504,9 @@ class TestSSEManager:
         manager = SSEManager()
 
         # Add connections
-        conn1 = manager.add_connection("client1", {'system'})
-        conn2 = manager.add_connection("client2", {'system'})
-        conn3 = manager.add_connection("client3", {'system'})
+        conn1 = manager.add_connection("client1", {"system"})
+        conn2 = manager.add_connection("client2", {"system"})
+        conn3 = manager.add_connection("client3", {"system"})
 
         # Clear connection events
         for conn in [conn1, conn2, conn3]:
@@ -526,15 +514,15 @@ class TestSSEManager:
 
         # Define filter function (only send to client1 and client3)
         def filter_func(connection):
-            return connection.client_id in ['client1', 'client3']
+            return connection.client_id in ["client1", "client3"]
 
         # Broadcast with filter
-        result = manager.broadcast_event('system', {'message': 'filtered'}, filter_func)
+        result = manager.broadcast_event("system", {"message": "filtered"}, filter_func)
 
-        assert result['sent'] == 2  # client1 and client3
-        assert result['failed'] == 0
-        assert result['filtered'] == 1  # client2 was filtered out
-        assert result['total_connections'] == 3
+        assert result["sent"] == 2  # client1 and client3
+        assert result["failed"] == 0
+        assert result["filtered"] == 1  # client2 was filtered out
+        assert result["total_connections"] == 3
 
         # Verify filtering worked
         events1 = conn1.get_events(timeout=0.1)
@@ -555,12 +543,12 @@ class TestSSEManager:
         conn = manager.add_connection("client1")
 
         # Mock send_event to fail
-        with patch.object(conn, 'send_event', return_value=False):
-            result = manager.broadcast_event('summary_progress', self.test_event_data)
+        with patch.object(conn, "send_event", return_value=False):
+            result = manager.broadcast_event("summary_progress", self.test_event_data)
 
-            assert result['sent'] == 0
-            assert result['failed'] == 1
-            assert result['total_connections'] == 1
+            assert result["sent"] == 0
+            assert result["failed"] == 1
+            assert result["total_connections"] == 1
 
         manager.shutdown()
 
@@ -572,11 +560,11 @@ class TestSSEManager:
         conn = manager.add_connection("client1")
 
         # Mock send_event to raise exception
-        with patch.object(conn, 'send_event', side_effect=Exception("Test error")):
-            result = manager.broadcast_event('summary_progress', self.test_event_data)
+        with patch.object(conn, "send_event", side_effect=Exception("Test error")):
+            result = manager.broadcast_event("summary_progress", self.test_event_data)
 
-            assert result['sent'] == 0
-            assert result['failed'] == 1
+            assert result["sent"] == 0
+            assert result["failed"] == 1
 
         manager.shutdown()
 
@@ -587,11 +575,11 @@ class TestSSEManager:
         stats = manager.get_connection_stats()
 
         expected = {
-            'total_connections': 0,
-            'average_age_seconds': 0,
-            'average_idle_seconds': 0,
-            'oldest_connection_seconds': 0,
-            'subscriptions_summary': {}
+            "total_connections": 0,
+            "average_age_seconds": 0,
+            "average_idle_seconds": 0,
+            "oldest_connection_seconds": 0,
+            "subscriptions_summary": {},
         }
 
         assert stats == expected
@@ -603,24 +591,24 @@ class TestSSEManager:
         manager = SSEManager()
 
         # Add connections with different subscriptions
-        conn1 = manager.add_connection("client1", {'summary_progress', 'system'})
+        conn1 = manager.add_connection("client1", {"summary_progress", "system"})
         time.sleep(0.1)  # Small delay for age difference
-        conn2 = manager.add_connection("client2", {'system', 'custom'})
-        conn3 = manager.add_connection("client3", {'summary_progress'})
+        conn2 = manager.add_connection("client2", {"system", "custom"})
+        conn3 = manager.add_connection("client3", {"summary_progress"})
 
         stats = manager.get_connection_stats()
 
-        assert stats['total_connections'] == 3
-        assert stats['average_age_seconds'] > 0
-        assert stats['average_idle_seconds'] >= 0
-        assert stats['oldest_connection_seconds'] > 0
-        assert stats['active_connections'] == 3
+        assert stats["total_connections"] == 3
+        assert stats["average_age_seconds"] > 0
+        assert stats["average_idle_seconds"] >= 0
+        assert stats["oldest_connection_seconds"] > 0
+        assert stats["active_connections"] == 3
 
         # Check subscription summary
-        subs = stats['subscriptions_summary']
-        assert subs['summary_progress'] == 2  # conn1, conn3
-        assert subs['system'] == 2  # conn1, conn2
-        assert subs['custom'] == 1  # conn2
+        subs = stats["subscriptions_summary"]
+        assert subs["summary_progress"] == 2  # conn1, conn3
+        assert subs["system"] == 2  # conn1, conn2
+        assert subs["custom"] == 1  # conn2
 
         manager.shutdown()
 
@@ -705,7 +693,7 @@ class TestSSEManager:
 
             # Send some events
             for i in range(5):
-                conn.send_event('summary_progress', {'sequence': i, 'client': client_id})
+                conn.send_event("summary_progress", {"sequence": i, "client": client_id})
 
             # Receive events
             events = conn.get_events(timeout=1.0)
@@ -767,7 +755,7 @@ class TestSSEManager:
         def worker_broadcast(worker_id):
             """Worker function for broadcasting events."""
             for i in range(5):
-                manager.broadcast_event('system', {'worker': worker_id, 'message': i})
+                manager.broadcast_event("system", {"worker": worker_id, "message": i})
                 time.sleep(0.02)
 
         def worker_stats():
@@ -804,7 +792,7 @@ class TestSSEManager:
         # Verify manager is still functional
         stats = manager.get_connection_stats()
         assert isinstance(stats, dict)
-        assert 'total_connections' in stats
+        assert "total_connections" in stats
 
         manager.shutdown()
 
@@ -822,11 +810,11 @@ class TestEventFormatting:
 
         event = format_summary_progress_event(job_id, video_id, progress, status, message)
 
-        assert event['job_id'] == job_id
-        assert event['video_id'] == video_id
-        assert event['progress'] == progress
-        assert event['status'] == status
-        assert event['message'] == message
+        assert event["job_id"] == job_id
+        assert event["video_id"] == video_id
+        assert event["progress"] == progress
+        assert event["status"] == status
+        assert event["message"] == message
 
     def test_format_summary_progress_event_progress_clamping(self):
         """Test progress value clamping in summary progress events."""
@@ -834,15 +822,15 @@ class TestEventFormatting:
         event_low = format_summary_progress_event("job1", "vid1", -0.5, "status")
         event_high = format_summary_progress_event("job2", "vid2", 1.5, "status")
 
-        assert event_low['progress'] == 0.0
-        assert event_high['progress'] == 1.0
+        assert event_low["progress"] == 0.0
+        assert event_high["progress"] == 1.0
 
         # Test boundary values
         event_min = format_summary_progress_event("job3", "vid3", 0.0, "status")
         event_max = format_summary_progress_event("job4", "vid4", 1.0, "status")
 
-        assert event_min['progress'] == 0.0
-        assert event_max['progress'] == 1.0
+        assert event_min["progress"] == 0.0
+        assert event_max["progress"] == 1.0
 
     def test_format_summary_complete_event(self):
         """Test summary completion event formatting."""
@@ -853,25 +841,21 @@ class TestEventFormatting:
         thumbnail_url = "https://example.com/thumb.jpg"
         cached = True
 
-        event = format_summary_complete_event(
-            job_id, video_id, title, summary, thumbnail_url, cached
-        )
+        event = format_summary_complete_event(job_id, video_id, title, summary, thumbnail_url, cached)
 
-        assert event['job_id'] == job_id
-        assert event['video_id'] == video_id
-        assert event['title'] == title
-        assert event['summary'] == summary
-        assert event['thumbnail_url'] == thumbnail_url
-        assert event['cached'] == cached
+        assert event["job_id"] == job_id
+        assert event["video_id"] == video_id
+        assert event["title"] == title
+        assert event["summary"] == summary
+        assert event["thumbnail_url"] == thumbnail_url
+        assert event["cached"] == cached
 
     def test_format_summary_complete_event_defaults(self):
         """Test summary completion event with default values."""
-        event = format_summary_complete_event(
-            "job_789", "vid_789", "Title", "Summary text"
-        )
+        event = format_summary_complete_event("job_789", "vid_789", "Title", "Summary text")
 
-        assert event['thumbnail_url'] == ""
-        assert event['cached'] == False
+        assert event["thumbnail_url"] == ""
+        assert event["cached"] == False
 
     def test_format_system_event(self):
         """Test system event formatting."""
@@ -881,10 +865,10 @@ class TestEventFormatting:
 
         event = format_system_event(message, level, data)
 
-        assert event['message'] == message
-        assert event['level'] == level
-        assert event['maintenance_time'] == data['maintenance_time']
-        assert event['duration'] == data['duration']
+        assert event["message"] == message
+        assert event["level"] == level
+        assert event["maintenance_time"] == data["maintenance_time"]
+        assert event["duration"] == data["duration"]
 
     def test_format_system_event_defaults(self):
         """Test system event with default values."""
@@ -892,8 +876,8 @@ class TestEventFormatting:
 
         event = format_system_event(message)
 
-        assert event['message'] == message
-        assert event['level'] == "info"
+        assert event["message"] == message
+        assert event["level"] == "info"
         assert len(event) == 2  # Only message and level
 
     def test_format_system_event_no_data(self):
@@ -903,8 +887,8 @@ class TestEventFormatting:
 
         event = format_system_event(message, level, None)
 
-        assert event['message'] == message
-        assert event['level'] == level
+        assert event["message"] == message
+        assert event["level"] == level
         assert len(event) == 2
 
 
@@ -981,17 +965,17 @@ class TestFlaskIntegration:
     def setup_method(self):
         """Set up Flask test client."""
         self.app = Flask(__name__)
-        self.app.config['TESTING'] = True
+        self.app.config["TESTING"] = True
         self.client = self.app.test_client()
         self.manager = SSEManager()
 
         # Create SSE endpoint
-        @self.app.route('/events')
+        @self.app.route("/events")
         def events():
             """SSE endpoint for testing."""
             from flask import Response, request
 
-            client_id = request.args.get('client_id')
+            client_id = request.args.get("client_id")
             if not client_id:
                 client_id = str(uuid.uuid4())
 
@@ -1010,12 +994,8 @@ class TestFlaskIntegration:
 
             return Response(
                 event_stream(),
-                mimetype='text/event-stream',
-                headers={
-                    'Cache-Control': 'no-cache',
-                    'Connection': 'keep-alive',
-                    'Access-Control-Allow-Origin': '*'
-                }
+                mimetype="text/event-stream",
+                headers={"Cache-Control": "no-cache", "Connection": "keep-alive", "Access-Control-Allow-Origin": "*"},
             )
 
     def teardown_method(self):
@@ -1025,46 +1005,46 @@ class TestFlaskIntegration:
     def test_sse_endpoint_headers(self):
         """Test SSE endpoint returns proper headers."""
         with self.app.test_client() as client:
-            response = client.get('/events?client_id=test_client')
+            response = client.get("/events?client_id=test_client")
 
             assert response.status_code == 200
-            assert response.mimetype == 'text/event-stream'
-            assert response.headers.get('Cache-Control') == 'no-cache'
-            assert response.headers.get('Connection') == 'keep-alive'
-            assert response.headers.get('Access-Control-Allow-Origin') == '*'
+            assert response.mimetype == "text/event-stream"
+            assert response.headers.get("Cache-Control") == "no-cache"
+            assert response.headers.get("Connection") == "keep-alive"
+            assert response.headers.get("Access-Control-Allow-Origin") == "*"
 
     def test_sse_endpoint_connection_event(self):
         """Test that SSE endpoint sends connection confirmation."""
         with self.app.test_client() as client:
-            response = client.get('/events?client_id=test_client_flask')
+            response = client.get("/events?client_id=test_client_flask")
 
             # Read first chunk of data
             data_iter = response.response
             first_chunk = next(data_iter)
 
             # Should contain connection event or ping (if connected event was consumed)
-            chunk_str = first_chunk.decode('utf-8')
+            chunk_str = first_chunk.decode("utf-8")
             # Either connected event or ping with client ID should be present
-            if 'event: connected' in chunk_str:
-                assert 'test_client_flask' in chunk_str
+            if "event: connected" in chunk_str:
+                assert "test_client_flask" in chunk_str
             else:
                 # If we get a ping instead, verify it contains client ID
-                assert 'event: ping' in chunk_str
-                assert 'test_client_flask' in chunk_str
+                assert "event: ping" in chunk_str
+                assert "test_client_flask" in chunk_str
 
     def test_sse_endpoint_auto_client_id(self):
         """Test SSE endpoint with auto-generated client ID."""
         with self.app.test_client() as client:
-            response = client.get('/events')
+            response = client.get("/events")
 
             assert response.status_code == 200
 
             # Should still work without explicit client_id
             data_iter = response.response
             first_chunk = next(data_iter)
-            chunk_str = first_chunk.decode('utf-8')
+            chunk_str = first_chunk.decode("utf-8")
             # Either connected event or ping should be present
-            assert ('event: connected' in chunk_str) or ('event: ping' in chunk_str)
+            assert ("event: connected" in chunk_str) or ("event: ping" in chunk_str)
 
 
 class TestPerformanceAndLoad:
@@ -1089,12 +1069,10 @@ class TestPerformanceAndLoad:
         event_count = 100
 
         for i in range(event_count):
-            result = manager.broadcast_event('summary_progress', {
-                'sequence': i,
-                'progress': i / event_count,
-                'status': f'processing_step_{i}'
-            })
-            assert result['sent'] == 50  # All connections should receive
+            result = manager.broadcast_event(
+                "summary_progress", {"sequence": i, "progress": i / event_count, "status": f"processing_step_{i}"}
+            )
+            assert result["sent"] == 50  # All connections should receive
 
         end_time = time.time()
         duration = end_time - start_time
@@ -1120,7 +1098,7 @@ class TestPerformanceAndLoad:
             conn = manager.add_connection(client_id)
 
             # Send a few events
-            conn.send_event('summary_progress', {'test': i})
+            conn.send_event("summary_progress", {"test": i})
 
             # Remove connection
             manager.remove_connection(client_id)
@@ -1142,7 +1120,7 @@ class TestPerformanceAndLoad:
         # Try to overflow the queue (maxsize=1000)
         overflow_count = 0
         for i in range(1500):  # Try to send more than queue capacity
-            if not connection.send_event('summary_progress', {'sequence': i}):
+            if not connection.send_event("summary_progress", {"sequence": i}):
                 overflow_count += 1
 
         # Some events should have been dropped due to queue limit
@@ -1162,20 +1140,15 @@ class TestPerformanceAndLoad:
         def broadcast_worker(worker_id, event_count):
             """Worker function for concurrent broadcasting."""
             for i in range(event_count):
-                manager.broadcast_event('system', {
-                    'worker': worker_id,
-                    'sequence': i,
-                    'message': f'Message from worker {worker_id}'
-                })
+                manager.broadcast_event(
+                    "system", {"worker": worker_id, "sequence": i, "message": f"Message from worker {worker_id}"}
+                )
 
         start_time = time.time()
 
         # Run concurrent broadcasts
         with ThreadPoolExecutor(max_workers=5) as executor:
-            futures = [
-                executor.submit(broadcast_worker, i, 20)
-                for i in range(5)
-            ]
+            futures = [executor.submit(broadcast_worker, i, 20) for i in range(5)]
 
             # Wait for all to complete
             for future in as_completed(futures):
@@ -1203,20 +1176,20 @@ class TestEdgeCases:
 
         # Test with various malformed data
         test_cases = [
-            {'circular_ref': None},  # Will be handled by json.dumps
-            {'large_string': 'x' * 100000},  # Very large string
-            {'unicode': '🎥📺🔊'},  # Unicode characters
-            {'nested': {'deep': {'very': {'nested': 'value'}}}},  # Deep nesting
+            {"circular_ref": None},  # Will be handled by json.dumps
+            {"large_string": "x" * 100000},  # Very large string
+            {"unicode": "🎥📺🔊"},  # Unicode characters
+            {"nested": {"deep": {"very": {"nested": "value"}}}},  # Deep nesting
         ]
 
         for i, test_data in enumerate(test_cases):
             if i == 0:
                 # Create circular reference
-                test_data['circular_ref'] = test_data
+                test_data["circular_ref"] = test_data
 
             # Should handle gracefully without crashing
             try:
-                result = connection.send_event('summary_progress', test_data)
+                result = connection.send_event("summary_progress", test_data)
                 # If circular reference, should fail
                 if i == 0:
                     assert result is False
@@ -1244,8 +1217,8 @@ class TestEdgeCases:
         connection.get_events = failing_get_events
 
         # Broadcasting should still work (events queued)
-        result = manager.broadcast_event('summary_progress', {'test': 'data'})
-        assert result['sent'] == 1  # Event should be queued
+        result = manager.broadcast_event("summary_progress", {"test": "data"})
+        assert result["sent"] == 1  # Event should be queued
 
         # Restore original method
         connection.get_events = original_get
@@ -1281,13 +1254,13 @@ class TestEdgeCases:
 
         # Test rapid queue filling and emptying
         for i in range(50):
-            connection.send_event('summary_progress', {'rapid': i})
+            connection.send_event("summary_progress", {"rapid": i})
 
         # Get events in small batches
         all_events = []
         while True:
             events = connection.get_events(timeout=0.1)
-            if not events or (len(events) == 1 and 'event: ping' in events[0]):
+            if not events or (len(events) == 1 and "event: ping" in events[0]):
                 break
             all_events.extend(events)
 
@@ -1305,7 +1278,7 @@ class TestEdgeCases:
             lambda: manager.add_connection(f"consistency_test_{uuid.uuid4()}"),
             lambda: manager.remove_connection("nonexistent"),
             lambda: manager.get_connection_stats(),
-            lambda: manager.broadcast_event('system', {'test': 'data'}),
+            lambda: manager.broadcast_event("system", {"test": "data"}),
             lambda: manager.cleanup_stale_connections(),
         ]
 
@@ -1326,11 +1299,11 @@ class TestEdgeCases:
         # Manager should still be in consistent state
         stats = manager.get_connection_stats()
         assert isinstance(stats, dict)
-        assert stats['total_connections'] >= 0
-        assert stats['total_connections'] <= 10  # Within limit
+        assert stats["total_connections"] >= 0
+        assert stats["total_connections"] <= 10  # Within limit
 
         manager.shutdown()
 
 
-if __name__ == '__main__':
-    pytest.main([__file__, '-v', '--tb=short'])
+if __name__ == "__main__":
+    pytest.main([__file__, "-v", "--tb=short"])

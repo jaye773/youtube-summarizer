@@ -12,13 +12,13 @@ Classes:
 """
 
 import json
+import logging
 import queue
 import threading
 import time
 import uuid
 from datetime import datetime
-from typing import Dict, Any, Optional, Callable, List, Set
-import logging
+from typing import Any, Callable, Dict, List, Optional, Set
 
 logger = logging.getLogger(__name__)
 
@@ -44,7 +44,7 @@ class SSEConnection:
         self.queue = queue.Queue(maxsize=1000)  # Limit queue size to prevent memory issues
         self.created_at = datetime.now()
         self.last_activity = datetime.now()
-        self.subscriptions = subscriptions or {'summary_progress', 'summary_complete', 'system'}
+        self.subscriptions = subscriptions or {"summary_progress", "summary_complete", "system"}
         self.is_active = True
         self._lock = threading.Lock()
 
@@ -111,7 +111,7 @@ class SSEConnection:
 
         except queue.Empty:
             # Send heartbeat if no events
-            events.append(self._format_sse_event('ping', {'timestamp': datetime.now().isoformat()}))
+            events.append(self._format_sse_event("ping", {"timestamp": datetime.now().isoformat()}))
 
         return events
 
@@ -140,17 +140,10 @@ class SSEConnection:
             str: Formatted SSE event string
         """
         # Add metadata
-        formatted_data = {
-            **data,
-            'timestamp': datetime.now().isoformat(),
-            'client_id': self.client_id
-        }
+        formatted_data = {**data, "timestamp": datetime.now().isoformat(), "client_id": self.client_id}
 
         # Format as SSE event
-        event_lines = [
-            f"event: {event_type}",
-            f"data: {json.dumps(formatted_data)}"
-        ]
+        event_lines = [f"event: {event_type}", f"data: {json.dumps(formatted_data)}"]
 
         return "\n".join(event_lines) + "\n\n"
 
@@ -192,7 +185,9 @@ class SSEManager:
         # Start background cleanup thread
         self._start_cleanup_thread()
 
-        logger.info(f"SSE Manager initialized with max_connections={max_connections}, heartbeat_interval={heartbeat_interval}s")
+        logger.info(
+            f"SSE Manager initialized with max_connections={max_connections}, heartbeat_interval={heartbeat_interval}s"
+        )
 
     def add_connection(self, client_id: str = None, subscriptions: Set[str] = None) -> SSEConnection:
         """
@@ -227,11 +222,14 @@ class SSEManager:
             self.connections[client_id] = connection
 
             # Send connection confirmation event
-            connection.send_event('connected', {
-                'connection_id': client_id,
-                'subscriptions': list(connection.subscriptions),
-                'server_time': datetime.now().isoformat()
-            })
+            connection.send_event(
+                "connected",
+                {
+                    "connection_id": client_id,
+                    "subscriptions": list(connection.subscriptions),
+                    "server_time": datetime.now().isoformat(),
+                },
+            )
 
             logger.info(f"SSE connection added: {client_id} (total: {len(self.connections)})")
             return connection
@@ -268,8 +266,9 @@ class SSEManager:
         with self._lock:
             return self.connections.get(client_id)
 
-    def broadcast_event(self, event_type: str, data: Dict[str, Any],
-                       filter_func: Callable[[SSEConnection], bool] = None) -> Dict[str, int]:
+    def broadcast_event(
+        self, event_type: str, data: Dict[str, Any], filter_func: Callable[[SSEConnection], bool] = None
+    ) -> Dict[str, int]:
         """
         Broadcast an event to multiple clients.
 
@@ -306,10 +305,10 @@ class SSEManager:
                 failed_count += 1
 
         result = {
-            'sent': sent_count,
-            'failed': failed_count,
-            'filtered': filtered_count,
-            'total_connections': len(connections_snapshot)
+            "sent": sent_count,
+            "failed": failed_count,
+            "filtered": filtered_count,
+            "total_connections": len(connections_snapshot),
         }
 
         logger.debug(f"Broadcast {event_type}: {result}")
@@ -328,11 +327,11 @@ class SSEManager:
         total = len(connections_snapshot)
         if total == 0:
             return {
-                'total_connections': 0,
-                'average_age_seconds': 0,
-                'average_idle_seconds': 0,
-                'oldest_connection_seconds': 0,
-                'subscriptions_summary': {}
+                "total_connections": 0,
+                "average_age_seconds": 0,
+                "average_idle_seconds": 0,
+                "oldest_connection_seconds": 0,
+                "subscriptions_summary": {},
             }
 
         ages = [conn.age_seconds for conn in connections_snapshot]
@@ -345,12 +344,12 @@ class SSEManager:
                 subscriptions_count[sub] = subscriptions_count.get(sub, 0) + 1
 
         return {
-            'total_connections': total,
-            'average_age_seconds': sum(ages) / total,
-            'average_idle_seconds': sum(idle_times) / total,
-            'oldest_connection_seconds': max(ages),
-            'subscriptions_summary': subscriptions_count,
-            'active_connections': len([c for c in connections_snapshot if c.is_active])
+            "total_connections": total,
+            "average_age_seconds": sum(ages) / total,
+            "average_idle_seconds": sum(idle_times) / total,
+            "oldest_connection_seconds": max(ages),
+            "subscriptions_summary": subscriptions_count,
+            "active_connections": len([c for c in connections_snapshot if c.is_active]),
         }
 
     def cleanup_stale_connections(self, max_idle_seconds: int = 300) -> int:
@@ -404,6 +403,7 @@ class SSEManager:
 
     def _start_cleanup_thread(self):
         """Start the background cleanup thread."""
+
         def cleanup_worker():
             while not self._shutdown_event.is_set():
                 try:
@@ -427,25 +427,27 @@ class SSEManager:
     def _send_heartbeat(self):
         """Send heartbeat events to all active connections."""
         heartbeat_data = {
-            'message': 'heartbeat',
-            'server_time': datetime.now().isoformat(),
-            'connection_count': len(self.connections)
+            "message": "heartbeat",
+            "server_time": datetime.now().isoformat(),
+            "connection_count": len(self.connections),
         }
 
         # Only send to connections that haven't had activity recently
         def needs_heartbeat(conn: SSEConnection) -> bool:
             return conn.idle_seconds > (self.heartbeat_interval * 0.8)
 
-        result = self.broadcast_event('ping', heartbeat_data, filter_func=needs_heartbeat)
+        result = self.broadcast_event("ping", heartbeat_data, filter_func=needs_heartbeat)
 
-        if result['sent'] > 0:
+        if result["sent"] > 0:
             logger.debug(f"Sent heartbeat to {result['sent']} connections")
 
 
 # Utility functions for SSE event formatting
 
-def format_summary_progress_event(job_id: str, video_id: str, progress: float,
-                                status: str, message: str = "") -> Dict[str, Any]:
+
+def format_summary_progress_event(
+    job_id: str, video_id: str, progress: float, status: str, message: str = ""
+) -> Dict[str, Any]:
     """
     Format a summary progress event.
 
@@ -460,17 +462,17 @@ def format_summary_progress_event(job_id: str, video_id: str, progress: float,
         Dict formatted for SSE transmission
     """
     return {
-        'job_id': job_id,
-        'video_id': video_id,
-        'progress': min(max(progress, 0.0), 1.0),  # Clamp between 0-1
-        'status': status,
-        'message': message
+        "job_id": job_id,
+        "video_id": video_id,
+        "progress": min(max(progress, 0.0), 1.0),  # Clamp between 0-1
+        "status": status,
+        "message": message,
     }
 
 
-def format_summary_complete_event(job_id: str, video_id: str, title: str,
-                                summary: str, thumbnail_url: str = "",
-                                cached: bool = False) -> Dict[str, Any]:
+def format_summary_complete_event(
+    job_id: str, video_id: str, title: str, summary: str, thumbnail_url: str = "", cached: bool = False
+) -> Dict[str, Any]:
     """
     Format a summary completion event.
 
@@ -486,17 +488,16 @@ def format_summary_complete_event(job_id: str, video_id: str, title: str,
         Dict formatted for SSE transmission
     """
     return {
-        'job_id': job_id,
-        'video_id': video_id,
-        'title': title,
-        'summary': summary,
-        'thumbnail_url': thumbnail_url,
-        'cached': cached
+        "job_id": job_id,
+        "video_id": video_id,
+        "title": title,
+        "summary": summary,
+        "thumbnail_url": thumbnail_url,
+        "cached": cached,
     }
 
 
-def format_system_event(message: str, level: str = "info",
-                       data: Dict[str, Any] = None) -> Dict[str, Any]:
+def format_system_event(message: str, level: str = "info", data: Dict[str, Any] = None) -> Dict[str, Any]:
     """
     Format a system event.
 
@@ -508,10 +509,7 @@ def format_system_event(message: str, level: str = "info",
     Returns:
         Dict formatted for SSE transmission
     """
-    event_data = {
-        'message': message,
-        'level': level
-    }
+    event_data = {"message": message, "level": level}
 
     if data:
         event_data.update(data)

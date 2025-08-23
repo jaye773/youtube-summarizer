@@ -11,11 +11,16 @@ import threading
 import time
 import traceback
 from datetime import datetime, timezone
-from typing import Optional, Dict, Any, List, Callable
+from typing import Any, Callable, Dict, List, Optional
 
 from job_models import (
-    ProcessingJob, JobStatus, JobType, JobResult, WorkerMetrics,
-    create_video_job, create_playlist_job
+    JobResult,
+    JobStatus,
+    JobType,
+    ProcessingJob,
+    WorkerMetrics,
+    create_playlist_job,
+    create_video_job,
 )
 from job_queue import JobScheduler
 
@@ -40,8 +45,7 @@ class WorkerThread:
     Each worker runs in its own thread and handles job execution.
     """
 
-    def __init__(self, worker_id: str, job_scheduler: JobScheduler,
-                 notification_callback: Optional[Callable] = None):
+    def __init__(self, worker_id: str, job_scheduler: JobScheduler, notification_callback: Optional[Callable] = None):
         """
         Initialize worker thread.
 
@@ -191,7 +195,7 @@ class WorkerThread:
                 job_type=job.job_type,
                 success=True,
                 data=result_data,
-                processing_time=processing_time
+                processing_time=processing_time,
             )
 
         except Exception as e:
@@ -208,7 +212,7 @@ class WorkerThread:
                 job_type=job.job_type,
                 success=False,
                 error=error_msg,
-                processing_time=processing_time
+                processing_time=processing_time,
             )
 
     def _process_video_job(self, job: ProcessingJob) -> Dict[str, Any]:
@@ -221,8 +225,8 @@ class WorkerThread:
         Returns:
             Dictionary with video processing results
         """
-        url = job.data.get('url', '')
-        model_key = job.data.get('model_key')
+        url = job.data.get("url", "")
+        model_key = job.data.get("model_key")
 
         # Step 1: Extract video ID and clean URL
         self._notify_progress(job, 0.1, "Extracting video ID...")
@@ -239,8 +243,8 @@ class WorkerThread:
         with self._cache_lock:
             if cache_key in self._summary_cache:
                 cached_result = self._summary_cache[cache_key].copy()
-                cached_result['cached'] = True
-                cached_result['video_id'] = video_id
+                cached_result["cached"] = True
+                cached_result["video_id"] = video_id
                 self._notify_progress(job, 1.0, "Retrieved from cache")
                 return cached_result
 
@@ -250,8 +254,8 @@ class WorkerThread:
         if not video_details or video_id not in video_details:
             raise ValueError("Could not fetch video details")
 
-        title = video_details[video_id]['title']
-        thumbnail_url = video_details[video_id].get('thumbnail_url')
+        title = video_details[video_id]["title"]
+        thumbnail_url = video_details[video_id].get("thumbnail_url")
 
         # Step 4: Get transcript
         self._notify_progress(job, 0.4, "Fetching transcript...")
@@ -270,14 +274,14 @@ class WorkerThread:
         # Step 6: Cache and return result
         self._notify_progress(job, 0.9, "Caching result...")
         result = {
-            'video_id': video_id,
-            'title': title,
-            'summary': summary,
-            'thumbnail_url': thumbnail_url,
-            'url': cleaned_url,
-            'model_used': model_key,
-            'cached': False,
-            'processed_at': datetime.now(timezone.utc).isoformat()
+            "video_id": video_id,
+            "title": title,
+            "summary": summary,
+            "thumbnail_url": thumbnail_url,
+            "url": cleaned_url,
+            "model_used": model_key,
+            "cached": False,
+            "processed_at": datetime.now(timezone.utc).isoformat(),
         }
 
         # Cache the result
@@ -301,9 +305,9 @@ class WorkerThread:
         Returns:
             Dictionary with playlist processing results
         """
-        url = job.data.get('url', '')
-        video_ids = job.data.get('video_ids', [])
-        model_key = job.data.get('model_key')
+        url = job.data.get("url", "")
+        video_ids = job.data.get("video_ids", [])
+        model_key = job.data.get("model_key")
 
         if not video_ids:
             # Extract playlist ID and get videos
@@ -316,7 +320,7 @@ class WorkerThread:
             if error:
                 raise ValueError(f"Could not fetch playlist videos: {error}")
 
-            video_ids = [item['contentDetails']['videoId'] for item in video_items if 'contentDetails' in item]
+            video_ids = [item["contentDetails"]["videoId"] for item in video_items if "contentDetails" in item]
 
         if not video_ids:
             raise ValueError("No videos found in playlist")
@@ -332,15 +336,12 @@ class WorkerThread:
             try:
                 # Create a temporary video job
                 video_job_data = {
-                    'url': f"https://www.youtube.com/watch?v={video_id}",
-                    'model_key': model_key,
-                    'type': 'video'
+                    "url": f"https://www.youtube.com/watch?v={video_id}",
+                    "model_key": model_key,
+                    "type": "video",
                 }
                 temp_job = ProcessingJob(
-                    job_id=f"{job.job_id}_video_{i}",
-                    job_type=JobType.VIDEO,
-                    priority=job.priority,
-                    data=video_job_data
+                    job_id=f"{job.job_id}_video_{i}", job_type=JobType.VIDEO, priority=job.priority, data=video_job_data
                 )
 
                 # Process the video
@@ -354,22 +355,17 @@ class WorkerThread:
             except Exception as e:
                 logger.warning(f"Failed to process video {video_id} in playlist: {e}")
                 # Add error entry but continue processing
-                results.append({
-                    'video_id': video_id,
-                    'title': f"Video {video_id}",
-                    'error': str(e),
-                    'cached': False
-                })
+                results.append({"video_id": video_id, "title": f"Video {video_id}", "error": str(e), "cached": False})
 
         self._notify_progress(job, 1.0, "Playlist processing completed")
 
         return {
-            'type': 'playlist',
-            'total_videos': total_videos,
-            'successful_videos': len([r for r in results if 'error' not in r]),
-            'failed_videos': len([r for r in results if 'error' in r]),
-            'results': results,
-            'processed_at': datetime.now(timezone.utc).isoformat()
+            "type": "playlist",
+            "total_videos": total_videos,
+            "successful_videos": len([r for r in results if "error" not in r]),
+            "failed_videos": len([r for r in results if "error" in r]),
+            "results": results,
+            "processed_at": datetime.now(timezone.utc).isoformat(),
         }
 
     def _process_batch_job(self, job: ProcessingJob) -> Dict[str, Any]:
@@ -382,8 +378,8 @@ class WorkerThread:
         Returns:
             Dictionary with batch processing results
         """
-        urls = job.data.get('urls', [])
-        model_key = job.data.get('model_key')
+        urls = job.data.get("urls", [])
+        model_key = job.data.get("model_key")
 
         if not urls:
             raise ValueError("No URLs provided for batch processing")
@@ -400,34 +396,30 @@ class WorkerThread:
                 if get_playlist_id(url):
                     # It's a playlist
                     playlist_job_data = {
-                        'url': url,
-                        'video_ids': [],  # Will be extracted
-                        'model_key': model_key,
-                        'type': 'playlist'
+                        "url": url,
+                        "video_ids": [],  # Will be extracted
+                        "model_key": model_key,
+                        "type": "playlist",
                     }
                     temp_job = ProcessingJob(
                         job_id=f"{job.job_id}_playlist_{i}",
                         job_type=JobType.PLAYLIST,
                         priority=job.priority,
-                        data=playlist_job_data
+                        data=playlist_job_data,
                     )
                     result = self._process_playlist_job(temp_job)
                 else:
                     # It's a video
-                    video_job_data = {
-                        'url': url,
-                        'model_key': model_key,
-                        'type': 'video'
-                    }
+                    video_job_data = {"url": url, "model_key": model_key, "type": "video"}
                     temp_job = ProcessingJob(
                         job_id=f"{job.job_id}_video_{i}",
                         job_type=JobType.VIDEO,
                         priority=job.priority,
-                        data=video_job_data
+                        data=video_job_data,
                     )
                     result = self._process_video_job(temp_job)
 
-                result['url'] = url
+                result["url"] = url
                 results.append(result)
 
                 # Add delay between URLs to prevent rate limiting
@@ -436,21 +428,17 @@ class WorkerThread:
 
             except Exception as e:
                 logger.warning(f"Failed to process URL {url} in batch: {e}")
-                results.append({
-                    'url': url,
-                    'error': str(e),
-                    'processed_at': datetime.now(timezone.utc).isoformat()
-                })
+                results.append({"url": url, "error": str(e), "processed_at": datetime.now(timezone.utc).isoformat()})
 
         self._notify_progress(job, 1.0, "Batch processing completed")
 
         return {
-            'type': 'batch',
-            'total_urls': total_urls,
-            'successful_urls': len([r for r in results if 'error' not in r]),
-            'failed_urls': len([r for r in results if 'error' in r]),
-            'results': results,
-            'processed_at': datetime.now(timezone.utc).isoformat()
+            "type": "batch",
+            "total_urls": total_urls,
+            "successful_urls": len([r for r in results if "error" not in r]),
+            "failed_urls": len([r for r in results if "error" in r]),
+            "results": results,
+            "processed_at": datetime.now(timezone.utc).isoformat(),
         }
 
     def _notify_progress(self, job: ProcessingJob, progress: float, message: str):
@@ -473,10 +461,10 @@ class WorkerThread:
     def get_status(self) -> Dict[str, Any]:
         """Get current worker status"""
         return {
-            'worker_id': self.worker_id,
-            'is_running': self.is_running,
-            'current_job_id': self.current_job.job_id if self.current_job else None,
-            'metrics': self.metrics.to_dict()
+            "worker_id": self.worker_id,
+            "is_running": self.is_running,
+            "current_job_id": self.current_job.job_id if self.current_job else None,
+            "metrics": self.metrics.to_dict(),
         }
 
 
@@ -486,8 +474,7 @@ class WorkerManager:
     Provides high-level interface for job submission and worker management.
     """
 
-    def __init__(self, num_workers: int = 3, max_queue_size: int = 1000,
-                 rate_limit_per_minute: int = 60):
+    def __init__(self, num_workers: int = 3, max_queue_size: int = 1000, rate_limit_per_minute: int = 60):
         """
         Initialize the worker manager.
 
@@ -554,7 +541,7 @@ class WorkerManager:
             worker = WorkerThread(
                 worker_id=worker_id,
                 job_scheduler=self.job_scheduler,
-                notification_callback=self._handle_worker_notification
+                notification_callback=self._handle_worker_notification,
             )
             self.workers.append(worker)
             worker.start()
@@ -643,15 +630,15 @@ class WorkerManager:
         worker_statuses = [worker.get_status() for worker in self.workers]
 
         return {
-            'is_running': self.is_running,
-            'num_workers': len(self.workers),
-            'workers': worker_statuses,
-            'queue': queue_status,
-            'system_metrics': {
-                'total_workers': len(self.workers),
-                'active_workers': sum(1 for w in self.workers if w.current_job is not None),
-                'idle_workers': sum(1 for w in self.workers if w.current_job is None),
-            }
+            "is_running": self.is_running,
+            "num_workers": len(self.workers),
+            "workers": worker_statuses,
+            "queue": queue_status,
+            "system_metrics": {
+                "total_workers": len(self.workers),
+                "active_workers": sum(1 for w in self.workers if w.current_job is not None),
+                "idle_workers": sum(1 for w in self.workers if w.current_job is None),
+            },
         }
 
     def add_progress_callback(self, callback: Callable):
@@ -662,8 +649,9 @@ class WorkerManager:
         """Add callback for job completion"""
         self._completion_callbacks.append(callback)
 
-    def _handle_worker_notification(self, job: ProcessingJob, result: Optional[JobResult],
-                                   progress_update: bool = False):
+    def _handle_worker_notification(
+        self, job: ProcessingJob, result: Optional[JobResult], progress_update: bool = False
+    ):
         """
         Handle notifications from workers.
 

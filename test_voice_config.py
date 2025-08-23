@@ -4,18 +4,20 @@ Test script for voice configuration functionality
 Run this to validate the voice model selection feature
 """
 
+import json
 import os
 import sys
-import json
+
 from voice_config import (
     AVAILABLE_VOICES,
     DEFAULT_VOICE,
+    get_sample_text,
     get_voice_config,
     get_voice_with_fallback,
     get_voices_by_tier,
     validate_voice_name,
-    get_sample_text
 )
+
 
 def test_voice_configuration():
     """Test voice configuration loading and structure"""
@@ -31,13 +33,23 @@ def test_voice_configuration():
 
     # Test voice structure
     for voice_id, voice_data in AVAILABLE_VOICES.items():
-        required_fields = ["name", "display_name", "language_code", "gender",
-                          "accent", "style", "tier", "description", "quality"]
+        required_fields = [
+            "name",
+            "display_name",
+            "language_code",
+            "gender",
+            "accent",
+            "style",
+            "tier",
+            "description",
+            "quality",
+        ]
         for field in required_fields:
             assert field in voice_data, f"Voice {voice_id} missing field: {field}"
     print("✅ All voices have required fields")
 
     return True
+
 
 def test_voice_functions():
     """Test voice utility functions"""
@@ -79,6 +91,7 @@ def test_voice_functions():
 
     return True
 
+
 def test_voice_quality_tiers():
     """Test voice quality tier organization"""
     print("\nTesting Voice Quality Tiers...")
@@ -96,6 +109,7 @@ def test_voice_quality_tiers():
     assert standard_count == 3, "Expected 3 standard voices"
 
     return True
+
 
 def test_voice_characteristics():
     """Test voice characteristics distribution"""
@@ -125,6 +139,7 @@ def test_voice_characteristics():
     print(f"✅ Styles: {', '.join([f'{k}({v})' for k,v in styles.items()])}")
 
     return True
+
 
 def main():
     """Run all tests"""
@@ -157,8 +172,10 @@ def main():
     except Exception as e:
         print(f"\n❌ UNEXPECTED ERROR: {e}")
         import traceback
+
         traceback.print_exc()
         return 1
+
 
 if __name__ == "__main__":
     sys.exit(main())

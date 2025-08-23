@@ -1,23 +1,25 @@
+import atexit
 import hashlib  # For generating filenames
 import html  # For HTML escaping user inputs
 import json
 import os
 import re
-import traceback
 import threading
 import time
+import traceback
 import uuid
 from datetime import datetime, timedelta, timezone
 from functools import wraps
+from queue import Empty, Queue
 from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
-from queue import Queue, Empty
 
 # Import new worker system modules
 try:
-    from worker_manager import WorkerManager
+    from job_models import JobPriority, create_playlist_job, create_video_job
     from job_state import JobStateManager
-    from sse_manager import SSEManager as NewSSEManager, get_sse_manager
-    from job_models import JobPriority, JobType, create_video_job, create_playlist_job
+    from sse_manager import get_sse_manager
+    from worker_manager import WorkerManager
+
     WORKER_SYSTEM_AVAILABLE = True
     print("✅ Worker system modules imported successfully")
 except ImportError as e:
@@ -25,17 +27,29 @@ except ImportError as e:
     print(f"⚠️ Worker system not available: {e}")
     print("   Falling back to synchronous processing only")
 
+import socket
+
 import google.generativeai as genai
+import httplib2
 import openai
-from flask import Flask, Response, jsonify, redirect, render_template, request, session, url_for, stream_template
+from flask import Flask, Response, jsonify, redirect, render_template, request, session, url_for
 from google.api_core.client_options import ClientOptions
 from google.cloud import texttospeech
-from voice_config import AVAILABLE_VOICES, DEFAULT_VOICE, get_voice_config, get_voice_with_fallback, get_voices_by_tier, validate_voice_name, get_sample_text, get_fallback_voice, get_optimized_cache_key, cleanup_audio_cache, should_cleanup_cache, CACHE_CONFIG
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 from youtube_transcript_api import NoTranscriptFound, TranscriptsDisabled, YouTubeTranscriptApi
-import httplib2
-import socket
+
+from voice_config import (
+    AVAILABLE_VOICES,
+    CACHE_CONFIG,
+    DEFAULT_VOICE,
+    cleanup_audio_cache,
+    get_fallback_voice,
+    get_optimized_cache_key,
+    get_voice_with_fallback,
+    get_voices_by_tier,
+    should_cleanup_cache,
+)
 
 # --- CONFIGURATION ---
 app = Flask(__name__)
@@ -45,8 +59,10 @@ app = Flask(__name__)
 sse_connections = {}
 sse_connection_lock = threading.Lock()
 
+
 class SSEConnection:
     """Manages individual SSE connection state"""
+
     def __init__(self, connection_id, session_id=None, user_ip=None):
         self.connection_id = connection_id
         self.session_id = session_id
@@ -64,16 +80,16 @@ class SSEConnection:
 
         try:
             message = {
-                'event': event_type,
-                'data': data,
-                'id': event_id or str(uuid.uuid4()),
-                'timestamp': datetime.now(timezone.utc).isoformat(),
-                'retry': retry
+                "event": event_type,
+                "data": data,
+                "id": event_id or str(uuid.uuid4()),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "retry": retry,
             }
             self.message_queue.put(message, timeout=1)
             self.last_activity = datetime.now(timezone.utc)
             return True
-        except:
+        except Exception:
             self.is_active = False
             return False
 
@@ -89,10 +105,10 @@ class SSEConnection:
             except Empty:
                 # Send keep-alive ping
                 yield {
-                    'event': 'ping',
-                    'data': 'keep-alive',
-                    'id': str(uuid.uuid4()),
-                    'timestamp': datetime.now(timezone.utc).isoformat()
+                    "event": "ping",
+                    "data": "keep-alive",
+                    "id": str(uuid.uuid4()),
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
                 }
 
     def close(self):
@@ -107,7 +123,8 @@ def cleanup_stale_connections():
 
     with sse_connection_lock:
         stale_connections = [
-            conn_id for conn_id, conn in sse_connections.items()
+            conn_id
+            for conn_id, conn in sse_connections.items()
             if conn.last_activity < cutoff_time or not conn.is_active
         ]
 
@@ -136,13 +153,13 @@ def broadcast_to_connections(event_type, data, session_filter=None, subscription
                 # Connection is dead, remove it
                 sse_connections.pop(conn_id, None)
 
+
 # --- WEBSHARE PROXY CONFIGURATION ---
 WEBSHARE_PROXY_ENABLED = os.environ.get("WEBSHARE_PROXY_ENABLED", "false").lower() == "true"
 WEBSHARE_PROXY_HOST = os.environ.get("WEBSHARE_PROXY_HOST")
 WEBSHARE_PROXY_PORT = os.environ.get("WEBSHARE_PROXY_PORT")
 WEBSHARE_PROXY_USERNAME = os.environ.get("WEBSHARE_PROXY_USERNAME")
 WEBSHARE_PROXY_PASSWORD = os.environ.get("WEBSHARE_PROXY_PASSWORD")
-
 
 
 def get_proxy_config():
@@ -294,6 +311,7 @@ worker_manager = None
 job_state_manager = None
 new_sse_manager = None
 
+
 def init_worker_system():
     """Initialize the async worker system"""
     global worker_manager, job_state_manager, new_sse_manager
@@ -315,26 +333,28 @@ def init_worker_system():
             worker_manager = WorkerManager(
                 num_workers=max_workers,
                 max_queue_size=int(os.environ.get("WORKER_MAX_QUEUE_SIZE", "100")),
-                rate_limit_per_minute=int(os.environ.get("WORKER_RATE_LIMIT", "60"))
+                rate_limit_per_minute=int(os.environ.get("WORKER_RATE_LIMIT", "60")),
             )
 
             # Set up app context functions in the worker manager
             # (These will be passed to worker threads to avoid circular imports)
-            worker_manager.set_app_functions({
-                "summary_cache": summary_cache,
-                "youtube": youtube,
-                "tts_client": tts_client,
-                "gemini_model": gemini_model,
-                "openai_client": openai_client,
-                "get_transcript": get_transcript,
-                "generate_summary": generate_summary,
-                "get_video_details": get_video_details,
-                "save_summary_cache": save_summary_cache,
-                "extract_video_id": get_video_id,
-                "extract_playlist_id": get_playlist_id,
-                "get_videos_from_playlist": get_videos_from_playlist,
-                "sse_manager": new_sse_manager
-            })
+            worker_manager.set_app_functions(
+                {
+                    "summary_cache": summary_cache,
+                    "youtube": youtube,
+                    "tts_client": tts_client,
+                    "gemini_model": gemini_model,
+                    "openai_client": openai_client,
+                    "get_transcript": get_transcript,
+                    "generate_summary": generate_summary,
+                    "get_video_details": get_video_details,
+                    "save_summary_cache": save_summary_cache,
+                    "extract_video_id": get_video_id,
+                    "extract_playlist_id": get_playlist_id,
+                    "get_videos_from_playlist": get_videos_from_playlist,
+                    "sse_manager": new_sse_manager,
+                }
+            )
 
             # Start the worker system
             worker_manager.start()
@@ -434,7 +454,6 @@ AVAILABLE_MODELS = {
         "display_name": "GPT-5 (Latest)",
         "description": "OpenAI's most advanced model",
     },
-
     "gpt-5-mini": {
         "provider": "openai",
         "model": "gpt-5-mini-2025-08-07",
@@ -456,6 +475,18 @@ AVAILABLE_MODELS = {
 }
 
 DEFAULT_MODEL = "gemini-2.5-flash"
+
+
+def create_youtube_client_with_timeout(api_key, timeout=30):
+    """Create a YouTube API client with custom timeout settings"""
+    # Create an httplib2 instance with timeout
+    http = httplib2.Http(timeout=timeout)
+
+    # Set socket timeout as well for extra safety
+    socket.setdefaulttimeout(timeout)
+
+    # Build the YouTube client with the configured http instance
+    return build("youtube", "v3", developerKey=api_key, http=http)
 
 
 # --- API CLIENT INITIALIZATION ---
@@ -618,18 +649,6 @@ def clean_youtube_url(url):
     return urlunparse(parsed_url._replace(query=urlencode(allowed_params, doseq=True)))
 
 
-def create_youtube_client_with_timeout(api_key, timeout=30):
-    """Create a YouTube API client with custom timeout settings"""
-    # Create an httplib2 instance with timeout
-    http = httplib2.Http(timeout=timeout)
-
-    # Set socket timeout as well for extra safety
-    socket.setdefaulttimeout(timeout)
-
-    # Build the YouTube client with the configured http instance
-    return build("youtube", "v3", developerKey=api_key, http=http)
-
-
 def get_playlist_id(url):
     url = url.replace("&list=WL", "")
     match = re.search(r"list=([a-zA-Z0-9_-]+)", url)
@@ -687,7 +706,10 @@ def get_video_details(video_ids, max_retries=3):
 
             # Exponential backoff with jitter
             delay = base_delay * (2 ** (retry_count - 1)) + (0.1 * retry_count)
-            print(f"Timeout error fetching video details (attempt {retry_count}/{max_retries}). Retrying in {delay:.1f}s...")
+            print(
+                f"Timeout error fetching video details (attempt {retry_count}/{max_retries}). "
+                f"Retrying in {delay:.1f}s..."
+            )
             time.sleep(delay)
 
         except HttpError as e:
@@ -754,7 +776,10 @@ def get_videos_from_playlist(playlist_id, max_retries=3):
 
                 # Exponential backoff with jitter
                 delay = base_delay * (2 ** (retry_count - 1)) + (0.1 * retry_count)
-                print(f"Timeout error fetching playlist (attempt {retry_count}/{max_retries}). Retrying in {delay:.1f}s...")
+                print(
+                    f"Timeout error fetching playlist (attempt {retry_count}/{max_retries}). "
+                    f"Retrying in {delay:.1f}s..."
+                )
                 time.sleep(delay)
 
             except HttpError as e:
@@ -765,7 +790,9 @@ def get_videos_from_playlist(playlist_id, max_retries=3):
                         return None, f"Server error fetching playlist after {max_retries} retries: {e}"
 
                     delay = base_delay * (2 ** (retry_count - 1))
-                    print(f"HTTP {e.resp.status} error (attempt {retry_count}/{max_retries}). Retrying in {delay:.1f}s...")
+                    print(
+                        f"HTTP {e.resp.status} error (attempt {retry_count}/{max_retries}). Retrying in {delay:.1f}s..."
+                    )
                     time.sleep(delay)
                 else:
                     # For other HTTP errors (like 403, 404), don't retry
@@ -1152,6 +1179,7 @@ def login_status():
 
 # --- SSE ENDPOINTS ---
 
+
 @app.route("/events")
 @require_auth
 def sse_events():
@@ -1160,7 +1188,7 @@ def sse_events():
     connection_id = str(uuid.uuid4())
 
     # Get client information for security and tracking
-    session_id = session.get("session_id") or session.sid if hasattr(session, 'sid') else None
+    session_id = session.get("session_id") or session.sid if hasattr(session, "sid") else None
     client_ip = request.environ.get("HTTP_X_FORWARDED_FOR", request.environ.get("REMOTE_ADDR", "127.0.0.1"))
     if "," in client_ip:
         client_ip = client_ip.split(",")[0].strip()
@@ -1184,22 +1212,21 @@ def sse_events():
         """Generator function for SSE stream"""
         try:
             # Send initial connection event
-            yield format_sse_message("connected", {
-                "connection_id": connection_id,
-                "message": "Connected to notification stream",
-                "subscriptions": list(subscriptions)
-            }, event_id=connection_id)
+            yield format_sse_message(
+                "connected",
+                {
+                    "connection_id": connection_id,
+                    "message": "Connected to notification stream",
+                    "subscriptions": list(subscriptions),
+                },
+                event_id=connection_id,
+            )
 
             # Stream messages from the connection's queue
             for message in connection.get_messages():
                 if not connection.is_active:
                     break
-                yield format_sse_message(
-                    message["event"],
-                    message["data"],
-                    message["id"],
-                    message.get("retry")
-                )
+                yield format_sse_message(message["event"], message["data"], message["id"], message.get("retry"))
 
         except GeneratorExit:
             # Client disconnected
@@ -1216,14 +1243,14 @@ def sse_events():
     # Return SSE response with proper headers
     return Response(
         generate(),
-        mimetype='text/event-stream',
+        mimetype="text/event-stream",
         headers={
-            'Cache-Control': 'no-cache, no-store, must-revalidate',
-            'Pragma': 'no-cache',
-            'Expires': '0',
-            'X-Accel-Buffering': 'no',  # Nginx directive to disable buffering
-            'Connection': 'keep-alive'
-        }
+            "Cache-Control": "no-cache, no-store, must-revalidate",
+            "Pragma": "no-cache",
+            "Expires": "0",
+            "X-Accel-Buffering": "no",  # Nginx directive to disable buffering
+            "Connection": "keep-alive",
+        },
     )
 
 
@@ -1236,21 +1263,20 @@ def sse_status():
     with sse_connection_lock:
         connection_info = []
         for conn_id, conn in sse_connections.items():
-            connection_info.append({
-                "connection_id": conn_id,
-                "session_id": conn.session_id,
-                "user_ip": conn.user_ip,
-                "created_at": conn.created_at.isoformat(),
-                "last_activity": conn.last_activity.isoformat(),
-                "is_active": conn.is_active,
-                "subscriptions": list(conn.subscriptions),
-                "queue_size": conn.message_queue.qsize()
-            })
+            connection_info.append(
+                {
+                    "connection_id": conn_id,
+                    "session_id": conn.session_id,
+                    "user_ip": conn.user_ip,
+                    "created_at": conn.created_at.isoformat(),
+                    "last_activity": conn.last_activity.isoformat(),
+                    "is_active": conn.is_active,
+                    "subscriptions": list(conn.subscriptions),
+                    "queue_size": conn.message_queue.qsize(),
+                }
+            )
 
-    return jsonify({
-        "total_connections": len(sse_connections),
-        "connections": connection_info
-    })
+    return jsonify({"total_connections": len(sse_connections), "connections": connection_info})
 
 
 @app.route("/events/broadcast", methods=["POST"])
@@ -1273,17 +1299,12 @@ def sse_broadcast():
             return jsonify({"error": f"Invalid event type. Allowed: {allowed_events}"}), 400
 
         broadcast_to_connections(
-            event_type,
-            message_data,
-            session_filter=session_filter,
-            subscription_filter=subscription_filter
+            event_type, message_data, session_filter=session_filter, subscription_filter=subscription_filter
         )
 
-        return jsonify({
-            "success": True,
-            "message": f"Broadcasted {event_type} event",
-            "total_connections": len(sse_connections)
-        })
+        return jsonify(
+            {"success": True, "message": f"Broadcasted {event_type} event", "total_connections": len(sse_connections)}
+        )
 
     except Exception as e:
         return jsonify({"error": f"Broadcast failed: {str(e)}"}), 500
@@ -1308,7 +1329,7 @@ def format_sse_message(event_type, data, event_id=None, retry=None):
         data_str = str(data)
 
     # Split multi-line data properly
-    for line in data_str.split('\n'):
+    for line in data_str.split("\n"):
         lines.append(f"data: {line}")
 
     lines.append("")  # Empty line to end the message
@@ -1515,12 +1536,18 @@ def debug_model():
 
     except Exception as e:
         import traceback
-        return jsonify({
-            "error": "Exception in debug_model",
-            "message": str(e),
-            "type": type(e).__name__,
-            "traceback": traceback.format_exc()
-        }), 500
+
+        return (
+            jsonify(
+                {
+                    "error": "Exception in debug_model",
+                    "message": str(e),
+                    "type": type(e).__name__,
+                    "traceback": traceback.format_exc(),
+                }
+            ),
+            500,
+        )
 
 
 @app.route("/summarize", methods=["POST"])
@@ -1544,25 +1571,35 @@ def summarize_links():
             return jsonify({"error": f"Unsupported model: {model_key}. Available models: {available_models}"}), 400
 
         # Get session ID for SSE notifications
-        session_id = session.get("session_id") or session.sid if hasattr(session, 'sid') else None
+        session_id = session.get("session_id") or session.sid if hasattr(session, "sid") else None
 
         # Send initial progress notification
         total_items = sum(1 for url in urls for _ in [get_playlist_id(url)] if _ is None or get_video_id(url))
         if any(get_playlist_id(url) for url in urls):
             # If there are playlists, we'll update the count as we discover videos
-            broadcast_to_connections("summary_progress", {
-                "status": "starting",
-                "message": "Analyzing URLs and counting videos...",
-                "progress": 0,
-                "total": None
-            }, session_filter=session_id, subscription_filter="summary_progress")
+            broadcast_to_connections(
+                "summary_progress",
+                {
+                    "status": "starting",
+                    "message": "Analyzing URLs and counting videos...",
+                    "progress": 0,
+                    "total": None,
+                },
+                session_filter=session_id,
+                subscription_filter="summary_progress",
+            )
         else:
-            broadcast_to_connections("summary_progress", {
-                "status": "starting",
-                "message": f"Starting to process {total_items} videos",
-                "progress": 0,
-                "total": total_items
-            }, session_filter=session_id, subscription_filter="summary_progress")
+            broadcast_to_connections(
+                "summary_progress",
+                {
+                    "status": "starting",
+                    "message": f"Starting to process {total_items} videos",
+                    "progress": 0,
+                    "total": total_items,
+                },
+                session_filter=session_id,
+                subscription_filter="summary_progress",
+            )
 
         results = []
         processed_count = 0
@@ -1608,13 +1645,18 @@ def summarize_links():
                     total_videos = len(playlist_items)
 
                     # Update total count now that we know playlist size
-                    broadcast_to_connections("summary_progress", {
-                        "status": "processing",
-                        "message": f"Processing playlist with {total_videos} videos",
-                        "progress": processed_count,
-                        "total": processed_count + total_videos,
-                        "current_playlist": playlist_title
-                    }, session_filter=session_id, subscription_filter="summary_progress")
+                    broadcast_to_connections(
+                        "summary_progress",
+                        {
+                            "status": "processing",
+                            "message": f"Processing playlist with {total_videos} videos",
+                            "progress": processed_count,
+                            "total": processed_count + total_videos,
+                            "current_playlist": playlist_title,
+                        },
+                        session_filter=session_id,
+                        subscription_filter="summary_progress",
+                    )
 
                     for index, item in enumerate(playlist_items):
                         snippet = item.get("snippet", {})
@@ -1624,17 +1666,18 @@ def summarize_links():
                         ).get("medium", {}).get("url")
 
                         # Send progress update for current video
-                        broadcast_to_connections("summary_progress", {
-                            "status": "processing",
-                            "message": f"Processing: {vid_title[:50]}{'...' if len(vid_title) > 50 else ''}",
-                            "progress": processed_count + index + 1,
-                            "total": processed_count + total_videos,
-                            "current_video": {
-                                "id": vid_id,
-                                "title": vid_title,
-                                "playlist": playlist_title
-                            }
-                        }, session_filter=session_id, subscription_filter="summary_progress")
+                        broadcast_to_connections(
+                            "summary_progress",
+                            {
+                                "status": "processing",
+                                "message": f"Processing: {vid_title[:50]}{'...' if len(vid_title) > 50 else ''}",
+                                "progress": processed_count + index + 1,
+                                "total": processed_count + total_videos,
+                                "current_video": {"id": vid_id, "title": vid_title, "playlist": playlist_title},
+                            },
+                            session_filter=session_id,
+                            subscription_filter="summary_progress",
+                        )
 
                         if vid_title in ["Private video", "Deleted video"]:
                             playlist_summaries.append(
@@ -1665,12 +1708,12 @@ def summarize_links():
                             )
 
                             # Send completion notification for cached video
-                            broadcast_to_connections("summary_complete", {
-                                "video_id": vid_id,
-                                "title": vid_title,
-                                "source": "cache",
-                                "playlist": playlist_title
-                            }, session_filter=session_id, subscription_filter="summary_complete")
+                            broadcast_to_connections(
+                                "summary_complete",
+                                {"video_id": vid_id, "title": vid_title, "source": "cache", "playlist": playlist_title},
+                                session_filter=session_id,
+                                subscription_filter="summary_complete",
+                            )
                             continue
 
                         transcript, err = get_transcript(vid_id)
@@ -1693,13 +1736,18 @@ def summarize_links():
                             save_summary_cache(summary_cache)
 
                             # Send completion notification for new summary
-                            broadcast_to_connections("summary_complete", {
-                                "video_id": vid_id,
-                                "title": vid_title,
-                                "source": "generated",
-                                "model_used": model_key,
-                                "playlist": playlist_title
-                            }, session_filter=session_id, subscription_filter="summary_complete")
+                            broadcast_to_connections(
+                                "summary_complete",
+                                {
+                                    "video_id": vid_id,
+                                    "title": vid_title,
+                                    "source": "generated",
+                                    "model_used": model_key,
+                                    "playlist": playlist_title,
+                                },
+                                session_filter=session_id,
+                                subscription_filter="summary_complete",
+                            )
 
                         playlist_summaries.append(
                             {
@@ -1737,16 +1785,18 @@ def summarize_links():
                 details = get_video_details([video_id]).get(video_id, {})
                 title = details.get("title", "Unknown Video")
 
-                broadcast_to_connections("summary_progress", {
-                    "status": "processing",
-                    "message": f"Processing: {title[:50]}{'...' if len(title) > 50 else ''}",
-                    "progress": processed_count,
-                    "total": len(urls),
-                    "current_video": {
-                        "id": video_id,
-                        "title": title
-                    }
-                }, session_filter=session_id, subscription_filter="summary_progress")
+                broadcast_to_connections(
+                    "summary_progress",
+                    {
+                        "status": "processing",
+                        "message": f"Processing: {title[:50]}{'...' if len(title) > 50 else ''}",
+                        "progress": processed_count,
+                        "total": len(urls),
+                        "current_video": {"id": video_id, "title": title},
+                    },
+                    session_filter=session_id,
+                    subscription_filter="summary_progress",
+                )
 
                 if video_id in summary_cache:
                     cached_item = summary_cache[video_id]
@@ -1763,11 +1813,12 @@ def summarize_links():
                     )
 
                     # Send completion notification for cached video
-                    broadcast_to_connections("summary_complete", {
-                        "video_id": video_id,
-                        "title": cached_item["title"],
-                        "source": "cache"
-                    }, session_filter=session_id, subscription_filter="summary_complete")
+                    broadcast_to_connections(
+                        "summary_complete",
+                        {"video_id": video_id, "title": cached_item["title"], "source": "cache"},
+                        session_filter=session_id,
+                        subscription_filter="summary_complete",
+                    )
                     continue
 
                 try:
@@ -1792,12 +1843,12 @@ def summarize_links():
                         save_summary_cache(summary_cache)
 
                         # Send completion notification for new summary
-                        broadcast_to_connections("summary_complete", {
-                            "video_id": video_id,
-                            "title": title,
-                            "source": "generated",
-                            "model_used": model_key
-                        }, session_filter=session_id, subscription_filter="summary_complete")
+                        broadcast_to_connections(
+                            "summary_complete",
+                            {"video_id": video_id, "title": title, "source": "generated", "model_used": model_key},
+                            session_filter=session_id,
+                            subscription_filter="summary_complete",
+                        )
 
                     results.append(
                         {
@@ -1829,13 +1880,18 @@ def summarize_links():
                 )
 
         # Send final completion notification
-        broadcast_to_connections("summary_progress", {
-            "status": "completed",
-            "message": "All summaries completed!",
-            "progress": processed_count,
-            "total": processed_count,
-            "results_count": len(results)
-        }, session_filter=session_id, subscription_filter="summary_progress")
+        broadcast_to_connections(
+            "summary_progress",
+            {
+                "status": "completed",
+                "message": "All summaries completed!",
+                "progress": processed_count,
+                "total": processed_count,
+                "results_count": len(results),
+            },
+            session_filter=session_id,
+            subscription_filter="summary_progress",
+        )
 
         return jsonify(results)
     except Exception as e:
@@ -1861,7 +1917,7 @@ def summarize_async():
     """Async version of summarize - submits jobs to worker queue"""
     if not WORKER_SYSTEM_AVAILABLE or worker_manager is None:
         # Fall back to synchronous processing
-        return redirect(url_for('summarize'))
+        return redirect(url_for("summarize"))
 
     try:
         data = request.get_json()
@@ -1875,27 +1931,24 @@ def summarize_async():
             return jsonify({"error": "No URLs provided"}), 400
 
         # Parse URLs
-        urls = [url.strip() for url in urls_input.replace('\n', ' ').split() if url.strip()]
+        urls = [url.strip() for url in urls_input.replace("\n", " ").split() if url.strip()]
 
         if not urls:
             return jsonify({"error": "No valid URLs provided"}), 400
 
         # Submit jobs to worker queue
         job_ids = []
-        session_id = session.get('session_id', str(uuid.uuid4()))
-        session['session_id'] = session_id
+        session_id = session.get("session_id", str(uuid.uuid4()))
+        session["session_id"] = session_id
 
         for url in urls:
-            video_id = extract_video_id(url)
-            playlist_id = extract_playlist_id(url)
+            video_id = get_video_id(url)
+            playlist_id = get_playlist_id(url)
 
             if video_id:
                 # Single video job
                 job = create_video_job(
-                    video_id=video_id,
-                    model_key=model_key,
-                    session_id=session_id,
-                    priority=JobPriority.HIGH
+                    video_id=video_id, model_key=model_key, session_id=session_id, priority=JobPriority.HIGH
                 )
 
                 if worker_manager.submit_job(job):
@@ -1904,10 +1957,7 @@ def summarize_async():
             elif playlist_id:
                 # Playlist job
                 job = create_playlist_job(
-                    playlist_id=playlist_id,
-                    model_key=model_key,
-                    session_id=session_id,
-                    priority=JobPriority.MEDIUM
+                    playlist_id=playlist_id, model_key=model_key, session_id=session_id, priority=JobPriority.MEDIUM
                 )
 
                 if worker_manager.submit_job(job):
@@ -1916,12 +1966,14 @@ def summarize_async():
         if not job_ids:
             return jsonify({"error": "Failed to submit any jobs"}), 500
 
-        return jsonify({
-            "success": True,
-            "message": f"Submitted {len(job_ids)} jobs for processing",
-            "job_ids": job_ids,
-            "session_id": session_id
-        })
+        return jsonify(
+            {
+                "success": True,
+                "message": f"Submitted {len(job_ids)} jobs for processing",
+                "job_ids": job_ids,
+                "session_id": session_id,
+            }
+        )
 
     except Exception as e:
         app.logger.error(f"Error in summarize_async: {e}")
@@ -1957,13 +2009,9 @@ def list_jobs():
     try:
         status_filter = request.args.get("status")
         limit = min(int(request.args.get("limit", 50)), 100)
-        session_id = session.get('session_id')
+        session_id = session.get("session_id")
 
-        jobs = job_state_manager.get_all_jobs(
-            status_filter=status_filter,
-            session_filter=session_id,
-            limit=limit
-        )
+        jobs = job_state_manager.get_all_jobs(status_filter=status_filter, session_filter=session_id, limit=limit)
 
         return jsonify({"jobs": jobs})
 
@@ -1992,12 +2040,13 @@ def speak():
         return jsonify({"error": f"Failed to parse request: {str(e)}"}), 400
 
     # Get voice selection from request data (default to configured voice)
-    voice_id = data.get('voice_id', TTS_VOICE)
+    voice_id = data.get("voice_id", TTS_VOICE)
 
     # Check if cache cleanup is needed (do this before generating cache key)
     if should_cleanup_cache(AUDIO_CACHE_DIR):
         cleanup_result = cleanup_audio_cache(AUDIO_CACHE_DIR)
-        print(f"Cache cleanup: removed {cleanup_result['cleaned']} files, freed {cleanup_result['size_freed']/1024/1024:.1f}MB")
+        size_mb = cleanup_result['size_freed'] / 1024 / 1024
+        print(f"Cache cleanup: removed {cleanup_result['cleaned']} files, freed {size_mb:.1f}MB")
 
     # Use optimized cache key generation
     cache_key = get_optimized_cache_key(voice_id, text_to_speak)
@@ -2026,16 +2075,11 @@ def speak():
 
         synthesis_input = texttospeech.SynthesisInput(text=text_to_speak)
         voice = texttospeech.VoiceSelectionParams(
-            language_code=voice_config["language_code"],
-            name=voice_config["name"]
+            language_code=voice_config["language_code"], name=voice_config["name"]
         )
         audio_config = texttospeech.AudioConfig(audio_encoding=texttospeech.AudioEncoding.MP3)
 
-        response = tts_client.synthesize_speech(
-            input=synthesis_input,
-            voice=voice,
-            audio_config=audio_config
-        )
+        response = tts_client.synthesize_speech(input=synthesis_input, voice=voice, audio_config=audio_config)
 
         with open(filepath, "wb") as f:
             f.write(response.audio_content)
@@ -2053,14 +2097,17 @@ def speak():
 def get_voices():
     """Get available voices organized by tier"""
     try:
-        return jsonify({
-            "voices": AVAILABLE_VOICES,
-            "tiers": get_voices_by_tier(),
-            "current_voice": TTS_VOICE,
-            "default_voice": DEFAULT_VOICE
-        })
+        return jsonify(
+            {
+                "voices": AVAILABLE_VOICES,
+                "tiers": get_voices_by_tier(),
+                "current_voice": TTS_VOICE,
+                "default_voice": DEFAULT_VOICE,
+            }
+        )
     except Exception as e:
         return jsonify({"error": f"Failed to get voices: {str(e)}"}), 500
+
 
 @app.route("/api/cache/status", methods=["GET"])
 @require_auth
@@ -2071,12 +2118,7 @@ def get_cache_status():
         from pathlib import Path
 
         if not os.path.exists(AUDIO_CACHE_DIR):
-            return jsonify({
-                "total_files": 0,
-                "total_size_mb": 0,
-                "cache_utilization": 0,
-                "needs_cleanup": False
-            })
+            return jsonify({"total_files": 0, "total_size_mb": 0, "cache_utilization": 0, "needs_cleanup": False})
 
         total_size = 0
         file_count = 0
@@ -2091,17 +2133,20 @@ def get_cache_status():
         max_size_bytes = CACHE_CONFIG["max_size_mb"] * 1024 * 1024
         utilization = (total_size / max_size_bytes) * 100 if max_size_bytes > 0 else 0
 
-        return jsonify({
-            "total_files": file_count,
-            "preview_files": preview_count,
-            "total_size_mb": round(total_size / 1024 / 1024, 2),
-            "max_size_mb": CACHE_CONFIG["max_size_mb"],
-            "cache_utilization": round(utilization, 1),
-            "needs_cleanup": should_cleanup_cache(AUDIO_CACHE_DIR),
-            "config": CACHE_CONFIG
-        })
+        return jsonify(
+            {
+                "total_files": file_count,
+                "preview_files": preview_count,
+                "total_size_mb": round(total_size / 1024 / 1024, 2),
+                "max_size_mb": CACHE_CONFIG["max_size_mb"],
+                "cache_utilization": round(utilization, 1),
+                "needs_cleanup": should_cleanup_cache(AUDIO_CACHE_DIR),
+                "config": CACHE_CONFIG,
+            }
+        )
     except Exception as e:
         return jsonify({"error": f"Failed to get cache status: {str(e)}"}), 500
+
 
 @app.route("/api/cache/cleanup", methods=["POST"])
 @require_auth
@@ -2109,15 +2154,18 @@ def manual_cache_cleanup():
     """Manually trigger cache cleanup"""
     try:
         cleanup_result = cleanup_audio_cache(AUDIO_CACHE_DIR)
-        return jsonify({
-            "success": True,
-            "cleaned_files": cleanup_result["cleaned"],
-            "size_freed_mb": round(cleanup_result["size_freed"] / 1024 / 1024, 2),
-            "remaining_files": cleanup_result["remaining_files"],
-            "remaining_size_mb": round(cleanup_result["remaining_size"] / 1024 / 1024, 2)
-        })
+        return jsonify(
+            {
+                "success": True,
+                "cleaned_files": cleanup_result["cleaned"],
+                "size_freed_mb": round(cleanup_result["size_freed"] / 1024 / 1024, 2),
+                "remaining_files": cleanup_result["remaining_files"],
+                "remaining_size_mb": round(cleanup_result["remaining_size"] / 1024 / 1024, 2),
+            }
+        )
     except Exception as e:
         return jsonify({"error": f"Failed to cleanup cache: {str(e)}"}), 500
+
 
 @app.route("/preview-voice", methods=["POST"])
 @require_auth
@@ -2165,8 +2213,7 @@ def preview_voice():
     # Check if TTS client is available
     if not tts_client:
         return Response(
-            "Text-to-speech service not available. Please set the GOOGLE_API_KEY environment variable.",
-            status=503
+            "Text-to-speech service not available. Please set the GOOGLE_API_KEY environment variable.", status=503
         )
 
     try:
@@ -2177,16 +2224,11 @@ def preview_voice():
 
         synthesis_input = texttospeech.SynthesisInput(text=text_to_speak)
         voice = texttospeech.VoiceSelectionParams(
-            language_code=voice_config["language_code"],
-            name=voice_config["name"]
+            language_code=voice_config["language_code"], name=voice_config["name"]
         )
         audio_config = texttospeech.AudioConfig(audio_encoding=texttospeech.AudioEncoding.MP3)
 
-        response = tts_client.synthesize_speech(
-            input=synthesis_input,
-            voice=voice,
-            audio_config=audio_config
-        )
+        response = tts_client.synthesize_speech(input=synthesis_input, voice=voice, audio_config=audio_config)
 
         # Cache the result
         with open(filepath, "wb") as f:
@@ -2208,15 +2250,12 @@ def preview_voice():
                 return Response("No fallback voice available", status=500)
 
             fallback_voice = texttospeech.VoiceSelectionParams(
-                language_code=fallback_config["language_code"],
-                name=fallback_config["name"]
+                language_code=fallback_config["language_code"], name=fallback_config["name"]
             )
             fallback_audio_config = texttospeech.AudioConfig(audio_encoding=texttospeech.AudioEncoding.MP3)
 
             response = tts_client.synthesize_speech(
-                input=synthesis_input,
-                voice=fallback_voice,
-                audio_config=fallback_audio_config
+                input=synthesis_input, voice=fallback_voice, audio_config=fallback_audio_config
             )
 
             with open(filepath, "wb") as f:
@@ -2522,12 +2561,8 @@ def handle_exception(e):
 
 
 # Graceful shutdown handler
-import atexit
-
 def cleanup_worker_system():
     """Cleanup function for application shutdown"""
-    global worker_manager, new_sse_manager
-
     if worker_manager:
         print("🔄 Shutting down worker system gracefully...")
         worker_manager.stop()
@@ -2537,6 +2572,7 @@ def cleanup_worker_system():
         print("🔄 Shutting down SSE manager...")
         new_sse_manager.shutdown()
         print("✅ SSE manager shutdown complete")
+
 
 # Register cleanup function
 atexit.register(cleanup_worker_system)

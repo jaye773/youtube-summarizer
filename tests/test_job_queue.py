@@ -5,15 +5,16 @@ Validates priority queue operations, thread safety, rate limiting, and job sched
 Tests queue management, concurrent operations, statistics tracking, and cleanup functionality.
 """
 
-import pytest
-import time
 import threading
-from datetime import datetime, timezone, timedelta
+import time
 from collections import deque
-from unittest.mock import patch, MagicMock
+from datetime import datetime, timedelta, timezone
+from unittest.mock import MagicMock, patch
 
-from job_models import ProcessingJob, JobStatus, JobPriority, JobType, WorkerMetrics
-from job_queue import PriorityJobQueue, JobScheduler
+import pytest
+
+from job_models import JobPriority, JobStatus, JobType, ProcessingJob, WorkerMetrics
+from job_queue import JobScheduler, PriorityJobQueue
 
 
 class TestPriorityJobQueue:
@@ -36,10 +37,7 @@ class TestPriorityJobQueue:
         """Test adding a single job to the queue"""
         queue = PriorityJobQueue()
         job = ProcessingJob(
-            job_id="test-job-1",
-            job_type=JobType.VIDEO,
-            priority=JobPriority.HIGH,
-            data={"url": "https://test.com"}
+            job_id="test-job-1", job_type=JobType.VIDEO, priority=JobPriority.HIGH, data={"url": "https://test.com"}
         )
 
         result = queue.put(job)
@@ -274,14 +272,14 @@ class TestPriorityJobQueue:
 
         stats = queue.get_stats()
 
-        assert stats['current_size'] == 6
-        assert stats['max_size'] == 100
-        assert stats['is_full'] is False
-        assert stats['priority_breakdown']['HIGH'] == 3
-        assert stats['priority_breakdown']['MEDIUM'] == 3
-        assert 'total_jobs_queued' in stats
-        assert 'queue_created_at' in stats
-        assert 'recent_activity' in stats
+        assert stats["current_size"] == 6
+        assert stats["max_size"] == 100
+        assert stats["is_full"] is False
+        assert stats["priority_breakdown"]["HIGH"] == 3
+        assert stats["priority_breakdown"]["MEDIUM"] == 3
+        assert "total_jobs_queued" in stats
+        assert "queue_created_at" in stats
+        assert "recent_activity" in stats
 
     def test_get_waiting_time_estimate(self):
         """Test waiting time estimation"""
@@ -342,8 +340,9 @@ class TestPriorityJobQueue:
             """Producer thread that adds jobs to queue"""
             for i in range(50):
                 try:
-                    job = ProcessingJob(f"thread-job-{threading.current_thread().ident}-{i}",
-                                      JobType.VIDEO, JobPriority.HIGH, {})
+                    job = ProcessingJob(
+                        f"thread-job-{threading.current_thread().ident}-{i}", JobType.VIDEO, JobPriority.HIGH, {}
+                    )
                     if queue.put(job):
                         results["puts"] += 1
                     time.sleep(0.001)  # Small delay
@@ -500,8 +499,7 @@ class TestJobScheduler:
     def test_get_job_status(self):
         """Test getting job status"""
         scheduler = JobScheduler()
-        job = ProcessingJob("status-test", JobType.VIDEO, JobPriority.HIGH,
-                          {"url": "https://test.com"})
+        job = ProcessingJob("status-test", JobType.VIDEO, JobPriority.HIGH, {"url": "https://test.com"})
 
         scheduler.submit_job(job)
 
@@ -626,7 +624,7 @@ class TestRateLimiting:
         assert success2 is False
 
         # Mock time passage (more than 1 minute)
-        with patch('job_queue.datetime') as mock_datetime:
+        with patch("job_queue.datetime") as mock_datetime:
             future_time = datetime.now(timezone.utc) + timedelta(minutes=2)
             mock_datetime.now.return_value = future_time
 

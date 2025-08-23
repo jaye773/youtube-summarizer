@@ -6,14 +6,15 @@ Contains job status tracking, priority levels, and job data structures.
 """
 
 import uuid
-from datetime import datetime, timezone
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from enum import Enum
-from typing import Optional, Dict, Any, List
+from typing import Any, Dict, List, Optional
 
 
 class JobStatus(Enum):
     """Job processing status"""
+
     PENDING = "pending"
     IN_PROGRESS = "in_progress"
     COMPLETED = "completed"
@@ -23,13 +24,15 @@ class JobStatus(Enum):
 
 class JobPriority(Enum):
     """Job priority levels - lower numbers = higher priority"""
-    HIGH = 1      # Single videos
-    MEDIUM = 2    # Small playlists (2-10 videos)
-    LOW = 3       # Large playlists (>10 videos)
+
+    HIGH = 1  # Single videos
+    MEDIUM = 2  # Small playlists (2-10 videos)
+    LOW = 3  # Large playlists (>10 videos)
 
 
 class JobType(Enum):
     """Types of processing jobs"""
+
     VIDEO = "video"
     PLAYLIST = "playlist"
     BATCH = "batch"
@@ -43,6 +46,7 @@ class ProcessingJob:
     Contains all necessary information to process a YouTube video or playlist
     including priority, status tracking, and retry information.
     """
+
     job_id: str
     job_type: JobType
     priority: JobPriority
@@ -71,10 +75,10 @@ class ProcessingJob:
         if self.job_type == JobType.VIDEO:
             self.total_steps = 3  # Get transcript, generate summary, cache result
         elif self.job_type == JobType.PLAYLIST:
-            video_count = len(self.data.get('video_ids', []))
+            video_count = len(self.data.get("video_ids", []))
             self.total_steps = video_count + 2  # Process each video + get playlist info + finalize
         else:  # BATCH
-            self.total_steps = len(self.data.get('urls', []))
+            self.total_steps = len(self.data.get("urls", []))
 
     def update_progress(self, progress: float, step: str = "", increment: bool = False):
         """
@@ -143,61 +147,68 @@ class ProcessingJob:
     def to_dict(self) -> Dict[str, Any]:
         """Convert job to dictionary for JSON serialization"""
         return {
-            'job_id': self.job_id,
-            'job_type': self.job_type.value,
-            'priority': self.priority.value,
-            'status': self.status.value,
-            'data': self.data,
-            'created_at': self.created_at.isoformat(),
-            'started_at': self.started_at.isoformat() if self.started_at else None,
-            'completed_at': self.completed_at.isoformat() if self.completed_at else None,
-            'progress': self.progress,
-            'current_step': self.current_step,
-            'total_steps': self.total_steps,
-            'retry_count': self.retry_count,
-            'max_retries': self.max_retries,
-            'error_message': self.error_message,
-            'result': self.result,
-            'worker_id': self.worker_id,
-            'client_id': self.client_id,
-            'session_id': self.session_id,
-            'processing_time': self.get_processing_time(),
-            'wait_time': self.get_wait_time()
+            "job_id": self.job_id,
+            "job_type": self.job_type.value,
+            "priority": self.priority.value,
+            "status": self.status.value,
+            "data": self.data,
+            "created_at": self.created_at.isoformat(),
+            "started_at": self.started_at.isoformat() if self.started_at else None,
+            "completed_at": self.completed_at.isoformat() if self.completed_at else None,
+            "progress": self.progress,
+            "current_step": self.current_step,
+            "total_steps": self.total_steps,
+            "retry_count": self.retry_count,
+            "max_retries": self.max_retries,
+            "error_message": self.error_message,
+            "result": self.result,
+            "worker_id": self.worker_id,
+            "client_id": self.client_id,
+            "session_id": self.session_id,
+            "processing_time": self.get_processing_time(),
+            "wait_time": self.get_wait_time(),
         }
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> 'ProcessingJob':
+    def from_dict(cls, data: Dict[str, Any]) -> "ProcessingJob":
         """Create ProcessingJob from dictionary"""
         # Parse datetime fields
-        created_at = datetime.fromisoformat(data['created_at'].replace('Z', '+00:00')) if data.get('created_at') else None
-        started_at = datetime.fromisoformat(data['started_at'].replace('Z', '+00:00')) if data.get('started_at') else None
-        completed_at = datetime.fromisoformat(data['completed_at'].replace('Z', '+00:00')) if data.get('completed_at') else None
+        created_at = (
+            datetime.fromisoformat(data["created_at"].replace("Z", "+00:00")) if data.get("created_at") else None
+        )
+        started_at = (
+            datetime.fromisoformat(data["started_at"].replace("Z", "+00:00")) if data.get("started_at") else None
+        )
+        completed_at = (
+            datetime.fromisoformat(data["completed_at"].replace("Z", "+00:00")) if data.get("completed_at") else None
+        )
 
         return cls(
-            job_id=data['job_id'],
-            job_type=JobType(data['job_type']),
-            priority=JobPriority(data['priority']),
-            data=data['data'],
-            status=JobStatus(data['status']),
+            job_id=data["job_id"],
+            job_type=JobType(data["job_type"]),
+            priority=JobPriority(data["priority"]),
+            data=data["data"],
+            status=JobStatus(data["status"]),
             created_at=created_at,
             started_at=started_at,
             completed_at=completed_at,
-            progress=data.get('progress', 0.0),
-            current_step=data.get('current_step', ''),
-            total_steps=data.get('total_steps', 1),
-            retry_count=data.get('retry_count', 0),
-            max_retries=data.get('max_retries', 3),
-            error_message=data.get('error_message'),
-            result=data.get('result'),
-            worker_id=data.get('worker_id'),
-            client_id=data.get('client_id'),
-            session_id=data.get('session_id')
+            progress=data.get("progress", 0.0),
+            current_step=data.get("current_step", ""),
+            total_steps=data.get("total_steps", 1),
+            retry_count=data.get("retry_count", 0),
+            max_retries=data.get("max_retries", 3),
+            error_message=data.get("error_message"),
+            result=data.get("result"),
+            worker_id=data.get("worker_id"),
+            client_id=data.get("client_id"),
+            session_id=data.get("session_id"),
         )
 
 
 @dataclass
 class JobResult:
     """Result of a completed job"""
+
     job_id: str
     job_type: JobType
     success: bool
@@ -208,12 +219,12 @@ class JobResult:
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for JSON serialization"""
         return {
-            'job_id': self.job_id,
-            'job_type': self.job_type.value,
-            'success': self.success,
-            'data': self.data,
-            'error': self.error,
-            'processing_time': self.processing_time
+            "job_id": self.job_id,
+            "job_type": self.job_type.value,
+            "success": self.success,
+            "data": self.data,
+            "error": self.error,
+            "processing_time": self.processing_time,
         }
 
 
@@ -250,13 +261,13 @@ class WorkerMetrics:
     def to_dict(self) -> Dict[str, Any]:
         """Convert metrics to dictionary"""
         return {
-            'jobs_processed': self.jobs_processed,
-            'jobs_failed': self.jobs_failed,
-            'success_rate': self.get_success_rate(),
-            'average_processing_time': self.get_average_processing_time(),
-            'total_processing_time': self.total_processing_time,
-            'created_at': self.created_at.isoformat(),
-            'last_job_at': self.last_job_at.isoformat() if self.last_job_at else None
+            "jobs_processed": self.jobs_processed,
+            "jobs_failed": self.jobs_failed,
+            "success_rate": self.get_success_rate(),
+            "average_processing_time": self.get_average_processing_time(),
+            "total_processing_time": self.total_processing_time,
+            "created_at": self.created_at.isoformat(),
+            "last_job_at": self.last_job_at.isoformat() if self.last_job_at else None,
         }
 
 
@@ -273,11 +284,7 @@ def create_video_job(url: str, model_key: str = None, client_id: str = None, ses
     Returns:
         ProcessingJob configured for video processing
     """
-    job_data = {
-        'url': url,
-        'model_key': model_key,
-        'type': 'video'
-    }
+    job_data = {"url": url, "model_key": model_key, "type": "video"}
 
     return ProcessingJob(
         job_id=str(uuid.uuid4()),
@@ -285,12 +292,13 @@ def create_video_job(url: str, model_key: str = None, client_id: str = None, ses
         priority=JobPriority.HIGH,
         data=job_data,
         client_id=client_id,
-        session_id=session_id
+        session_id=session_id,
     )
 
 
-def create_playlist_job(url: str, video_ids: List[str], model_key: str = None,
-                       client_id: str = None, session_id: str = None) -> ProcessingJob:
+def create_playlist_job(
+    url: str, video_ids: List[str], model_key: str = None, client_id: str = None, session_id: str = None
+) -> ProcessingJob:
     """
     Factory function to create a playlist processing job.
 
@@ -304,12 +312,7 @@ def create_playlist_job(url: str, video_ids: List[str], model_key: str = None,
     Returns:
         ProcessingJob configured for playlist processing
     """
-    job_data = {
-        'url': url,
-        'video_ids': video_ids,
-        'model_key': model_key,
-        'type': 'playlist'
-    }
+    job_data = {"url": url, "video_ids": video_ids, "model_key": model_key, "type": "playlist"}
 
     # Determine priority based on playlist size
     priority = JobPriority.MEDIUM if len(video_ids) <= 10 else JobPriority.LOW
@@ -320,12 +323,13 @@ def create_playlist_job(url: str, video_ids: List[str], model_key: str = None,
         priority=priority,
         data=job_data,
         client_id=client_id,
-        session_id=session_id
+        session_id=session_id,
     )
 
 
-def create_batch_job(urls: List[str], model_key: str = None,
-                    client_id: str = None, session_id: str = None) -> ProcessingJob:
+def create_batch_job(
+    urls: List[str], model_key: str = None, client_id: str = None, session_id: str = None
+) -> ProcessingJob:
     """
     Factory function to create a batch processing job.
 
@@ -338,11 +342,7 @@ def create_batch_job(urls: List[str], model_key: str = None,
     Returns:
         ProcessingJob configured for batch processing
     """
-    job_data = {
-        'urls': urls,
-        'model_key': model_key,
-        'type': 'batch'
-    }
+    job_data = {"urls": urls, "model_key": model_key, "type": "batch"}
 
     # Determine priority based on batch size
     if len(urls) == 1:
@@ -358,5 +358,5 @@ def create_batch_job(urls: List[str], model_key: str = None,
         priority=priority,
         data=job_data,
         client_id=client_id,
-        session_id=session_id
+        session_id=session_id,
     )

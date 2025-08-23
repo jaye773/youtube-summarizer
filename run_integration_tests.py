@@ -40,7 +40,7 @@ def run_command(cmd, description):
     print(f"\n{'='*60}")
     print(f"Running: {description}")
     print(f"Command: {' '.join(cmd)}")
-    print('='*60)
+    print("=" * 60)
 
     start_time = time.time()
     result = subprocess.run(cmd, capture_output=False)
@@ -59,59 +59,31 @@ def run_command(cmd, description):
 
 def get_base_pytest_cmd():
     """Get base pytest command with common options."""
-    return ['python', '-m', 'pytest']
+    return ["python", "-m", "pytest"]
 
 
 def main():
-    parser = argparse.ArgumentParser(
-        description="Run integration tests for YouTube Summarizer async worker system"
-    )
+    parser = argparse.ArgumentParser(description="Run integration tests for YouTube Summarizer async worker system")
 
     parser.add_argument(
-        'suite',
-        nargs='?',
-        default='all',
-        choices=['all', 'app', 'endpoints', 'e2e', 'fallback', 'quick',
-                'performance', 'concurrent'],
-        help='Test suite to run'
+        "suite",
+        nargs="?",
+        default="all",
+        choices=["all", "app", "endpoints", "e2e", "fallback", "quick", "performance", "concurrent"],
+        help="Test suite to run",
     )
 
-    parser.add_argument(
-        '--verbose', '-v',
-        action='store_true',
-        help='Verbose output'
-    )
+    parser.add_argument("--verbose", "-v", action="store_true", help="Verbose output")
 
-    parser.add_argument(
-        '--coverage',
-        action='store_true',
-        help='Run with coverage reporting'
-    )
+    parser.add_argument("--coverage", action="store_true", help="Run with coverage reporting")
 
-    parser.add_argument(
-        '--parallel', '-n',
-        type=int,
-        default=1,
-        help='Number of parallel test processes'
-    )
+    parser.add_argument("--parallel", "-n", type=int, default=1, help="Number of parallel test processes")
 
-    parser.add_argument(
-        '--no-slow',
-        action='store_true',
-        help='Skip slow tests'
-    )
+    parser.add_argument("--no-slow", action="store_true", help="Skip slow tests")
 
-    parser.add_argument(
-        '--fail-fast',
-        action='store_true',
-        help='Stop on first failure'
-    )
+    parser.add_argument("--fail-fast", action="store_true", help="Stop on first failure")
 
-    parser.add_argument(
-        '--html-report',
-        action='store_true',
-        help='Generate HTML test report'
-    )
+    parser.add_argument("--html-report", action="store_true", help="Generate HTML test report")
 
     args = parser.parse_args()
 
@@ -124,89 +96,79 @@ def main():
 
     # Add verbosity
     if args.verbose:
-        cmd.extend(['-vvv'])
+        cmd.extend(["-vvv"])
 
     # Add coverage
     if args.coverage:
-        cmd.extend(['--cov=app', '--cov=worker_manager', '--cov=job_state',
-                   '--cov=sse_manager', '--cov=job_models', '--cov-report=html',
-                   '--cov-report=term'])
+        cmd.extend(
+            [
+                "--cov=app",
+                "--cov=worker_manager",
+                "--cov=job_state",
+                "--cov=sse_manager",
+                "--cov=job_models",
+                "--cov-report=html",
+                "--cov-report=term",
+            ]
+        )
 
     # Add parallel execution
     if args.parallel > 1:
-        cmd.extend(['-n', str(args.parallel)])
+        cmd.extend(["-n", str(args.parallel)])
 
     # Add fail fast
     if args.fail_fast:
-        cmd.extend(['-x'])
+        cmd.extend(["-x"])
 
     # Add HTML report
     if args.html_report:
-        cmd.extend(['--html=reports/integration_test_report.html', '--self-contained-html'])
+        cmd.extend(["--html=reports/integration_test_report.html", "--self-contained-html"])
         # Create reports directory if it doesn't exist
-        Path('reports').mkdir(exist_ok=True)
+        Path("reports").mkdir(exist_ok=True)
 
     # Add slow test filtering
     if args.no_slow:
-        cmd.extend(['-m', 'not slow'])
+        cmd.extend(["-m", "not slow"])
 
     # Test suite selection
     suite_configs = {
-        'all': {
-            'files': [
-                'tests/test_app_integration.py',
-                'tests/test_async_endpoints.py',
-                'tests/test_end_to_end.py',
-                'tests/test_fallback_scenarios.py'
+        "all": {
+            "files": [
+                "tests/test_app_integration.py",
+                "tests/test_async_endpoints.py",
+                "tests/test_end_to_end.py",
+                "tests/test_fallback_scenarios.py",
             ],
-            'description': 'All integration tests'
+            "description": "All integration tests",
         },
-        'app': {
-            'files': ['tests/test_app_integration.py'],
-            'description': 'Flask app integration tests'
-        },
-        'endpoints': {
-            'files': ['tests/test_async_endpoints.py'],
-            'description': 'Async API endpoint tests'
-        },
-        'e2e': {
-            'files': ['tests/test_end_to_end.py'],
-            'description': 'End-to-end workflow tests'
-        },
-        'fallback': {
-            'files': ['tests/test_fallback_scenarios.py'],
-            'description': 'Fallback and error handling tests'
-        },
-        'quick': {
-            'files': [
-                'tests/test_app_integration.py::TestFlaskAppInitialization',
-                'tests/test_async_endpoints.py::TestAsyncJobSubmission::test_submit_video_job_success',
-                'tests/test_end_to_end.py::TestCompleteVideoWorkflow::test_video_processing_success_workflow',
-                'tests/test_fallback_scenarios.py::TestWorkerSystemUnavailable::test_app_starts_without_worker_system'
+        "app": {"files": ["tests/test_app_integration.py"], "description": "Flask app integration tests"},
+        "endpoints": {"files": ["tests/test_async_endpoints.py"], "description": "Async API endpoint tests"},
+        "e2e": {"files": ["tests/test_end_to_end.py"], "description": "End-to-end workflow tests"},
+        "fallback": {"files": ["tests/test_fallback_scenarios.py"], "description": "Fallback and error handling tests"},
+        "quick": {
+            "files": [
+                "tests/test_app_integration.py::TestFlaskAppInitialization",
+                "tests/test_async_endpoints.py::TestAsyncJobSubmission::test_submit_video_job_success",
+                "tests/test_end_to_end.py::TestCompleteVideoWorkflow::test_video_processing_success_workflow",
+                "tests/test_fallback_scenarios.py::TestWorkerSystemUnavailable::test_app_starts_without_worker_system",
             ],
-            'description': 'Quick smoke tests'
+            "description": "Quick smoke tests",
         },
-        'performance': {
-            'markers': ['performance'],
-            'description': 'Performance and load tests'
-        },
-        'concurrent': {
-            'markers': ['concurrent'],
-            'description': 'Concurrent operation tests'
-        }
+        "performance": {"markers": ["performance"], "description": "Performance and load tests"},
+        "concurrent": {"markers": ["concurrent"], "description": "Concurrent operation tests"},
     }
 
     config = suite_configs[args.suite]
 
     # Add test selection
-    if 'files' in config:
-        cmd.extend(config['files'])
-    elif 'markers' in config:
-        cmd.extend(['-m', ' and '.join(config['markers'])])
+    if "files" in config:
+        cmd.extend(config["files"])
+    elif "markers" in config:
+        cmd.extend(["-m", " and ".join(config["markers"])])
 
     # Print test plan
     print("🧪 YouTube Summarizer Integration Test Runner")
-    print("="*60)
+    print("=" * 60)
     print(f"Suite: {args.suite} - {config['description']}")
     print(f"Coverage: {'Yes' if args.coverage else 'No'}")
     print(f"Parallel: {'Yes' if args.parallel > 1 else 'No'} ({args.parallel} processes)")
@@ -228,10 +190,10 @@ def main():
         print("❌ Some tests failed!")
         sys.exit(1)
 
-    print("="*60)
+    print("=" * 60)
 
     return success
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

@@ -6,16 +6,17 @@ Tests WorkerThread and WorkerManager functionality, including startup/shutdown, 
 notification callbacks, and integration with the job queue system.
 """
 
-import pytest
-import time
 import threading
-from datetime import datetime, timezone
-from unittest.mock import patch, MagicMock, Mock
+import time
 from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime, timezone
+from unittest.mock import MagicMock, Mock, patch
 
-from job_models import ProcessingJob, JobStatus, JobType, JobPriority, JobResult, WorkerMetrics
+import pytest
+
+from job_models import JobPriority, JobResult, JobStatus, JobType, ProcessingJob, WorkerMetrics
 from job_queue import JobScheduler
-from worker_manager import WorkerThread, WorkerManager
+from worker_manager import WorkerManager, WorkerThread
 
 
 class TestWorkerThread:
@@ -38,16 +39,15 @@ class TestWorkerThread:
         worker_manager.get_playlist_id = MagicMock(return_value="mock_playlist_id")
         worker_manager.get_transcript = MagicMock(return_value=("mock transcript text", None))
         worker_manager.generate_summary = MagicMock(return_value=("mock summary text", None))
-        worker_manager.get_video_details = MagicMock(return_value={
-            "mock_video_id": {
-                "title": "Mock Video Title",
-                "thumbnail_url": "https://mock.thumbnail.url"
-            }
-        })
-        worker_manager.get_videos_from_playlist = MagicMock(return_value=([
-            {"contentDetails": {"videoId": "playlist_vid_1"}},
-            {"contentDetails": {"videoId": "playlist_vid_2"}}
-        ], None))
+        worker_manager.get_video_details = MagicMock(
+            return_value={"mock_video_id": {"title": "Mock Video Title", "thumbnail_url": "https://mock.thumbnail.url"}}
+        )
+        worker_manager.get_videos_from_playlist = MagicMock(
+            return_value=(
+                [{"contentDetails": {"videoId": "playlist_vid_1"}}, {"contentDetails": {"videoId": "playlist_vid_2"}}],
+                None,
+            )
+        )
         worker_manager.load_summary_cache = MagicMock(return_value={})
         worker_manager.save_summary_cache = MagicMock()
 
@@ -120,7 +120,7 @@ class TestWorkerThread:
             job_id="video-test",
             job_type=JobType.VIDEO,
             priority=JobPriority.HIGH,
-            data={"url": "https://youtube.com/watch?v=test123", "model_key": "gpt-4"}
+            data={"url": "https://youtube.com/watch?v=test123", "model_key": "gpt-4"},
         )
 
         # Process job
@@ -145,14 +145,8 @@ class TestWorkerThread:
         import worker_manager
 
         # Set up cache with existing result
-        cached_result = {
-            "video_id": "mock_video_id",
-            "title": "Cached Video",
-            "summary": "Cached summary"
-        }
-        worker_manager.load_summary_cache = MagicMock(return_value={
-            "mock_video_id_gpt-4": cached_result
-        })
+        cached_result = {"video_id": "mock_video_id", "title": "Cached Video", "summary": "Cached summary"}
+        worker_manager.load_summary_cache = MagicMock(return_value={"mock_video_id_gpt-4": cached_result})
 
         worker = WorkerThread("cache-worker", self.job_scheduler)
         # Manually set the cache since we're not going through the full worker loop
@@ -162,7 +156,7 @@ class TestWorkerThread:
             job_id="cache-test",
             job_type=JobType.VIDEO,
             priority=JobPriority.HIGH,
-            data={"url": "https://youtube.com/watch?v=cached", "model_key": "gpt-4"}
+            data={"url": "https://youtube.com/watch?v=cached", "model_key": "gpt-4"},
         )
 
         result = worker._process_job(job)
@@ -184,7 +178,7 @@ class TestWorkerThread:
             job_id="failure-test",
             job_type=JobType.VIDEO,
             priority=JobPriority.HIGH,
-            data={"url": "https://youtube.com/watch?v=fail123"}
+            data={"url": "https://youtube.com/watch?v=fail123"},
         )
 
         result = worker._process_job(job)
@@ -206,8 +200,8 @@ class TestWorkerThread:
             data={
                 "url": "https://youtube.com/playlist?list=test123",
                 "video_ids": ["vid1", "vid2"],
-                "model_key": "gpt-4"
-            }
+                "model_key": "gpt-4",
+            },
         )
 
         result = worker._process_job(job)
@@ -239,8 +233,8 @@ class TestWorkerThread:
             data={
                 "url": "https://youtube.com/playlist?list=partial",
                 "video_ids": ["vid1", "vid2", "vid3"],
-                "model_key": "gpt-4"
-            }
+                "model_key": "gpt-4",
+            },
         )
 
         result = worker._process_job(job)
@@ -259,12 +253,9 @@ class TestWorkerThread:
             job_type=JobType.BATCH,
             priority=JobPriority.LOW,
             data={
-                "urls": [
-                    "https://youtube.com/watch?v=batch1",
-                    "https://youtube.com/watch?v=batch2"
-                ],
-                "model_key": "gpt-4"
-            }
+                "urls": ["https://youtube.com/watch?v=batch1", "https://youtube.com/watch?v=batch2"],
+                "model_key": "gpt-4",
+            },
         )
 
         result = worker._process_job(job)
@@ -282,7 +273,7 @@ class TestWorkerThread:
             job_id="progress-test",
             job_type=JobType.VIDEO,
             priority=JobPriority.HIGH,
-            data={"url": "https://youtube.com/watch?v=progress123"}
+            data={"url": "https://youtube.com/watch?v=progress123"},
         )
 
         worker._process_job(job)
@@ -291,8 +282,9 @@ class TestWorkerThread:
         assert self.notification_callback.call_count >= 2
 
         # Check that some calls were progress updates
-        progress_calls = [call for call in self.notification_callback.call_args_list
-                         if call[1].get('progress_update') is True]
+        progress_calls = [
+            call for call in self.notification_callback.call_args_list if call[1].get("progress_update") is True
+        ]
         assert len(progress_calls) > 0
 
     def test_worker_get_status(self):
@@ -318,10 +310,12 @@ class TestWorkerThread:
         worker = WorkerThread("loop-worker", self.job_scheduler, self.notification_callback)
 
         # Add jobs to scheduler
-        job1 = ProcessingJob("loop-job-1", JobType.VIDEO, JobPriority.HIGH,
-                           {"url": "https://youtube.com/watch?v=loop1"})
-        job2 = ProcessingJob("loop-job-2", JobType.VIDEO, JobPriority.MEDIUM,
-                           {"url": "https://youtube.com/watch?v=loop2"})
+        job1 = ProcessingJob(
+            "loop-job-1", JobType.VIDEO, JobPriority.HIGH, {"url": "https://youtube.com/watch?v=loop1"}
+        )
+        job2 = ProcessingJob(
+            "loop-job-2", JobType.VIDEO, JobPriority.MEDIUM, {"url": "https://youtube.com/watch?v=loop2"}
+        )
 
         self.job_scheduler.submit_job(job1)
         self.job_scheduler.submit_job(job2)
@@ -342,7 +336,7 @@ class TestWorkerThread:
     def test_worker_error_handling(self):
         """Test worker error handling and recovery"""
         # Mock an exception during job processing
-        with patch.object(WorkerThread, '_process_job', side_effect=Exception("Test exception")):
+        with patch.object(WorkerThread, "_process_job", side_effect=Exception("Test exception")):
             worker = WorkerThread("error-worker", self.job_scheduler)
 
             job = ProcessingJob("error-job", JobType.VIDEO, JobPriority.HIGH, {})
@@ -370,12 +364,12 @@ class TestWorkerManager:
             "extract_playlist_id": MagicMock(return_value="mock_playlist_id"),
             "get_transcript": MagicMock(return_value=("mock transcript", None)),
             "generate_summary": MagicMock(return_value=("mock summary", None)),
-            "get_video_details": MagicMock(return_value={
-                "mock_video_id": {"title": "Mock Title", "thumbnail_url": "mock_url"}
-            }),
+            "get_video_details": MagicMock(
+                return_value={"mock_video_id": {"title": "Mock Title", "thumbnail_url": "mock_url"}}
+            ),
             "get_videos_from_playlist": MagicMock(return_value=([], None)),
             "save_summary_cache": MagicMock(),
-            "load_summary_cache": MagicMock(return_value={})
+            "load_summary_cache": MagicMock(return_value={}),
         }
 
     def test_manager_initialization(self):
@@ -393,11 +387,12 @@ class TestWorkerManager:
         manager = WorkerManager()
         manager.set_app_functions(self.mock_app_context)
 
-        assert hasattr(manager, 'app_context')
+        assert hasattr(manager, "app_context")
         assert manager.app_context == self.mock_app_context
 
         # Test that functions are set globally
         import worker_manager
+
         assert worker_manager.get_video_id is not None
         assert worker_manager.get_transcript is not None
 
@@ -474,8 +469,7 @@ class TestWorkerManager:
         manager.start()
 
         try:
-            job = ProcessingJob("status-job", JobType.VIDEO, JobPriority.HIGH,
-                              {"url": "https://test.com"})
+            job = ProcessingJob("status-job", JobType.VIDEO, JobPriority.HIGH, {"url": "https://test.com"})
             success, _ = manager.submit_job(job)
             assert success is True
 
@@ -546,6 +540,7 @@ class TestWorkerManager:
 
         # Set up callbacks to track completion
         completed_jobs = []
+
         def track_completion(job, result):
             completed_jobs.append((job.job_id, result.success))
 
@@ -555,10 +550,12 @@ class TestWorkerManager:
         manager.start()
 
         # Submit test jobs
-        job1 = ProcessingJob("workflow-1", JobType.VIDEO, JobPriority.HIGH,
-                           {"url": "https://youtube.com/watch?v=test1"})
-        job2 = ProcessingJob("workflow-2", JobType.VIDEO, JobPriority.MEDIUM,
-                           {"url": "https://youtube.com/watch?v=test2"})
+        job1 = ProcessingJob(
+            "workflow-1", JobType.VIDEO, JobPriority.HIGH, {"url": "https://youtube.com/watch?v=test1"}
+        )
+        job2 = ProcessingJob(
+            "workflow-2", JobType.VIDEO, JobPriority.MEDIUM, {"url": "https://youtube.com/watch?v=test2"}
+        )
 
         manager.submit_job(job1)
         manager.submit_job(job2)
@@ -619,7 +616,9 @@ class TestWorkerThreadSafety:
         worker_manager.get_playlist_id = lambda url: f"playlist_{hash(url) % 10000}"
         worker_manager.get_transcript = lambda vid_id: (f"transcript for {vid_id}", None)
         worker_manager.generate_summary = lambda transcript, title, model: (f"summary of {transcript[:20]}", None)
-        worker_manager.get_video_details = lambda vid_ids: {vid_id: {"title": f"Title {vid_id}", "thumbnail_url": "url"} for vid_id in vid_ids}
+        worker_manager.get_video_details = lambda vid_ids: {
+            vid_id: {"title": f"Title {vid_id}", "thumbnail_url": "url"} for vid_id in vid_ids
+        }
         worker_manager.get_videos_from_playlist = lambda pl_id: ([], None)
         worker_manager.load_summary_cache = lambda: {}
         worker_manager.save_summary_cache = lambda cache: None
@@ -628,18 +627,23 @@ class TestWorkerThreadSafety:
     def test_concurrent_job_processing(self):
         """Test concurrent job processing with multiple workers"""
         manager = WorkerManager(num_workers=3, max_queue_size=100)
-        manager.set_app_functions({
-            "extract_video_id": lambda url: f"video_{hash(url) % 10000}",
-            "extract_playlist_id": lambda url: None,
-            "get_transcript": lambda vid_id: (f"transcript for {vid_id}", None),
-            "generate_summary": lambda transcript, title, model: (f"summary of {transcript}", None),
-            "get_video_details": lambda vid_ids: {vid_id: {"title": f"Title {vid_id}", "thumbnail_url": "url"} for vid_id in vid_ids},
-            "get_videos_from_playlist": lambda pl_id: ([], None),
-            "save_summary_cache": lambda cache: None,
-            "load_summary_cache": lambda: {}
-        })
+        manager.set_app_functions(
+            {
+                "extract_video_id": lambda url: f"video_{hash(url) % 10000}",
+                "extract_playlist_id": lambda url: None,
+                "get_transcript": lambda vid_id: (f"transcript for {vid_id}", None),
+                "generate_summary": lambda transcript, title, model: (f"summary of {transcript}", None),
+                "get_video_details": lambda vid_ids: {
+                    vid_id: {"title": f"Title {vid_id}", "thumbnail_url": "url"} for vid_id in vid_ids
+                },
+                "get_videos_from_playlist": lambda pl_id: ([], None),
+                "save_summary_cache": lambda cache: None,
+                "load_summary_cache": lambda: {},
+            }
+        )
 
         completed_jobs = []
+
         def track_completion(job, result):
             completed_jobs.append((job.job_id, result.success, threading.current_thread().ident))
 
@@ -649,8 +653,12 @@ class TestWorkerThreadSafety:
         # Submit many jobs quickly
         jobs = []
         for i in range(10):
-            job = ProcessingJob(f"concurrent-{i}", JobType.VIDEO, JobPriority.HIGH,
-                              {"url": f"https://youtube.com/watch?v=concurrent{i}"})
+            job = ProcessingJob(
+                f"concurrent-{i}",
+                JobType.VIDEO,
+                JobPriority.HIGH,
+                {"url": f"https://youtube.com/watch?v=concurrent{i}"},
+            )
             jobs.append(job)
             manager.submit_job(job)
 
@@ -680,25 +688,27 @@ class TestWorkerThreadSafety:
         worker = WorkerThread("cache-safety-worker", JobScheduler())
 
         # Verify that cache has lock protection
-        assert hasattr(worker, '_cache_lock')
+        assert hasattr(worker, "_cache_lock")
         # Check that it has lock methods (duck typing approach)
-        assert hasattr(worker._cache_lock, 'acquire')
-        assert hasattr(worker._cache_lock, 'release')
+        assert hasattr(worker._cache_lock, "acquire")
+        assert hasattr(worker._cache_lock, "release")
 
     @pytest.mark.slow
     def test_rapid_start_stop_cycles(self):
         """Test rapid start/stop cycles for stability"""
         manager = WorkerManager(num_workers=2)
-        manager.set_app_functions({
-            "extract_video_id": lambda url: "test_video",
-            "extract_playlist_id": lambda url: None,
-            "get_transcript": lambda vid_id: ("test transcript", None),
-            "generate_summary": lambda transcript, title, model: ("test summary", None),
-            "get_video_details": lambda vid_ids: {"test_video": {"title": "Test", "thumbnail_url": "url"}},
-            "get_videos_from_playlist": lambda pl_id: ([], None),
-            "save_summary_cache": lambda cache: None,
-            "load_summary_cache": lambda: {}
-        })
+        manager.set_app_functions(
+            {
+                "extract_video_id": lambda url: "test_video",
+                "extract_playlist_id": lambda url: None,
+                "get_transcript": lambda vid_id: ("test transcript", None),
+                "generate_summary": lambda transcript, title, model: ("test summary", None),
+                "get_video_details": lambda vid_ids: {"test_video": {"title": "Test", "thumbnail_url": "url"}},
+                "get_videos_from_playlist": lambda pl_id: ([], None),
+                "save_summary_cache": lambda cache: None,
+                "load_summary_cache": lambda: {},
+            }
+        )
 
         # Perform rapid start/stop cycles
         for cycle in range(3):
@@ -753,8 +763,7 @@ class TestErrorScenarios:
 
         worker = WorkerThread("retry-worker", JobScheduler())
 
-        job = ProcessingJob("retry-job", JobType.VIDEO, JobPriority.HIGH,
-                          {"url": "https://youtube.com/watch?v=retry"})
+        job = ProcessingJob("retry-job", JobType.VIDEO, JobPriority.HIGH, {"url": "https://youtube.com/watch?v=retry"})
         job.max_retries = 2
 
         result = worker._process_job(job)
@@ -774,8 +783,9 @@ class TestErrorScenarios:
 
         worker = WorkerThread("summary-fail-worker", JobScheduler())
 
-        job = ProcessingJob("summary-fail", JobType.VIDEO, JobPriority.HIGH,
-                          {"url": "https://youtube.com/watch?v=summaryfail"})
+        job = ProcessingJob(
+            "summary-fail", JobType.VIDEO, JobPriority.HIGH, {"url": "https://youtube.com/watch?v=summaryfail"}
+        )
 
         result = worker._process_job(job)
 
@@ -795,8 +805,9 @@ class TestErrorScenarios:
 
         worker = WorkerThread("cache-fail-worker", JobScheduler())
 
-        job = ProcessingJob("cache-fail", JobType.VIDEO, JobPriority.HIGH,
-                          {"url": "https://youtube.com/watch?v=cachefail"})
+        job = ProcessingJob(
+            "cache-fail", JobType.VIDEO, JobPriority.HIGH, {"url": "https://youtube.com/watch?v=cachefail"}
+        )
 
         # Should succeed despite cache save failure
         result = worker._process_job(job)
@@ -846,12 +857,12 @@ class TestJobProcessingIntegration:
         self.video_data = {
             "dQw4w9WgXcQ": {
                 "title": "Rick Astley - Never Gonna Give You Up",
-                "thumbnail_url": "https://img.youtube.com/vi/dQw4w9WgXcQ/maxresdefault.jpg"
+                "thumbnail_url": "https://img.youtube.com/vi/dQw4w9WgXcQ/maxresdefault.jpg",
             },
             "jNQXAC9IVRw": {
                 "title": "Me at the zoo",
-                "thumbnail_url": "https://img.youtube.com/vi/jNQXAC9IVRw/maxresdefault.jpg"
-            }
+                "thumbnail_url": "https://img.youtube.com/vi/jNQXAC9IVRw/maxresdefault.jpg",
+            },
         }
 
         worker_manager.clean_youtube_url = lambda url: url
@@ -878,7 +889,7 @@ class TestJobProcessingIntegration:
         transcripts = {
             "dQw4w9WgXcQ": "We're no strangers to love...",
             "jNQXAC9IVRw": "All right, so here we are in front of the elephants...",
-            "mock_video_id": "This is a mock video transcript."
+            "mock_video_id": "This is a mock video transcript.",
         }
         return transcripts.get(video_id, "Default transcript"), None
 
@@ -889,32 +900,34 @@ class TestJobProcessingIntegration:
 
     def mock_get_video_details(self, video_ids):
         """Mock video details retrieval"""
-        return {vid_id: self.video_data.get(vid_id, {"title": f"Title {vid_id}", "thumbnail_url": "mock_url"})
-                for vid_id in video_ids}
+        return {
+            vid_id: self.video_data.get(vid_id, {"title": f"Title {vid_id}", "thumbnail_url": "mock_url"})
+            for vid_id in video_ids
+        }
 
     def mock_get_playlist_videos(self, playlist_id):
         """Mock playlist video retrieval"""
-        return [
-            {"contentDetails": {"videoId": "dQw4w9WgXcQ"}},
-            {"contentDetails": {"videoId": "jNQXAC9IVRw"}}
-        ], None
+        return [{"contentDetails": {"videoId": "dQw4w9WgXcQ"}}, {"contentDetails": {"videoId": "jNQXAC9IVRw"}}], None
 
     @pytest.mark.slow
     def test_complete_video_processing_workflow(self):
         """Test complete video processing from submission to completion"""
         manager = WorkerManager(num_workers=1)
-        manager.set_app_functions({
-            "extract_video_id": self.mock_get_video_id,
-            "extract_playlist_id": lambda url: None,
-            "get_transcript": self.mock_get_transcript,
-            "generate_summary": self.mock_generate_summary,
-            "get_video_details": self.mock_get_video_details,
-            "get_videos_from_playlist": self.mock_get_playlist_videos,
-            "save_summary_cache": MagicMock(),
-            "load_summary_cache": lambda: {}
-        })
+        manager.set_app_functions(
+            {
+                "extract_video_id": self.mock_get_video_id,
+                "extract_playlist_id": lambda url: None,
+                "get_transcript": self.mock_get_transcript,
+                "generate_summary": self.mock_generate_summary,
+                "get_video_details": self.mock_get_video_details,
+                "get_videos_from_playlist": self.mock_get_playlist_videos,
+                "save_summary_cache": MagicMock(),
+                "load_summary_cache": lambda: {},
+            }
+        )
 
         completed_jobs = []
+
         def track_completion(job, result):
             completed_jobs.append((job, result))
 
@@ -926,10 +939,7 @@ class TestJobProcessingIntegration:
             job_id="integration-test",
             job_type=JobType.VIDEO,
             priority=JobPriority.HIGH,
-            data={
-                "url": "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
-                "model_key": "gpt-4"
-            }
+            data={"url": "https://www.youtube.com/watch?v=dQw4w9WgXcQ", "model_key": "gpt-4"},
         )
 
         success, message = manager.submit_job(job)
@@ -957,18 +967,21 @@ class TestJobProcessingIntegration:
     def test_complete_playlist_processing_workflow(self):
         """Test complete playlist processing workflow"""
         manager = WorkerManager(num_workers=1)
-        manager.set_app_functions({
-            "extract_video_id": self.mock_get_video_id,
-            "extract_playlist_id": lambda url: "PLtest123" if "playlist" in url else None,
-            "get_transcript": self.mock_get_transcript,
-            "generate_summary": self.mock_generate_summary,
-            "get_video_details": self.mock_get_video_details,
-            "get_videos_from_playlist": self.mock_get_playlist_videos,
-            "save_summary_cache": MagicMock(),
-            "load_summary_cache": lambda: {}
-        })
+        manager.set_app_functions(
+            {
+                "extract_video_id": self.mock_get_video_id,
+                "extract_playlist_id": lambda url: "PLtest123" if "playlist" in url else None,
+                "get_transcript": self.mock_get_transcript,
+                "generate_summary": self.mock_generate_summary,
+                "get_video_details": self.mock_get_video_details,
+                "get_videos_from_playlist": self.mock_get_playlist_videos,
+                "save_summary_cache": MagicMock(),
+                "load_summary_cache": lambda: {},
+            }
+        )
 
         completed_jobs = []
+
         def track_completion(job, result):
             completed_jobs.append((job, result))
 
@@ -983,8 +996,8 @@ class TestJobProcessingIntegration:
             data={
                 "url": "https://www.youtube.com/playlist?list=PLtest123",
                 "video_ids": [],  # Will be extracted
-                "model_key": "gpt-4"
-            }
+                "model_key": "gpt-4",
+            },
         )
 
         manager.submit_job(job)

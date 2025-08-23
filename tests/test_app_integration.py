@@ -14,37 +14,38 @@ Test Categories:
 
 import json
 import os
+
+# Import main application
+import sys
 import tempfile
 import threading
 import time
 import uuid
 from datetime import datetime, timezone
-from unittest.mock import Mock, patch, MagicMock
-import pytest
+from unittest.mock import MagicMock, Mock, patch
 
+import pytest
 from flask import Flask
 from flask.testing import FlaskClient
 
-# Import main application
-import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from app import app
-from worker_manager import WorkerManager
+from job_models import JobPriority, JobStatus, JobType
 from job_state import JobStateManager
 from sse_manager import SSEManager as NewSSEManager
-from job_models import JobStatus, JobType, JobPriority
+from worker_manager import WorkerManager
 
 
 @pytest.fixture
 def client():
     """Create a Flask test client with clean configuration."""
-    app.config['TESTING'] = True
-    app.config['SECRET_KEY'] = 'test-secret-key'
-    app.config['WTF_CSRF_ENABLED'] = False
+    app.config["TESTING"] = True
+    app.config["SECRET_KEY"] = "test-secret-key"
+    app.config["WTF_CSRF_ENABLED"] = False
 
     # Create temporary directory for testing
-    app.config['TEMP_DIR'] = tempfile.mkdtemp()
+    app.config["TEMP_DIR"] = tempfile.mkdtemp()
 
     with app.test_client() as client:
         with app.app_context():
@@ -54,10 +55,10 @@ def client():
 @pytest.fixture
 def mock_worker_system():
     """Mock the entire worker system for testing."""
-    with patch('app.WORKER_SYSTEM_AVAILABLE', True):
-        with patch('app.WorkerManager') as mock_wm, \
-             patch('app.JobStateManager') as mock_jsm, \
-             patch('app.NewSSEManager') as mock_sse:
+    with patch("app.WORKER_SYSTEM_AVAILABLE", True):
+        with patch("app.WorkerManager") as mock_wm, patch("app.JobStateManager") as mock_jsm, patch(
+            "app.NewSSEManager"
+        ) as mock_sse:
 
             # Configure mock instances
             mock_wm_instance = Mock()
@@ -75,16 +76,16 @@ def mock_worker_system():
             mock_sse_instance.broadcast_event.return_value = None
 
             yield {
-                'worker_manager': mock_wm_instance,
-                'job_state_manager': mock_jsm_instance,
-                'sse_manager': mock_sse_instance
+                "worker_manager": mock_wm_instance,
+                "job_state_manager": mock_jsm_instance,
+                "sse_manager": mock_sse_instance,
             }
 
 
 @pytest.fixture
 def unavailable_worker_system():
     """Mock worker system as unavailable."""
-    with patch('app.WORKER_SYSTEM_AVAILABLE', False):
+    with patch("app.WORKER_SYSTEM_AVAILABLE", False):
         yield
 
 
@@ -94,28 +95,31 @@ class TestFlaskAppInitialization:
     def test_app_creation(self, client):
         """Test that Flask app is created successfully."""
         assert app is not None
-        assert app.config['TESTING'] is True
+        assert app.config["TESTING"] is True
 
     def test_worker_system_available_flag(self):
         """Test worker system availability detection."""
         # This will depend on actual system state
         from app import WORKER_SYSTEM_AVAILABLE
+
         assert isinstance(WORKER_SYSTEM_AVAILABLE, bool)
 
-    @patch('app.WORKER_SYSTEM_AVAILABLE', True)
+    @patch("app.WORKER_SYSTEM_AVAILABLE", True)
     def test_worker_system_imports_success(self):
         """Test successful worker system import."""
         # Simulate successful import
-        with patch('builtins.__import__', return_value=Mock()):
+        with patch("builtins.__import__", return_value=Mock()):
             # Re-import to trigger the import logic
             import importlib
+
             import app
+
             importlib.reload(app)
 
             # Should have imported successfully
-            assert hasattr(app, 'WorkerManager')
+            assert hasattr(app, "WorkerManager")
 
-    @patch('app.WORKER_SYSTEM_AVAILABLE', False)
+    @patch("app.WORKER_SYSTEM_AVAILABLE", False)
     def test_worker_system_imports_failure(self, unavailable_worker_system):
         """Test graceful handling of failed worker system imports."""
         # Should handle ImportError gracefully
@@ -129,14 +133,14 @@ class TestWorkerSystemIntegration:
         """Test WorkerManager initialization during app startup."""
         with app.app_context():
             # Simulate app initialization with worker system
-            response = client.get('/')
+            response = client.get("/")
             assert response.status_code == 200
 
     def test_sse_manager_initialization(self, client, mock_worker_system):
         """Test SSEManager initialization."""
         with app.app_context():
             # Check if SSE manager is properly initialized
-            response = client.get('/events', headers={'Accept': 'text/event-stream'})
+            response = client.get("/events", headers={"Accept": "text/event-stream"})
             # Should not raise an error
             assert response.status_code in [200, 404, 405]  # Depending on implementation
 
@@ -144,12 +148,12 @@ class TestWorkerSystemIntegration:
         """Test JobStateManager initialization."""
         with app.app_context():
             # JobStateManager should be initialized with worker system
-            response = client.get('/jobs')
+            response = client.get("/jobs")
             # Should handle request without errors
             assert response.status_code in [200, 404, 405]
 
-    @patch('app.WORKER_SYSTEM_AVAILABLE', True)
-    @patch('app.WorkerManager')
+    @patch("app.WORKER_SYSTEM_AVAILABLE", True)
+    @patch("app.WorkerManager")
     def test_worker_system_startup_sequence(self, mock_worker_manager, client):
         """Test the worker system startup sequence."""
         mock_manager = Mock()
@@ -158,11 +162,11 @@ class TestWorkerSystemIntegration:
 
         with app.app_context():
             # Simulate startup
-            response = client.get('/')
+            response = client.get("/")
             assert response.status_code == 200
 
-    @patch('app.WORKER_SYSTEM_AVAILABLE', True)
-    @patch('app.WorkerManager')
+    @patch("app.WORKER_SYSTEM_AVAILABLE", True)
+    @patch("app.WorkerManager")
     def test_worker_system_startup_failure(self, mock_worker_manager, client):
         """Test handling of worker system startup failure."""
         mock_manager = Mock()
@@ -171,7 +175,7 @@ class TestWorkerSystemIntegration:
 
         with app.app_context():
             # Should handle startup failure gracefully
-            response = client.get('/')
+            response = client.get("/")
             # App should still respond even if worker system fails
             assert response.status_code == 200
 
@@ -183,36 +187,39 @@ class TestGracefulFallback:
         """Test fallback to synchronous processing."""
         with app.app_context():
             # Should still be able to process requests synchronously
-            response = client.get('/')
+            response = client.get("/")
             assert response.status_code == 200
 
-    @patch('app.WORKER_SYSTEM_AVAILABLE', False)
+    @patch("app.WORKER_SYSTEM_AVAILABLE", False)
     def test_async_endpoints_unavailable(self, client):
         """Test that async endpoints handle unavailable worker system."""
         # Async endpoints should return appropriate error messages
-        response = client.post('/summarize_async', json={
-            'url': 'https://www.youtube.com/watch?v=test123',
-            'ai_provider': 'gemini',
-            'model': 'gemini-2.5-flash'
-        })
+        response = client.post(
+            "/summarize_async",
+            json={
+                "url": "https://www.youtube.com/watch?v=test123",
+                "ai_provider": "gemini",
+                "model": "gemini-2.5-flash",
+            },
+        )
 
         # Should handle gracefully (might return 503 or redirect to sync)
         assert response.status_code in [200, 400, 404, 503]
 
-    @patch('app.WORKER_SYSTEM_AVAILABLE', False)
+    @patch("app.WORKER_SYSTEM_AVAILABLE", False)
     def test_sse_endpoints_unavailable(self, client):
         """Test SSE endpoints when worker system unavailable."""
-        response = client.get('/events', headers={'Accept': 'text/event-stream'})
+        response = client.get("/events", headers={"Accept": "text/event-stream"})
         # Should handle gracefully
         assert response.status_code in [200, 404, 503]
 
-    @patch('app.WORKER_SYSTEM_AVAILABLE', False)
+    @patch("app.WORKER_SYSTEM_AVAILABLE", False)
     def test_job_endpoints_unavailable(self, client):
         """Test job management endpoints when worker system unavailable."""
-        response = client.get('/jobs')
+        response = client.get("/jobs")
         assert response.status_code in [200, 404, 503]
 
-        response = client.get('/jobs/test-job-id/status')
+        response = client.get("/jobs/test-job-id/status")
         assert response.status_code in [200, 404, 503]
 
 
@@ -222,31 +229,27 @@ class TestConfigurationManagement:
     def test_secret_key_configuration(self, client):
         """Test secret key configuration."""
         with app.app_context():
-            assert app.secret_key is not None or app.config.get('SECRET_KEY') is not None
+            assert app.secret_key is not None or app.config.get("SECRET_KEY") is not None
 
     def test_worker_system_config(self, client, mock_worker_system):
         """Test worker system configuration."""
         # Should be able to configure worker parameters
         with app.app_context():
-            response = client.get('/')
+            response = client.get("/")
             assert response.status_code == 200
 
-    @patch.dict(os.environ, {
-        'FLASK_ENV': 'testing',
-        'MAX_WORKERS': '4',
-        'JOB_TIMEOUT': '300'
-    })
+    @patch.dict(os.environ, {"FLASK_ENV": "testing", "MAX_WORKERS": "4", "JOB_TIMEOUT": "300"})
     def test_environment_variable_loading(self, client):
         """Test loading configuration from environment variables."""
         # Should respect environment configuration
-        assert os.environ.get('FLASK_ENV') == 'testing'
-        assert os.environ.get('MAX_WORKERS') == '4'
+        assert os.environ.get("FLASK_ENV") == "testing"
+        assert os.environ.get("MAX_WORKERS") == "4"
 
     def test_cache_configuration(self, client):
         """Test cache configuration and initialization."""
         with app.app_context():
             # Should handle cache configuration
-            response = client.get('/')
+            response = client.get("/")
             assert response.status_code == 200
 
 
@@ -255,8 +258,9 @@ class TestThreadingAndConcurrency:
 
     def test_concurrent_requests(self, client, mock_worker_system):
         """Test handling of concurrent requests."""
+
         def make_request():
-            return client.get('/')
+            return client.get("/")
 
         # Create multiple threads to test concurrency
         threads = []
@@ -282,8 +286,7 @@ class TestThreadingAndConcurrency:
         connections = []
 
         for i in range(3):
-            response = client.get('/events',
-                                headers={'Accept': 'text/event-stream'})
+            response = client.get("/events", headers={"Accept": "text/event-stream"})
             connections.append(response)
 
         # Should handle multiple connections
@@ -291,12 +294,16 @@ class TestThreadingAndConcurrency:
 
     def test_thread_safety_worker_operations(self, client, mock_worker_system):
         """Test thread safety of worker operations."""
+
         def submit_job():
-            return client.post('/summarize_async', json={
-                'url': f'https://www.youtube.com/watch?v=test{uuid.uuid4()}',
-                'ai_provider': 'gemini',
-                'model': 'gemini-2.5-flash'
-            })
+            return client.post(
+                "/summarize_async",
+                json={
+                    "url": f"https://www.youtube.com/watch?v=test{uuid.uuid4()}",
+                    "ai_provider": "gemini",
+                    "model": "gemini-2.5-flash",
+                },
+            )
 
         # Submit multiple jobs concurrently
         threads = []
@@ -321,7 +328,7 @@ class TestResourceManagement:
         """Test memory management during operations."""
         # Make multiple requests to test memory usage
         for _ in range(10):
-            response = client.get('/')
+            response = client.get("/")
             assert response.status_code == 200
 
         # Should not accumulate excessive memory
@@ -332,18 +339,17 @@ class TestResourceManagement:
         """Test cleanup of SSE connections."""
         # Create and close connections
         for _ in range(5):
-            response = client.get('/events',
-                                headers={'Accept': 'text/event-stream'})
+            response = client.get("/events", headers={"Accept": "text/event-stream"})
             # Connection should be handled properly
             assert response.status_code in [200, 404, 405]
 
     def test_worker_thread_cleanup(self, client, mock_worker_system):
         """Test cleanup of worker threads."""
-        mock_worker_system['worker_manager'].stop.return_value = None
+        mock_worker_system["worker_manager"].stop.return_value = None
 
         with app.app_context():
             # Should handle cleanup gracefully
-            response = client.get('/')
+            response = client.get("/")
             assert response.status_code == 200
 
 
@@ -352,26 +358,25 @@ class TestErrorHandling:
 
     def test_worker_system_exception_handling(self, client):
         """Test handling of worker system exceptions."""
-        with patch('app.WorkerManager', side_effect=Exception("Test error")):
+        with patch("app.WorkerManager", side_effect=Exception("Test error")):
             with app.app_context():
                 # Should handle worker system errors gracefully
-                response = client.get('/')
+                response = client.get("/")
                 assert response.status_code == 200
 
     def test_sse_manager_exception_handling(self, client):
         """Test handling of SSE manager exceptions."""
-        with patch('app.NewSSEManager', side_effect=Exception("SSE error")):
+        with patch("app.NewSSEManager", side_effect=Exception("SSE error")):
             with app.app_context():
-                response = client.get('/events',
-                                    headers={'Accept': 'text/event-stream'})
+                response = client.get("/events", headers={"Accept": "text/event-stream"})
                 # Should handle SSE errors gracefully
                 assert response.status_code in [200, 404, 500, 503]
 
     def test_job_state_manager_exception_handling(self, client):
         """Test handling of job state manager exceptions."""
-        with patch('app.JobStateManager', side_effect=Exception("Job state error")):
+        with patch("app.JobStateManager", side_effect=Exception("Job state error")):
             with app.app_context():
-                response = client.get('/jobs')
+                response = client.get("/jobs")
                 # Should handle job state errors gracefully
                 assert response.status_code in [200, 404, 500, 503]
 
@@ -381,23 +386,23 @@ class TestHealthChecks:
 
     def test_basic_health_check(self, client):
         """Test basic application health check."""
-        response = client.get('/')
+        response = client.get("/")
         assert response.status_code == 200
 
     def test_worker_system_health(self, client, mock_worker_system):
         """Test worker system health status."""
-        mock_worker_system['worker_manager'].is_healthy.return_value = True
+        mock_worker_system["worker_manager"].is_healthy.return_value = True
 
         with app.app_context():
             # Should indicate worker system is healthy
-            response = client.get('/')
+            response = client.get("/")
             assert response.status_code == 200
 
     def test_dependency_health_checks(self, client):
         """Test health checks for external dependencies."""
         with app.app_context():
             # Should handle external dependency checks
-            response = client.get('/')
+            response = client.get("/")
             assert response.status_code == 200
 
 
@@ -409,7 +414,7 @@ class TestPerformanceBaselines:
         start_time = time.time()
 
         with app.app_context():
-            response = client.get('/')
+            response = client.get("/")
 
         end_time = time.time()
         startup_time = end_time - start_time
@@ -421,7 +426,7 @@ class TestPerformanceBaselines:
     def test_request_response_time(self, client, mock_worker_system):
         """Test basic request response time."""
         start_time = time.time()
-        response = client.get('/')
+        response = client.get("/")
         end_time = time.time()
 
         response_time = end_time - start_time
@@ -435,7 +440,7 @@ class TestPerformanceBaselines:
         start_time = time.time()
 
         def make_request():
-            return client.get('/')
+            return client.get("/")
 
         threads = []
         for _ in range(5):
@@ -453,6 +458,6 @@ class TestPerformanceBaselines:
         assert total_time < 3.0
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     # Run tests with verbose output
-    pytest.main([__file__, '-v', '--tb=short'])
+    pytest.main([__file__, "-v", "--tb=short"])
