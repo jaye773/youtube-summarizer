@@ -5,7 +5,6 @@ Main worker thread management for the async YouTube Summarizer system.
 Coordinates worker threads, job processing, and result handling.
 """
 
-import json
 import logging
 import threading
 import time
@@ -15,12 +14,9 @@ from typing import Any, Callable, Dict, List, Optional
 
 from job_models import (
     JobResult,
-    JobStatus,
     JobType,
     ProcessingJob,
     WorkerMetrics,
-    create_playlist_job,
-    create_video_job,
 )
 from job_queue import JobScheduler
 
@@ -45,7 +41,12 @@ class WorkerThread:
     Each worker runs in its own thread and handles job execution.
     """
 
-    def __init__(self, worker_id: str, job_scheduler: JobScheduler, notification_callback: Optional[Callable] = None):
+    def __init__(
+        self,
+        worker_id: str,
+        job_scheduler: JobScheduler,
+        notification_callback: Optional[Callable] = None,
+    ):
         """
         Initialize worker thread.
 
@@ -80,7 +81,9 @@ class WorkerThread:
             return
 
         self.should_stop = False
-        self.thread = threading.Thread(target=self._run, name=f"Worker-{self.worker_id}")
+        self.thread = threading.Thread(
+            target=self._run, name=f"Worker-{self.worker_id}"
+        )
         self.thread.daemon = True
         self.thread.start()
         self.is_running = True
@@ -115,7 +118,9 @@ class WorkerThread:
         # Load cache at start
         try:
             self._summary_cache = load_summary_cache()
-            logger.debug(f"Worker {self.worker_id} loaded cache with {len(self._summary_cache)} entries")
+            logger.debug(
+                f"Worker {self.worker_id} loaded cache with {len(self._summary_cache)} entries"
+            )
         except Exception as e:
             logger.error(f"Worker {self.worker_id} failed to load cache: {e}")
             self._summary_cache = {}
@@ -150,7 +155,9 @@ class WorkerThread:
 
                 # If we have a current job, mark it as failed
                 if self.current_job:
-                    self.current_job.fail_with_error(f"Worker error: {str(e)}", can_retry=True)
+                    self.current_job.fail_with_error(
+                        f"Worker error: {str(e)}", can_retry=True
+                    )
                     self.current_job = None
 
                 # Brief sleep to prevent tight error loop
@@ -188,7 +195,9 @@ class WorkerThread:
             job.complete_successfully(result_data)
             processing_time = time.time() - start_time
 
-            logger.info(f"Worker {self.worker_id} completed job {job.job_id} in {processing_time:.2f}s")
+            logger.info(
+                f"Worker {self.worker_id} completed job {job.job_id} in {processing_time:.2f}s"
+            )
 
             return JobResult(
                 job_id=job.job_id,
@@ -200,7 +209,9 @@ class WorkerThread:
 
         except Exception as e:
             error_msg = str(e)
-            logger.error(f"Worker {self.worker_id} failed to process job {job.job_id}: {error_msg}")
+            logger.error(
+                f"Worker {self.worker_id} failed to process job {job.job_id}: {error_msg}"
+            )
             logger.error(traceback.format_exc())
 
             # Mark job as failed
@@ -320,7 +331,11 @@ class WorkerThread:
             if error:
                 raise ValueError(f"Could not fetch playlist videos: {error}")
 
-            video_ids = [item["contentDetails"]["videoId"] for item in video_items if "contentDetails" in item]
+            video_ids = [
+                item["contentDetails"]["videoId"]
+                for item in video_items
+                if "contentDetails" in item
+            ]
 
         if not video_ids:
             raise ValueError("No videos found in playlist")
@@ -331,7 +346,9 @@ class WorkerThread:
 
         for i, video_id in enumerate(video_ids):
             progress = (i / total_videos) * 0.9  # Reserve last 10% for finalization
-            self._notify_progress(job, progress, f"Processing video {i+1} of {total_videos}...")
+            self._notify_progress(
+                job, progress, f"Processing video {i+1} of {total_videos}..."
+            )
 
             try:
                 # Create a temporary video job
@@ -341,7 +358,10 @@ class WorkerThread:
                     "type": "video",
                 }
                 temp_job = ProcessingJob(
-                    job_id=f"{job.job_id}_video_{i}", job_type=JobType.VIDEO, priority=job.priority, data=video_job_data
+                    job_id=f"{job.job_id}_video_{i}",
+                    job_type=JobType.VIDEO,
+                    priority=job.priority,
+                    data=video_job_data,
                 )
 
                 # Process the video
@@ -355,7 +375,14 @@ class WorkerThread:
             except Exception as e:
                 logger.warning(f"Failed to process video {video_id} in playlist: {e}")
                 # Add error entry but continue processing
-                results.append({"video_id": video_id, "title": f"Video {video_id}", "error": str(e), "cached": False})
+                results.append(
+                    {
+                        "video_id": video_id,
+                        "title": f"Video {video_id}",
+                        "error": str(e),
+                        "cached": False,
+                    }
+                )
 
         self._notify_progress(job, 1.0, "Playlist processing completed")
 
@@ -389,7 +416,9 @@ class WorkerThread:
 
         for i, url in enumerate(urls):
             progress = (i / total_urls) * 0.9
-            self._notify_progress(job, progress, f"Processing URL {i+1} of {total_urls}...")
+            self._notify_progress(
+                job, progress, f"Processing URL {i+1} of {total_urls}..."
+            )
 
             try:
                 # Determine if it's a video or playlist
@@ -410,7 +439,11 @@ class WorkerThread:
                     result = self._process_playlist_job(temp_job)
                 else:
                     # It's a video
-                    video_job_data = {"url": url, "model_key": model_key, "type": "video"}
+                    video_job_data = {
+                        "url": url,
+                        "model_key": model_key,
+                        "type": "video",
+                    }
                     temp_job = ProcessingJob(
                         job_id=f"{job.job_id}_video_{i}",
                         job_type=JobType.VIDEO,
@@ -428,7 +461,13 @@ class WorkerThread:
 
             except Exception as e:
                 logger.warning(f"Failed to process URL {url} in batch: {e}")
-                results.append({"url": url, "error": str(e), "processed_at": datetime.now(timezone.utc).isoformat()})
+                results.append(
+                    {
+                        "url": url,
+                        "error": str(e),
+                        "processed_at": datetime.now(timezone.utc).isoformat(),
+                    }
+                )
 
         self._notify_progress(job, 1.0, "Batch processing completed")
 
@@ -474,7 +513,12 @@ class WorkerManager:
     Provides high-level interface for job submission and worker management.
     """
 
-    def __init__(self, num_workers: int = 3, max_queue_size: int = 1000, rate_limit_per_minute: int = 60):
+    def __init__(
+        self,
+        num_workers: int = 3,
+        max_queue_size: int = 1000,
+        rate_limit_per_minute: int = 60,
+    ):
         """
         Initialize the worker manager.
 
@@ -507,10 +551,13 @@ class WorkerManager:
         """
         global clean_youtube_url, get_video_id, get_playlist_id, get_transcript
         global generate_summary, get_video_details, get_videos_from_playlist
-        global load_summary_cache, save_summary_cache
+        global save_summary_cache
 
         # Extract functions from app context
-        clean_youtube_url = lambda url: url  # Simple version
+        def default_clean_url(url):
+            return url
+
+        clean_youtube_url = default_clean_url
         get_video_id = app_context.get("extract_video_id")
         get_playlist_id = app_context.get("extract_playlist_id")
         get_transcript = app_context.get("get_transcript")
@@ -548,7 +595,9 @@ class WorkerManager:
 
         # Start management thread
         self._should_stop_management = False
-        self._management_thread = threading.Thread(target=self._management_loop, name="WorkerManager-Management")
+        self._management_thread = threading.Thread(
+            target=self._management_loop, name="WorkerManager-Management"
+        )
         self._management_thread.daemon = True
         self._management_thread.start()
 
@@ -636,7 +685,9 @@ class WorkerManager:
             "queue": queue_status,
             "system_metrics": {
                 "total_workers": len(self.workers),
-                "active_workers": sum(1 for w in self.workers if w.current_job is not None),
+                "active_workers": sum(
+                    1 for w in self.workers if w.current_job is not None
+                ),
                 "idle_workers": sum(1 for w in self.workers if w.current_job is None),
             },
         }
@@ -650,7 +701,10 @@ class WorkerManager:
         self._completion_callbacks.append(callback)
 
     def _handle_worker_notification(
-        self, job: ProcessingJob, result: Optional[JobResult], progress_update: bool = False
+        self,
+        job: ProcessingJob,
+        result: Optional[JobResult],
+        progress_update: bool = False,
     ):
         """
         Handle notifications from workers.
@@ -684,11 +738,15 @@ class WorkerManager:
                 # Check worker health
                 for worker in self.workers:
                     if not worker.is_running and not self._should_stop_management:
-                        logger.warning(f"Worker {worker.worker_id} stopped unexpectedly, restarting...")
+                        logger.warning(
+                            f"Worker {worker.worker_id} stopped unexpectedly, restarting..."
+                        )
                         try:
                             worker.start()
                         except Exception as e:
-                            logger.error(f"Failed to restart worker {worker.worker_id}: {e}")
+                            logger.error(
+                                f"Failed to restart worker {worker.worker_id}: {e}"
+                            )
 
                 # Sleep for 30 seconds before next check
                 for _ in range(30):

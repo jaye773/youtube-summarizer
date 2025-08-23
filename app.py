@@ -15,7 +15,7 @@ from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
 
 # Import new worker system modules
 try:
-    from job_models import JobPriority, create_playlist_job, create_video_job
+    from job_models import create_playlist_job, create_video_job
     from job_state import JobStateManager
     from sse_manager import get_sse_manager
     from worker_manager import WorkerManager
@@ -32,12 +32,25 @@ import socket
 import google.generativeai as genai
 import httplib2
 import openai
-from flask import Flask, Response, jsonify, redirect, render_template, request, session, url_for
+from flask import (
+    Flask,
+    Response,
+    jsonify,
+    redirect,
+    render_template,
+    request,
+    session,
+    url_for,
+)
 from google.api_core.client_options import ClientOptions
 from google.cloud import texttospeech
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
-from youtube_transcript_api import NoTranscriptFound, TranscriptsDisabled, YouTubeTranscriptApi
+from youtube_transcript_api import (
+    NoTranscriptFound,
+    TranscriptsDisabled,
+    YouTubeTranscriptApi,
+)
 
 from voice_config import (
     AVAILABLE_VOICES,
@@ -135,7 +148,9 @@ def cleanup_stale_connections():
                 print(f"Cleaned up stale SSE connection: {conn_id}")
 
 
-def broadcast_to_connections(event_type, data, session_filter=None, subscription_filter=None):
+def broadcast_to_connections(
+    event_type, data, session_filter=None, subscription_filter=None
+):
     """Broadcast message to all matching connections"""
     cleanup_stale_connections()
 
@@ -146,7 +161,10 @@ def broadcast_to_connections(event_type, data, session_filter=None, subscription
                 continue
 
             # Filter by subscription if specified
-            if subscription_filter and subscription_filter not in connection.subscriptions:
+            if (
+                subscription_filter
+                and subscription_filter not in connection.subscriptions
+            ):
                 continue
 
             if not connection.send_message(event_type, data):
@@ -155,7 +173,9 @@ def broadcast_to_connections(event_type, data, session_filter=None, subscription
 
 
 # --- WEBSHARE PROXY CONFIGURATION ---
-WEBSHARE_PROXY_ENABLED = os.environ.get("WEBSHARE_PROXY_ENABLED", "false").lower() == "true"
+WEBSHARE_PROXY_ENABLED = (
+    os.environ.get("WEBSHARE_PROXY_ENABLED", "false").lower() == "true"
+)
 WEBSHARE_PROXY_HOST = os.environ.get("WEBSHARE_PROXY_HOST")
 WEBSHARE_PROXY_PORT = os.environ.get("WEBSHARE_PROXY_PORT")
 WEBSHARE_PROXY_USERNAME = os.environ.get("WEBSHARE_PROXY_USERNAME")
@@ -167,7 +187,14 @@ def get_proxy_config():
     if not WEBSHARE_PROXY_ENABLED:
         return None
 
-    if not all([WEBSHARE_PROXY_HOST, WEBSHARE_PROXY_PORT, WEBSHARE_PROXY_USERNAME, WEBSHARE_PROXY_PASSWORD]):
+    if not all(
+        [
+            WEBSHARE_PROXY_HOST,
+            WEBSHARE_PROXY_PORT,
+            WEBSHARE_PROXY_USERNAME,
+            WEBSHARE_PROXY_PASSWORD,
+        ]
+    ):
         print(
             "⚠️ Webshare proxy is enabled but missing required configuration. "
             "Required: WEBSHARE_PROXY_HOST, WEBSHARE_PROXY_PORT, WEBSHARE_PROXY_USERNAME, WEBSHARE_PROXY_PASSWORD"
@@ -175,10 +202,13 @@ def get_proxy_config():
         return None
 
     proxy_url = (
-        f"http://{WEBSHARE_PROXY_USERNAME}:{WEBSHARE_PROXY_PASSWORD}@{WEBSHARE_PROXY_HOST}:{WEBSHARE_PROXY_PORT}"
+        f"http://{WEBSHARE_PROXY_USERNAME}:{WEBSHARE_PROXY_PASSWORD}"
+        f"@{WEBSHARE_PROXY_HOST}:{WEBSHARE_PROXY_PORT}"
     )
     proxies = {"http": proxy_url, "https": proxy_url}
-    print(f"✅ Using webshare proxy: {WEBSHARE_PROXY_USERNAME}@{WEBSHARE_PROXY_HOST}:{WEBSHARE_PROXY_PORT}")
+    print(
+        f"✅ Using webshare proxy: {WEBSHARE_PROXY_USERNAME}@{WEBSHARE_PROXY_HOST}:{WEBSHARE_PROXY_PORT}"
+    )
     return proxies
 
 
@@ -273,7 +303,10 @@ def record_failed_attempt(ip_address):
     attempts_data = clean_expired_attempts(attempts_data)
 
     if ip_address not in attempts_data:
-        attempts_data[ip_address] = {"count": 0, "first_attempt": datetime.now(timezone.utc).isoformat()}
+        attempts_data[ip_address] = {
+            "count": 0,
+            "first_attempt": datetime.now(timezone.utc).isoformat(),
+        }
 
     attempts_data[ip_address]["count"] += 1
     attempts_data[ip_address]["last_attempt"] = datetime.now(timezone.utc).isoformat()
@@ -359,7 +392,9 @@ def init_worker_system():
             # Start the worker system
             worker_manager.start()
 
-            print(f"✅ Worker system initialized with {worker_manager.max_workers} worker threads")
+            print(
+                f"✅ Worker system initialized with {worker_manager.max_workers} worker threads"
+            )
             return True
 
     except Exception as e:
@@ -421,10 +456,14 @@ TTS_VOICE = os.environ.get("TTS_VOICE", "en-US-Chirp3-HD-Zephyr")
 # Configure Flask session
 if LOGIN_ENABLED:
     if not SESSION_SECRET_KEY:
-        print("Warning: SESSION_SECRET_KEY not set. Using auto-generated key (not recommended for production)")
+        print(
+            "Warning: SESSION_SECRET_KEY not set. Using auto-generated key (not recommended for production)"
+        )
         SESSION_SECRET_KEY = os.urandom(24).hex()
     if not LOGIN_CODE:
-        print("Warning: LOGIN_CODE not set. Login functionality will not work properly.")
+        print(
+            "Warning: LOGIN_CODE not set. Login functionality will not work properly."
+        )
 
 app.secret_key = SESSION_SECRET_KEY if SESSION_SECRET_KEY else os.urandom(24)
 
@@ -500,15 +539,21 @@ openai_client = None
 # Initialize Google APIs
 if google_api_key and not os.environ.get("TESTING"):
     try:
-        tts_client = texttospeech.TextToSpeechClient(client_options=ClientOptions(api_key=google_api_key))
+        tts_client = texttospeech.TextToSpeechClient(
+            client_options=ClientOptions(api_key=google_api_key)
+        )
         genai.configure(api_key=google_api_key)
         youtube = create_youtube_client_with_timeout(google_api_key, timeout=30)
-        gemini_model = genai.GenerativeModel(model_name="gemini-2.5-flash-preview-05-20")
+        gemini_model = genai.GenerativeModel(
+            model_name="gemini-2.5-flash-preview-05-20"
+        )
         print("✅ Google APIs initialized successfully")
     except Exception as e:
         print(f"Warning: Could not configure Google APIs. Error: {e}")
 elif not google_api_key and not os.environ.get("TESTING"):
-    print("Warning: GOOGLE_API_KEY environment variable is not set. Google services will be unavailable.")
+    print(
+        "Warning: GOOGLE_API_KEY environment variable is not set. Google services will be unavailable."
+    )
 
 # Initialize OpenAI API
 if openai_api_key and not os.environ.get("TESTING"):
@@ -518,13 +563,17 @@ if openai_api_key and not os.environ.get("TESTING"):
     except Exception as e:
         print(f"Warning: Could not configure OpenAI API. Error: {e}")
 elif not openai_api_key and not os.environ.get("TESTING"):
-    print("Warning: OPENAI_API_KEY environment variable is not set. OpenAI models will be unavailable.")
+    print(
+        "Warning: OPENAI_API_KEY environment variable is not set. OpenAI models will be unavailable."
+    )
 
 # For testing, create clients even without API keys
 if os.environ.get("TESTING"):
     try:
         if not gemini_model:
-            gemini_model = genai.GenerativeModel(model_name="gemini-2.5-flash-preview-05-20")
+            gemini_model = genai.GenerativeModel(
+                model_name="gemini-2.5-flash-preview-05-20"
+            )
         if not openai_client:
             openai_client = openai.OpenAI(api_key="test-key")
     except Exception:
@@ -694,14 +743,18 @@ def get_video_details(video_ids, max_retries=3):
                 snippet = item.get("snippet", {})
                 details[item["id"]] = {
                     "title": snippet.get("title", "Unknown Title"),
-                    "thumbnail_url": snippet.get("thumbnails", {}).get("medium", {}).get("url"),
+                    "thumbnail_url": snippet.get("thumbnails", {})
+                    .get("medium", {})
+                    .get("url"),
                 }
             return details
 
         except (socket.timeout, TimeoutError, OSError) as e:
             retry_count += 1
             if retry_count > max_retries:
-                print(f"Max retries ({max_retries}) exceeded for video details. Error: {e}")
+                print(
+                    f"Max retries ({max_retries}) exceeded for video details. Error: {e}"
+                )
                 return {}
 
             # Exponential backoff with jitter
@@ -717,11 +770,15 @@ def get_video_details(video_ids, max_retries=3):
             if e.resp.status in [500, 502, 503, 504]:  # Server errors
                 retry_count += 1
                 if retry_count > max_retries:
-                    print(f"Max retries ({max_retries}) exceeded for video details. HTTP Error: {e}")
+                    print(
+                        f"Max retries ({max_retries}) exceeded for video details. HTTP Error: {e}"
+                    )
                     return {}
 
                 delay = base_delay * (2 ** (retry_count - 1))
-                print(f"HTTP {e.resp.status} error (attempt {retry_count}/{max_retries}). Retrying in {delay:.1f}s...")
+                print(
+                    f"HTTP {e.resp.status} error (attempt {retry_count}/{max_retries}). Retrying in {delay:.1f}s..."
+                )
                 time.sleep(delay)
             else:
                 # For other HTTP errors, don't retry
@@ -772,7 +829,10 @@ def get_videos_from_playlist(playlist_id, max_retries=3):
             except (socket.timeout, TimeoutError, OSError) as e:
                 retry_count += 1
                 if retry_count > max_retries:
-                    return None, f"Timeout error fetching playlist after {max_retries} retries: {e}"
+                    return (
+                        None,
+                        f"Timeout error fetching playlist after {max_retries} retries: {e}",
+                    )
 
                 # Exponential backoff with jitter
                 delay = base_delay * (2 ** (retry_count - 1)) + (0.1 * retry_count)
@@ -787,7 +847,10 @@ def get_videos_from_playlist(playlist_id, max_retries=3):
                 if e.resp.status in [500, 502, 503, 504]:  # Server errors
                     retry_count += 1
                     if retry_count > max_retries:
-                        return None, f"Server error fetching playlist after {max_retries} retries: {e}"
+                        return (
+                            None,
+                            f"Server error fetching playlist after {max_retries} retries: {e}",
+                        )
 
                     delay = base_delay * (2 ** (retry_count - 1))
                     print(
@@ -815,13 +878,21 @@ def get_transcript(video_id):
     proxies = get_proxy_config()
 
     try:
-        transcript_list = YouTubeTranscriptApi.get_transcript(video_id, languages=["en", "en-US"], proxies=proxies)
+        transcript_list = YouTubeTranscriptApi.get_transcript(
+            video_id, languages=["en", "en-US"], proxies=proxies
+        )
         transcript_text = " ".join([d["text"] for d in transcript_list])
-        return (transcript_text, None) if transcript_text.strip() else (None, "Transcript was found but it is empty.")
+        return (
+            (transcript_text, None)
+            if transcript_text.strip()
+            else (None, "Transcript was found but it is empty.")
+        )
     except NoTranscriptFound:
         try:
             transcript_list = (
-                YouTubeTranscriptApi.list_transcripts(video_id, proxies=proxies).find_transcript(["en"]).fetch()
+                YouTubeTranscriptApi.list_transcripts(video_id, proxies=proxies)
+                .find_transcript(["en"])
+                .fetch()
             )
             transcript_text = " ".join([d["text"] for d in transcript_list])
             return (
@@ -904,7 +975,10 @@ def get_summary_prompt(transcript, title):
 def generate_summary_gemini(transcript, title, model_name):
     """Generate summary using Google Gemini"""
     if not gemini_model:
-        return None, "Gemini model not available. Please set the GOOGLE_API_KEY environment variable."
+        return (
+            None,
+            "Gemini model not available. Please set the GOOGLE_API_KEY environment variable.",
+        )
 
     try:
         # Create model instance for the specific model if different from default
@@ -924,7 +998,10 @@ def generate_summary_gemini(transcript, title, model_name):
 def generate_summary_openai(transcript, title, model_name):
     """Generate summary using OpenAI"""
     if not openai_client:
-        return None, "OpenAI client not available. Please set the OPENAI_API_KEY environment variable."
+        return (
+            None,
+            "OpenAI client not available. Please set the OPENAI_API_KEY environment variable.",
+        )
 
     try:
         prompt = get_summary_prompt(transcript, title)
@@ -980,7 +1057,10 @@ def generate_summary(transcript, title, model_key=None):
 
     # Validate model key
     if model_key not in AVAILABLE_MODELS:
-        return None, f"Unsupported model: {model_key}. Available models: {list(AVAILABLE_MODELS.keys())}"
+        return (
+            None,
+            f"Unsupported model: {model_key}. Available models: {list(AVAILABLE_MODELS.keys())}",
+        )
 
     model_config = AVAILABLE_MODELS[model_key]
     provider = model_config["provider"]
@@ -1020,7 +1100,9 @@ def require_auth(f):
             ]
 
             # Special handling for settings: GET requests should redirect, POST should return JSON
-            is_settings_post = request.path.startswith("/settings") and request.method == "POST"
+            is_settings_post = (
+                request.path.startswith("/settings") and request.method == "POST"
+            )
 
             is_api_request = (
                 request.content_type == "application/json"
@@ -1031,7 +1113,12 @@ def require_auth(f):
 
             if is_api_request:
                 return (
-                    jsonify({"error": "Authentication required", "message": "Please login to access this resource"}),
+                    jsonify(
+                        {
+                            "error": "Authentication required",
+                            "message": "Please login to access this resource",
+                        }
+                    ),
                     401,
                 )
 
@@ -1085,7 +1172,9 @@ def login():
         return jsonify({"error": "Login system is disabled"}), 404
 
     # Get client IP address
-    client_ip = request.environ.get("HTTP_X_FORWARDED_FOR", request.environ.get("REMOTE_ADDR", "127.0.0.1"))
+    client_ip = request.environ.get(
+        "HTTP_X_FORWARDED_FOR", request.environ.get("REMOTE_ADDR", "127.0.0.1")
+    )
     if "," in client_ip:
         client_ip = client_ip.split(",")[0].strip()
 
@@ -1143,7 +1232,13 @@ def login():
                 remaining_attempts = MAX_LOGIN_ATTEMPTS - current_count
 
                 return (
-                    jsonify({"success": False, "error": "Invalid passcode", "remaining_attempts": remaining_attempts}),
+                    jsonify(
+                        {
+                            "success": False,
+                            "error": "Invalid passcode",
+                            "remaining_attempts": remaining_attempts,
+                        }
+                    ),
                     401,
                 )
 
@@ -1188,8 +1283,12 @@ def sse_events():
     connection_id = str(uuid.uuid4())
 
     # Get client information for security and tracking
-    session_id = session.get("session_id") or session.sid if hasattr(session, "sid") else None
-    client_ip = request.environ.get("HTTP_X_FORWARDED_FOR", request.environ.get("REMOTE_ADDR", "127.0.0.1"))
+    session_id = (
+        session.get("session_id") or session.sid if hasattr(session, "sid") else None
+    )
+    client_ip = request.environ.get(
+        "HTTP_X_FORWARDED_FOR", request.environ.get("REMOTE_ADDR", "127.0.0.1")
+    )
     if "," in client_ip:
         client_ip = client_ip.split(",")[0].strip()
 
@@ -1197,7 +1296,11 @@ def sse_events():
     subscriptions = request.args.get("subscribe", "").split(",")
     subscriptions = {sub.strip() for sub in subscriptions if sub.strip()}
     if not subscriptions:
-        subscriptions = {"summary_complete", "summary_progress", "system"}  # Default subscriptions
+        subscriptions = {
+            "summary_complete",
+            "summary_progress",
+            "system",
+        }  # Default subscriptions
 
     # Create and register the connection
     connection = SSEConnection(connection_id, session_id, client_ip)
@@ -1206,7 +1309,9 @@ def sse_events():
     with sse_connection_lock:
         sse_connections[connection_id] = connection
 
-    print(f"New SSE connection established: {connection_id} from {client_ip} (Session: {session_id})")
+    print(
+        f"New SSE connection established: {connection_id} from {client_ip} (Session: {session_id})"
+    )
 
     def generate():
         """Generator function for SSE stream"""
@@ -1226,7 +1331,12 @@ def sse_events():
             for message in connection.get_messages():
                 if not connection.is_active:
                     break
-                yield format_sse_message(message["event"], message["data"], message["id"], message.get("retry"))
+                yield format_sse_message(
+                    message["event"],
+                    message["data"],
+                    message["id"],
+                    message.get("retry"),
+                )
 
         except GeneratorExit:
             # Client disconnected
@@ -1276,7 +1386,9 @@ def sse_status():
                 }
             )
 
-    return jsonify({"total_connections": len(sse_connections), "connections": connection_info})
+    return jsonify(
+        {"total_connections": len(sse_connections), "connections": connection_info}
+    )
 
 
 @app.route("/events/broadcast", methods=["POST"])
@@ -1294,16 +1406,32 @@ def sse_broadcast():
         subscription_filter = data.get("subscription_filter")
 
         # Validate event type
-        allowed_events = ["test", "system", "summary_complete", "summary_progress", "admin"]
+        allowed_events = [
+            "test",
+            "system",
+            "summary_complete",
+            "summary_progress",
+            "admin",
+        ]
         if event_type not in allowed_events:
-            return jsonify({"error": f"Invalid event type. Allowed: {allowed_events}"}), 400
+            return (
+                jsonify({"error": f"Invalid event type. Allowed: {allowed_events}"}),
+                400,
+            )
 
         broadcast_to_connections(
-            event_type, message_data, session_filter=session_filter, subscription_filter=subscription_filter
+            event_type,
+            message_data,
+            session_filter=session_filter,
+            subscription_filter=subscription_filter,
         )
 
         return jsonify(
-            {"success": True, "message": f"Broadcasted {event_type} event", "total_connections": len(sse_connections)}
+            {
+                "success": True,
+                "message": f"Broadcasted {event_type} event",
+                "total_connections": len(sse_connections),
+            }
         )
 
     except Exception as e:
@@ -1350,7 +1478,13 @@ def get_cached_summaries():
     if not summary_cache:
         if is_pagination_request:
             return jsonify(
-                {"summaries": [], "total": 0, "page": page or 1, "per_page": per_page or 10, "total_pages": 0}
+                {
+                    "summaries": [],
+                    "total": 0,
+                    "page": page or 1,
+                    "per_page": per_page or 10,
+                    "total_pages": 0,
+                }
             )
         else:
             return jsonify([])
@@ -1382,7 +1516,9 @@ def get_cached_summaries():
         }
         for video_id, d in summary_cache.items()
     ]
-    cached_list.sort(key=lambda x: x.get("summarized_at", "1970-01-01T00:00:00.000000"), reverse=True)
+    cached_list.sort(
+        key=lambda x: x.get("summarized_at", "1970-01-01T00:00:00.000000"), reverse=True
+    )
 
     total = len(cached_list)
 
@@ -1407,7 +1543,13 @@ def get_cached_summaries():
     paginated_list = cached_list[start_index:end_index]
 
     return jsonify(
-        {"summaries": paginated_list, "total": total, "page": page, "per_page": per_page, "total_pages": total_pages}
+        {
+            "summaries": paginated_list,
+            "total": total,
+            "page": page,
+            "per_page": per_page,
+            "total_pages": total_pages,
+        }
     )
 
 
@@ -1447,7 +1589,9 @@ def search_summaries():
             )
 
     # Sort by date (most recent first)
-    results.sort(key=lambda x: x.get("summarized_at", "1970-01-01T00:00:00.000000"), reverse=True)
+    results.sort(
+        key=lambda x: x.get("summarized_at", "1970-01-01T00:00:00.000000"), reverse=True
+    )
 
     return jsonify(results)
 
@@ -1499,7 +1643,9 @@ def debug_transcript():
     }
 
     if transcript:
-        result["transcript_preview"] = transcript[:200] + "..." if len(transcript) > 200 else transcript
+        result["transcript_preview"] = (
+            transcript[:200] + "..." if len(transcript) > 200 else transcript
+        )
 
     return jsonify(result)
 
@@ -1530,7 +1676,9 @@ def debug_model():
         }
 
         if summary:
-            result["summary_preview"] = summary[:200] + "..." if len(summary) > 200 else summary
+            result["summary_preview"] = (
+                summary[:200] + "..." if len(summary) > 200 else summary
+            )
 
         return jsonify(result)
 
@@ -1568,13 +1716,29 @@ def summarize_links():
         # Validate model key
         if model_key not in AVAILABLE_MODELS:
             available_models = list(AVAILABLE_MODELS.keys())
-            return jsonify({"error": f"Unsupported model: {model_key}. Available models: {available_models}"}), 400
+            return (
+                jsonify(
+                    {
+                        "error": f"Unsupported model: {model_key}. Available models: {available_models}"
+                    }
+                ),
+                400,
+            )
 
         # Get session ID for SSE notifications
-        session_id = session.get("session_id") or session.sid if hasattr(session, "sid") else None
+        session_id = (
+            session.get("session_id") or session.sid
+            if hasattr(session, "sid")
+            else None
+        )
 
         # Send initial progress notification
-        total_items = sum(1 for url in urls for _ in [get_playlist_id(url)] if _ is None or get_video_id(url))
+        total_items = sum(
+            1
+            for url in urls
+            for _ in [get_playlist_id(url)]
+            if _ is None or get_video_id(url)
+        )
         if any(get_playlist_id(url) for url in urls):
             # If there are playlists, we'll update the count as we discover videos
             broadcast_to_connections(
@@ -1617,7 +1781,9 @@ def summarize_links():
                             }
                         )
                         continue
-                    pl_meta_request = youtube.playlists().list(part="snippet", id=playlist_id)
+                    pl_meta_request = youtube.playlists().list(
+                        part="snippet", id=playlist_id
+                    )
                     pl_meta_response = pl_meta_request.execute()
                     if not pl_meta_response.get("items"):
                         results.append(
@@ -1661,9 +1827,9 @@ def summarize_links():
                     for index, item in enumerate(playlist_items):
                         snippet = item.get("snippet", {})
                         vid_id = snippet.get("resourceId", {}).get("videoId")
-                        vid_title, thumbnail_url = snippet.get("title", "Unknown Title"), snippet.get(
-                            "thumbnails", {}
-                        ).get("medium", {}).get("url")
+                        vid_title, thumbnail_url = snippet.get(
+                            "title", "Unknown Title"
+                        ), snippet.get("thumbnails", {}).get("medium", {}).get("url")
 
                         # Send progress update for current video
                         broadcast_to_connections(
@@ -1673,7 +1839,11 @@ def summarize_links():
                                 "message": f"Processing: {vid_title[:50]}{'...' if len(vid_title) > 50 else ''}",
                                 "progress": processed_count + index + 1,
                                 "total": processed_count + total_videos,
-                                "current_video": {"id": vid_id, "title": vid_title, "playlist": playlist_title},
+                                "current_video": {
+                                    "id": vid_id,
+                                    "title": vid_title,
+                                    "playlist": playlist_title,
+                                },
                             },
                             session_filter=session_id,
                             subscription_filter="summary_progress",
@@ -1710,14 +1880,23 @@ def summarize_links():
                             # Send completion notification for cached video
                             broadcast_to_connections(
                                 "summary_complete",
-                                {"video_id": vid_id, "title": vid_title, "source": "cache", "playlist": playlist_title},
+                                {
+                                    "video_id": vid_id,
+                                    "title": vid_title,
+                                    "source": "cache",
+                                    "playlist": playlist_title,
+                                },
                                 session_filter=session_id,
                                 subscription_filter="summary_complete",
                             )
                             continue
 
                         transcript, err = get_transcript(vid_id)
-                        summary, err = (None, err) if err else generate_summary(transcript, vid_title, model_key)
+                        summary, err = (
+                            (None, err)
+                            if err
+                            else generate_summary(transcript, vid_title, model_key)
+                        )
 
                         if summary and not err:
                             audio_filename = f"{hashlib.sha256(summary.encode('utf-8')).hexdigest()}.mp3"
@@ -1807,7 +1986,10 @@ def summarize_links():
                             "title": cached_item["title"],
                             "thumbnail_url": cached_item["thumbnail_url"],
                             "summary": cached_item["summary"],
-                            "video_url": cached_item.get("video_url", f"https://www.youtube.com/watch?v={video_id}"),
+                            "video_url": cached_item.get(
+                                "video_url",
+                                f"https://www.youtube.com/watch?v={video_id}",
+                            ),
                             "error": None,
                         }
                     )
@@ -1815,7 +1997,11 @@ def summarize_links():
                     # Send completion notification for cached video
                     broadcast_to_connections(
                         "summary_complete",
-                        {"video_id": video_id, "title": cached_item["title"], "source": "cache"},
+                        {
+                            "video_id": video_id,
+                            "title": cached_item["title"],
+                            "source": "cache",
+                        },
                         session_filter=session_id,
                         subscription_filter="summary_complete",
                     )
@@ -1824,10 +2010,16 @@ def summarize_links():
                 try:
                     thumbnail_url = details.get("thumbnail_url")
                     transcript, err = get_transcript(video_id)
-                    summary, err = (None, err) if err else generate_summary(transcript, title, model_key)
+                    summary, err = (
+                        (None, err)
+                        if err
+                        else generate_summary(transcript, title, model_key)
+                    )
 
                     if summary and not err:
-                        audio_filename = f"{hashlib.sha256(summary.encode('utf-8')).hexdigest()}.mp3"
+                        audio_filename = (
+                            f"{hashlib.sha256(summary.encode('utf-8')).hexdigest()}.mp3"
+                        )
                         # --- MODIFICATION START ---
                         video_url = f"https://www.youtube.com/watch?v={video_id}"
                         summary_cache[video_id] = {
@@ -1845,7 +2037,12 @@ def summarize_links():
                         # Send completion notification for new summary
                         broadcast_to_connections(
                             "summary_complete",
-                            {"video_id": video_id, "title": title, "source": "generated", "model_used": model_key},
+                            {
+                                "video_id": video_id,
+                                "title": title,
+                                "source": "generated",
+                                "model_used": model_key,
+                            },
                             session_filter=session_id,
                             subscription_filter="summary_complete",
                         )
@@ -1896,7 +2093,9 @@ def summarize_links():
         return jsonify(results)
     except Exception as e:
         # Catch-all exception handler for the entire endpoint
-        app.logger.error(f"Unhandled exception in /summarize: {str(e)}\n{traceback.format_exc()}")
+        app.logger.error(
+            f"Unhandled exception in /summarize: {str(e)}\n{traceback.format_exc()}"
+        )
         return (
             jsonify(
                 {
@@ -1931,7 +2130,9 @@ def summarize_async():
             return jsonify({"error": "No URLs provided"}), 400
 
         # Parse URLs
-        urls = [url.strip() for url in urls_input.replace("\n", " ").split() if url.strip()]
+        urls = [
+            url.strip() for url in urls_input.replace("\n", " ").split() if url.strip()
+        ]
 
         if not urls:
             return jsonify({"error": "No valid URLs provided"}), 400
@@ -2009,9 +2210,6 @@ def list_jobs():
 
     try:
         status_filter = request.args.get("status")
-        limit = min(int(request.args.get("limit", 50)), 100)
-        session_id = session.get("session_id")
-
         jobs = job_state_manager.get_all_jobs(status_filter=status_filter)
 
         return jsonify({"jobs": jobs})
@@ -2046,8 +2244,10 @@ def speak():
     # Check if cache cleanup is needed (do this before generating cache key)
     if should_cleanup_cache(AUDIO_CACHE_DIR):
         cleanup_result = cleanup_audio_cache(AUDIO_CACHE_DIR)
-        size_mb = cleanup_result['size_freed'] / 1024 / 1024
-        print(f"Cache cleanup: removed {cleanup_result['cleaned']} files, freed {size_mb:.1f}MB")
+        size_mb = cleanup_result["size_freed"] / 1024 / 1024
+        print(
+            f"Cache cleanup: removed {cleanup_result['cleaned']} files, freed {size_mb:.1f}MB"
+        )
 
     # Use optimized cache key generation
     cache_key = get_optimized_cache_key(voice_id, text_to_speak)
@@ -2065,7 +2265,8 @@ def speak():
     # Check if TTS client is available
     if not tts_client:
         return Response(
-            "Text-to-speech service not available. Please set the GOOGLE_API_KEY environment variable.", status=503
+            "Text-to-speech service not available. Please set the GOOGLE_API_KEY environment variable.",
+            status=503,
         )
 
     try:
@@ -2078,9 +2279,13 @@ def speak():
         voice = texttospeech.VoiceSelectionParams(
             language_code=voice_config["language_code"], name=voice_config["name"]
         )
-        audio_config = texttospeech.AudioConfig(audio_encoding=texttospeech.AudioEncoding.MP3)
+        audio_config = texttospeech.AudioConfig(
+            audio_encoding=texttospeech.AudioEncoding.MP3
+        )
 
-        response = tts_client.synthesize_speech(input=synthesis_input, voice=voice, audio_config=audio_config)
+        response = tts_client.synthesize_speech(
+            input=synthesis_input, voice=voice, audio_config=audio_config
+        )
 
         with open(filepath, "wb") as f:
             f.write(response.audio_content)
@@ -2119,7 +2324,14 @@ def get_cache_status():
         from pathlib import Path
 
         if not os.path.exists(AUDIO_CACHE_DIR):
-            return jsonify({"total_files": 0, "total_size_mb": 0, "cache_utilization": 0, "needs_cleanup": False})
+            return jsonify(
+                {
+                    "total_files": 0,
+                    "total_size_mb": 0,
+                    "cache_utilization": 0,
+                    "needs_cleanup": False,
+                }
+            )
 
         total_size = 0
         file_count = 0
@@ -2161,7 +2373,9 @@ def manual_cache_cleanup():
                 "cleaned_files": cleanup_result["cleaned"],
                 "size_freed_mb": round(cleanup_result["size_freed"] / 1024 / 1024, 2),
                 "remaining_files": cleanup_result["remaining_files"],
-                "remaining_size_mb": round(cleanup_result["remaining_size"] / 1024 / 1024, 2),
+                "remaining_size_mb": round(
+                    cleanup_result["remaining_size"] / 1024 / 1024, 2
+                ),
             }
         )
     except Exception as e:
@@ -2214,7 +2428,8 @@ def preview_voice():
     # Check if TTS client is available
     if not tts_client:
         return Response(
-            "Text-to-speech service not available. Please set the GOOGLE_API_KEY environment variable.", status=503
+            "Text-to-speech service not available. Please set the GOOGLE_API_KEY environment variable.",
+            status=503,
         )
 
     try:
@@ -2227,9 +2442,13 @@ def preview_voice():
         voice = texttospeech.VoiceSelectionParams(
             language_code=voice_config["language_code"], name=voice_config["name"]
         )
-        audio_config = texttospeech.AudioConfig(audio_encoding=texttospeech.AudioEncoding.MP3)
+        audio_config = texttospeech.AudioConfig(
+            audio_encoding=texttospeech.AudioEncoding.MP3
+        )
 
-        response = tts_client.synthesize_speech(input=synthesis_input, voice=voice, audio_config=audio_config)
+        response = tts_client.synthesize_speech(
+            input=synthesis_input, voice=voice, audio_config=audio_config
+        )
 
         # Cache the result
         with open(filepath, "wb") as f:
@@ -2251,12 +2470,17 @@ def preview_voice():
                 return Response("No fallback voice available", status=500)
 
             fallback_voice = texttospeech.VoiceSelectionParams(
-                language_code=fallback_config["language_code"], name=fallback_config["name"]
+                language_code=fallback_config["language_code"],
+                name=fallback_config["name"],
             )
-            fallback_audio_config = texttospeech.AudioConfig(audio_encoding=texttospeech.AudioEncoding.MP3)
+            fallback_audio_config = texttospeech.AudioConfig(
+                audio_encoding=texttospeech.AudioEncoding.MP3
+            )
 
             response = tts_client.synthesize_speech(
-                input=synthesis_input, voice=fallback_voice, audio_config=fallback_audio_config
+                input=synthesis_input,
+                voice=fallback_voice,
+                audio_config=fallback_audio_config,
             )
 
             with open(filepath, "wb") as f:
@@ -2314,7 +2538,12 @@ def delete_summary():
                 except Exception as e:
                     print(f"Warning: Could not delete audio file {audio_filepath}: {e}")
 
-        return jsonify({"success": True, "message": f"Summary for video {video_id} deleted successfully"})
+        return jsonify(
+            {
+                "success": True,
+                "message": f"Summary for video {video_id} deleted successfully",
+            }
+        )
 
     except Exception as e:
         print(f"Error in delete_summary endpoint: {e}")
@@ -2356,7 +2585,10 @@ def update_settings():
         if not data:
             return jsonify({"error": "Invalid JSON in request body"}), 400
     except Exception as e:
-        return jsonify({"error": "Invalid JSON in request body", "message": str(e)}), 400
+        return (
+            jsonify({"error": "Invalid JSON in request body", "message": str(e)}),
+            400,
+        )
 
     try:
         # Define which environment variables we allow to be updated
@@ -2382,15 +2614,30 @@ def update_settings():
         updated_vars = {}
         for form_key, env_key in allowed_vars.items():
             if form_key in data:
-                value = data[form_key].strip() if isinstance(data[form_key], str) else str(data[form_key])
+                value = (
+                    data[form_key].strip()
+                    if isinstance(data[form_key], str)
+                    else str(data[form_key])
+                )
 
                 # Sanitize settings input to prevent XSS
                 value = html.escape(value)
 
                 # Special validation for numeric fields
-                if form_key in ["max_login_attempts", "lockout_duration", "webshare_proxy_port"]:
+                if form_key in [
+                    "max_login_attempts",
+                    "lockout_duration",
+                    "webshare_proxy_port",
+                ]:
                     if value and not value.isdigit():
-                        return jsonify({"error": f"Invalid value for {form_key}: must be a number"}), 400
+                        return (
+                            jsonify(
+                                {
+                                    "error": f"Invalid value for {form_key}: must be a number"
+                                }
+                            ),
+                            400,
+                        )
 
                 # Update environment variable
                 os.environ[env_key] = value
@@ -2408,13 +2655,17 @@ def update_settings():
         MAX_LOGIN_ATTEMPTS = int(os.environ.get("MAX_LOGIN_ATTEMPTS", "5"))
         LOCKOUT_DURATION = int(os.environ.get("LOCKOUT_DURATION", "15"))
 
-        WEBSHARE_PROXY_ENABLED = os.environ.get("WEBSHARE_PROXY_ENABLED", "false").lower() == "true"
+        WEBSHARE_PROXY_ENABLED = (
+            os.environ.get("WEBSHARE_PROXY_ENABLED", "false").lower() == "true"
+        )
         WEBSHARE_PROXY_HOST = os.environ.get("WEBSHARE_PROXY_HOST")
         WEBSHARE_PROXY_PORT = os.environ.get("WEBSHARE_PROXY_PORT")
         WEBSHARE_PROXY_USERNAME = os.environ.get("WEBSHARE_PROXY_USERNAME")
         WEBSHARE_PROXY_PASSWORD = os.environ.get("WEBSHARE_PROXY_PASSWORD")
 
-        DATA_DIR = os.environ.get("DATA_DIR", "data" if os.path.exists("/.dockerenv") else ".")
+        DATA_DIR = os.environ.get(
+            "DATA_DIR", "data" if os.path.exists("/.dockerenv") else "."
+        )
         TTS_VOICE = os.environ.get("TTS_VOICE", "en-US-Chirp3-HD-Zephyr")
 
         # Update Flask secret key if SESSION_SECRET_KEY changed
@@ -2429,10 +2680,16 @@ def update_settings():
             # Reinitialize Google APIs if key was updated
             if "GOOGLE_API_KEY" in updated_vars and google_api_key:
                 try:
-                    tts_client = texttospeech.TextToSpeechClient(client_options=ClientOptions(api_key=google_api_key))
+                    tts_client = texttospeech.TextToSpeechClient(
+                        client_options=ClientOptions(api_key=google_api_key)
+                    )
                     genai.configure(api_key=google_api_key)
-                    youtube = create_youtube_client_with_timeout(google_api_key, timeout=30)
-                    gemini_model = genai.GenerativeModel(model_name="gemini-2.5-flash-preview-05-20")
+                    youtube = create_youtube_client_with_timeout(
+                        google_api_key, timeout=30
+                    )
+                    gemini_model = genai.GenerativeModel(
+                        model_name="gemini-2.5-flash-preview-05-20"
+                    )
                     print("✅ Google APIs reinitialized successfully")
                 except Exception as e:
                     print(f"Warning: Could not reinitialize Google APIs. Error: {e}")
@@ -2452,7 +2709,11 @@ def update_settings():
             {
                 "success": True,
                 "message": f"Settings updated successfully! {len(updated_vars)} variables updated."
-                + (" Saved to .env file." if save_success else " Warning: Could not save to .env file."),
+                + (
+                    " Saved to .env file."
+                    if save_success
+                    else " Warning: Could not save to .env file."
+                ),
                 "updated_variables": list(updated_vars.keys()),
                 "env_file_saved": save_success,
             }
@@ -2481,7 +2742,16 @@ def bad_request(e):
         "/events",
     ]
     if any(request.path.startswith(path) for path in api_paths):
-        return jsonify({"error": "Bad request", "message": str(e), "stacktrace": traceback.format_exc()}), 400
+        return (
+            jsonify(
+                {
+                    "error": "Bad request",
+                    "message": str(e),
+                    "stacktrace": traceback.format_exc(),
+                }
+            ),
+            400,
+        )
     return e
 
 
@@ -2502,7 +2772,12 @@ def not_found(e):
         "/events",
     ]
     if any(request.path.startswith(path) for path in api_paths):
-        return jsonify({"error": "Endpoint not found", "message": str(e), "path": request.path}), 404
+        return (
+            jsonify(
+                {"error": "Endpoint not found", "message": str(e), "path": request.path}
+            ),
+            404,
+        )
     return e
 
 
@@ -2523,7 +2798,16 @@ def server_error(e):
         "/events",
     ]
     if any(request.path.startswith(path) for path in api_paths):
-        return jsonify({"error": "Internal server error", "message": str(e), "stacktrace": traceback.format_exc()}), 500
+        return (
+            jsonify(
+                {
+                    "error": "Internal server error",
+                    "message": str(e),
+                    "stacktrace": traceback.format_exc(),
+                }
+            ),
+            500,
+        )
     return e
 
 

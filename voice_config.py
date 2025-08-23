@@ -242,7 +242,14 @@ def cleanup_audio_cache(cache_dir, config=None):
         stat = file_path.stat()
         age = current_time - stat.st_mtime
 
-        cache_files.append({"path": file_path, "size": stat.st_size, "age": age, "mtime": stat.st_mtime})
+        cache_files.append(
+            {
+                "path": file_path,
+                "size": stat.st_size,
+                "age": age,
+                "mtime": stat.st_mtime,
+            }
+        )
         total_size += stat.st_size
 
     files_to_delete = []
@@ -321,4 +328,8 @@ def should_cleanup_cache(cache_dir, config=None):
 
 def get_sample_text():
     """Get sample text for voice preview."""
-    return "Welcome to YouTube Summarizer! This tool helps you quickly understand video content by generating AI-powered summaries. You can choose from multiple AI models and customize your experience with different voice options for audio playback."
+    return (
+        "Welcome to YouTube Summarizer! This tool helps you quickly understand video content "
+        "by generating AI-powered summaries. You can choose from multiple AI models and "
+        "customize your experience with different voice options for audio playback."
+    )
