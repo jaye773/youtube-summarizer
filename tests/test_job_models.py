@@ -8,9 +8,6 @@ and factory function behavior with various inputs.
 
 import uuid
 from datetime import datetime, timedelta, timezone
-from unittest.mock import patch
-
-import pytest
 
 from job_models import (
     JobPriority,

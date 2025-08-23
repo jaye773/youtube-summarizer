@@ -18,27 +18,19 @@ Test Categories:
 
 import json
 import os
-
-# Import main application and models
 import sys
-import tempfile
-import threading
-import time
-import uuid
-from datetime import datetime, timezone
-from queue import Empty, Queue
-from unittest.mock import MagicMock, Mock, patch
-
-import pytest
-from flask import Flask
-from flask.testing import FlaskClient
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+import threading
+import time
+import uuid
+from unittest.mock import Mock, patch
+
+import pytest
 import requests
 
 from app import app
-from job_models import JobPriority, JobResult, JobStatus, JobType, ProcessingJob
 
 
 @pytest.fixture
@@ -632,7 +624,6 @@ class TestRateLimitingAndBackoff:
             mock_generate.side_effect = track_calls
 
             with patch("app.get_transcript", return_value=[{"text": "Test"}]):
-                start_time = time.time()
                 response = client.post(
                     "/summarize",
                     data={
@@ -641,11 +632,8 @@ class TestRateLimitingAndBackoff:
                         "model": "gemini-2.5-flash",
                     },
                 )
-                end_time = time.time()
 
                 # If backoff is implemented, should take some time
-                total_time = end_time - start_time
-
                 # This test is conceptual as the actual backoff would be in worker threads
                 assert response.status_code in [200, 500, 401, 302]
 
@@ -717,7 +705,7 @@ class TestGracefulShutdownScenarios:
                 mock_sse.close_all_connections.return_value = None
 
                 # Establish SSE connection
-                response = client.get("/events", headers={"Accept": "text/event-stream"})
+                client.get("/events", headers={"Accept": "text/event-stream"})
 
                 # Simulate cleanup
                 mock_sse.close_all_connections()

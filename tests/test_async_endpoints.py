@@ -13,29 +13,19 @@ Test Categories:
 - Rate limiting and error handling
 """
 
-import json
 import os
-
-# Import main application and models
 import sys
-import tempfile
-import threading
-import time
-import uuid
-from datetime import datetime, timezone
-from unittest.mock import AsyncMock, MagicMock, Mock, patch
-
-import pytest
-from flask import Flask
-from flask.testing import FlaskClient
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+import time
+import uuid
+from unittest.mock import Mock, patch
+
+import pytest
+
 from app import app
-from job_models import JobPriority, JobResult, JobStatus, JobType, ProcessingJob
-from job_state import JobStateManager
-from sse_manager import SSEManager
-from worker_manager import WorkerManager
+from job_models import JobPriority, JobStatus, JobType, ProcessingJob
 
 
 @pytest.fixture
@@ -222,7 +212,6 @@ class TestAsyncJobSubmission:
             "model": "gpt-4o",
         }
 
-        job_id = str(uuid.uuid4())
         mock_worker_system["worker_manager"].submit_job.return_value = True
 
         response = client.post("/summarize_async", json=custom_data, content_type="application/json")

@@ -8,8 +8,6 @@ notification callbacks, and integration with the job queue system.
 
 import threading
 import time
-from concurrent.futures import ThreadPoolExecutor
-from datetime import datetime
 from unittest.mock import MagicMock, patch
 
 import pytest

@@ -14,17 +14,15 @@ Tests cover:
 - Performance with large numbers of errors
 """
 
-import random
 import time
 import unittest
 from datetime import datetime, timedelta
-from typing import Any, Dict
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
 # Import the module under test
-from error_handler import ErrorCategory, ErrorHandler, ErrorInfo, JobStatus, RetryPolicy
+from error_handler import ErrorCategory, ErrorHandler, ErrorInfo, RetryPolicy
 
 
 class TestErrorCategory(unittest.TestCase):
@@ -506,7 +504,6 @@ class TestErrorHandler(unittest.TestCase):
         self.assertGreaterEqual(stats["total_errors"], 5)
 
         # Count actual categories returned
-        unique_categories = set(cat.value for cat in error_categories)
         self.assertGreaterEqual(len(stats["by_category"]), 1)  # At least one category
 
         # Find most common category from actual results

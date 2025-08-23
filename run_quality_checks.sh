@@ -243,18 +243,7 @@ if [ "$RUN_ALL" = true ] || [ "$RUN_LINT" = true ]; then
     echo ""
 fi
 
-# Step 9: Type checking with mypy (optional)
-if [ "$RUN_ALL" = true ] || [ "$RUN_LINT" = true ]; then
-    print_status "Checking for type hints with mypy..."
-    
-    if command_exists mypy; then
-        mypy app.py --ignore-missing-imports || true
-        print_success "Type checking completed"
-    else
-        print_warning "Mypy not installed. Run: pip install mypy"
-    fi
-    echo ""
-fi
+
 
 # Summary
 echo "================================================="

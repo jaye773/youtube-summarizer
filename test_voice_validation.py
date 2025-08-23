@@ -12,10 +12,6 @@ import time
 import unittest
 from unittest.mock import Mock, patch
 
-# Set testing mode before imports
-os.environ["TESTING"] = "true"
-
-# Import app components
 import app
 from voice_config import (
     AVAILABLE_VOICES,
@@ -25,6 +21,9 @@ from voice_config import (
     get_sample_text,
     get_voice_with_fallback,
 )
+
+# Set testing mode after imports
+os.environ["TESTING"] = "true"
 
 
 class VoiceValidationTestCase(unittest.TestCase):

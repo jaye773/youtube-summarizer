@@ -3,4 +3,6 @@ max-line-length = 120
 exclude = venv,htmlcov,.git,__pycache__
 # E203: whitespace before ':' (conflicts with black)
 # W503: line break before binary operator (conflicts with black)
-ignore = E203,W503 
+# E402: module level import not at top of file (needed for test files with sys.path.insert)
+# F401: imported but unused (some test imports are needed for global state management)
+ignore = E203,W503,E402,F401

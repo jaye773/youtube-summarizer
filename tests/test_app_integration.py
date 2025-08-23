@@ -12,29 +12,19 @@ Test Categories:
 - Threading and concurrent operations
 """
 
-import json
 import os
-
-# Import main application
 import sys
-import tempfile
-import threading
-import time
-import uuid
-from datetime import datetime, timezone
-from unittest.mock import MagicMock, Mock, patch
-
-import pytest
-from flask import Flask
-from flask.testing import FlaskClient
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+import tempfile
+import time
+import uuid
+from unittest.mock import Mock, patch
+
+import pytest
+
 from app import app
-from job_models import JobPriority, JobStatus, JobType
-from job_state import JobStateManager
-from sse_manager import SSEManager
-from worker_manager import WorkerManager
 
 
 @pytest.fixture

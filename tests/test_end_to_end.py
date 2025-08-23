@@ -14,30 +14,22 @@ Test Categories:
 - Template rendering integration
 """
 
-import json
 import os
-
-# Import main application and models
 import sys
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 import tempfile
 import threading
 import time
 import uuid
 from datetime import datetime, timedelta, timezone
-from queue import Queue
-from unittest.mock import MagicMock, Mock, call, patch
+from unittest.mock import Mock, patch
 
 import pytest
-from flask import Flask
-from flask.testing import FlaskClient
-
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from app import app
-from job_models import JobPriority, JobResult, JobStatus, JobType, ProcessingJob
-from job_state import JobStateManager
-from sse_manager import SSEManager
-from worker_manager import WorkerManager
+from job_models import JobResult, JobStatus, JobType
 
 
 @pytest.fixture
@@ -533,7 +525,6 @@ class TestProgressTrackingAndNotifications:
 
         # Simulate progress updates
         job_store = full_worker_system["job_store"]
-        sse_manager = full_worker_system["sse_manager"]
         job = job_store[job_id]
 
         # Progress stages

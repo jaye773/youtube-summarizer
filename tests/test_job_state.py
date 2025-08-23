@@ -14,7 +14,6 @@ Tests cover:
 - Memory usage with large number of jobs
 """
 
-import json
 import os
 import shutil
 import tempfile
@@ -22,14 +21,12 @@ import threading
 import time
 import unittest
 from datetime import datetime, timedelta
-from pathlib import Path
-from typing import Any, Dict
-from unittest.mock import MagicMock, mock_open, patch
+from unittest.mock import mock_open, patch
 
 import pytest
 
 # Import the module under test
-from job_state import JobPriority, JobStateManager, JobStatus
+from job_state import JobStateManager, JobStatus
 
 
 class TestJobStateManager(unittest.TestCase):
@@ -312,7 +309,7 @@ class TestJobStateManager(unittest.TestCase):
 
         def read_operation(result_list):
             """Perform read operation."""
-            status = self.manager.get_job_status("nonexistent")
+            self.manager.get_job_status("nonexistent")
             result_list.append(("read", datetime.now()))
 
         # Start write operation

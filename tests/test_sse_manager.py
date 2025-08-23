@@ -26,12 +26,10 @@ import json
 import queue
 import threading
 import time
-import unittest
 import uuid
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timedelta
-from typing import Any, Dict, List, Set
-from unittest.mock import MagicMock, Mock, PropertyMock, patch
+from unittest.mock import patch
 
 import pytest
 from flask import Flask
@@ -389,8 +387,8 @@ class TestSSEManager:
         manager = SSEManager(max_connections=2)
 
         # Add connections up to limit
-        connection1 = manager.add_connection("client1")
-        connection2 = manager.add_connection("client2")
+        manager.add_connection("client1")
+        manager.add_connection("client2")
         assert len(manager.connections) == 2
 
         # Attempt to exceed limit
@@ -475,7 +473,6 @@ class TestSSEManager:
         # Check result details for debugging
         expected_sent = 2  # conn1 and conn2 should receive (both subscribed to summary_progress)
         expected_filtered = 0  # No filter applied
-        expected_failed = 0 if conn1.is_active and conn2.is_active else result["failed"]
 
         assert result["sent"] == expected_sent, f"Expected {expected_sent} sent, got {result['sent']}. Result: {result}"
         # Allow for connection failures due to timing issues
@@ -591,10 +588,10 @@ class TestSSEManager:
         manager = SSEManager()
 
         # Add connections with different subscriptions
-        conn1 = manager.add_connection("client1", {"summary_progress", "system"})
+        manager.add_connection("client1", {"summary_progress", "system"})
         time.sleep(0.1)  # Small delay for age difference
-        conn2 = manager.add_connection("client2", {"system", "custom"})
-        conn3 = manager.add_connection("client3", {"summary_progress"})
+        manager.add_connection("client2", {"system", "custom"})
+        manager.add_connection("client3", {"summary_progress"})
 
         stats = manager.get_connection_stats()
 
@@ -707,7 +704,7 @@ class TestSSEManager:
         assert len(manager.connections) == 20
 
         # Verify all operations completed successfully
-        for event_count, client_id in results:
+        for event_count, _ in results:
             assert event_count > 0  # Should have received at least connection event
 
         manager.shutdown()
@@ -746,7 +743,7 @@ class TestSSEManager:
             for i in range(10):
                 client_id = f"worker_{worker_id}_client_{i}"
                 try:
-                    conn = manager.add_connection(client_id)
+                    manager.add_connection(client_id)
                     time.sleep(0.01)  # Small delay
                     manager.remove_connection(client_id)
                 except RuntimeError:
@@ -760,7 +757,7 @@ class TestSSEManager:
 
         def worker_stats():
             """Worker function for getting stats."""
-            for i in range(20):
+            for _ in range(20):
                 manager.get_connection_stats()
                 time.sleep(0.01)
 
@@ -1211,7 +1208,7 @@ class TestEdgeCases:
         # Simulate network issues by making get_events fail
         original_get = connection.get_events
 
-        def failing_get_events(timeout=30.0):
+        def failing_get_events(timeout=30.0):  # noqa: F841
             raise ConnectionError("Simulated network error")
 
         connection.get_events = failing_get_events
