@@ -11,9 +11,9 @@ import threading
 import time
 from collections import defaultdict, deque
 from datetime import datetime, timedelta, timezone
-from typing import Any, Callable, Dict, List, Optional, Set
+from typing import Any, Callable, Dict, List, Optional
 
-from job_models import JobPriority, JobStatus, JobType, ProcessingJob, WorkerMetrics
+from job_models import JobPriority, JobStatus, ProcessingJob, WorkerMetrics
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -70,7 +70,9 @@ class PriorityJobQueue:
         with self._lock:
             # Check if queue is full
             if len(self._queue) >= self.max_size:
-                logger.warning(f"Queue is full (max_size={self.max_size}), rejecting job {job.job_id}")
+                logger.warning(
+                    f"Queue is full (max_size={self.max_size}), rejecting job {job.job_id}"
+                )
                 return False
 
             # Check for duplicate job IDs
@@ -108,7 +110,8 @@ class PriorityJobQueue:
             )
 
             logger.info(
-                f"Queued job {job.job_id} with priority {job.priority.name} " f"(queue size: {len(self._queue)})"
+                f"Queued job {job.job_id} with priority {job.priority.name} "
+                f"(queue size: {len(self._queue)})"
             )
             return True
 
@@ -128,7 +131,9 @@ class PriorityJobQueue:
             with self._lock:
                 if self._queue:
                     # Get highest priority job
-                    priority_value, neg_counter, timestamp, job_id = heapq.heappop(self._queue)
+                    priority_value, neg_counter, timestamp, job_id = heapq.heappop(
+                        self._queue
+                    )
 
                     # Retrieve and remove from job dict
                     job = self._job_dict.pop(job_id, None)
@@ -295,7 +300,9 @@ class PriorityJobQueue:
                 "current_size": current_size,
                 "max_size": self.max_size,
                 "is_full": current_size >= self.max_size,
-                "priority_breakdown": {p.name: count for p, count in priority_breakdown.items()},
+                "priority_breakdown": {
+                    p.name: count for p, count in priority_breakdown.items()
+                },
                 "total_jobs_queued": self._stats["jobs_queued"],
                 "total_jobs_processed": self._stats["jobs_processed"],
                 "total_jobs_failed": self._stats["jobs_failed"],
@@ -317,7 +324,9 @@ class PriorityJobQueue:
             # Count jobs with higher or equal priority
             jobs_ahead = 0
             for job in self._job_dict.values():
-                if job.priority.value <= priority.value:  # Lower value = higher priority
+                if (
+                    job.priority.value <= priority.value
+                ):  # Lower value = higher priority
                     jobs_ahead += 1
 
             # Rough estimate: 30 seconds per job (can be tuned based on metrics)
@@ -337,7 +346,9 @@ class PriorityJobQueue:
             valid_entries = []
             for priority_value, neg_counter, timestamp, job_id in self._queue:
                 if job_id in self._job_dict:
-                    valid_entries.append((priority_value, neg_counter, timestamp, job_id))
+                    valid_entries.append(
+                        (priority_value, neg_counter, timestamp, job_id)
+                    )
 
             self._queue = valid_entries
             heapq.heapify(self._queue)
@@ -363,7 +374,9 @@ class JobScheduler:
         self.rate_limit_per_minute = rate_limit_per_minute
 
         # Rate limiting tracking
-        self._client_requests: Dict[str, deque] = defaultdict(lambda: deque(maxlen=rate_limit_per_minute))
+        self._client_requests: Dict[str, deque] = defaultdict(
+            lambda: deque(maxlen=rate_limit_per_minute)
+        )
         self._rate_limit_lock = threading.Lock()
 
         # Job completion callbacks
@@ -373,7 +386,8 @@ class JobScheduler:
         self.metrics = WorkerMetrics()
 
         logger.info(
-            f"Initialized JobScheduler with queue_size={max_queue_size}, " f"rate_limit={rate_limit_per_minute}/min"
+            f"Initialized JobScheduler with queue_size={max_queue_size}, "
+            f"rate_limit={rate_limit_per_minute}/min"
         )
 
     def submit_job(self, job: ProcessingJob, client_ip: str = None) -> tuple[bool, str]:
@@ -389,7 +403,10 @@ class JobScheduler:
         """
         # Check rate limiting
         if client_ip and not self._check_rate_limit(client_ip):
-            return False, f"Rate limit exceeded: max {self.rate_limit_per_minute} requests per minute"
+            return (
+                False,
+                f"Rate limit exceeded: max {self.rate_limit_per_minute} requests per minute",
+            )
 
         # Submit to queue
         if self.queue.put(job):
@@ -426,7 +443,9 @@ class JobScheduler:
                 logger.info(f"Cancelled job {job_id}")
                 return True
 
-        logger.warning(f"Could not cancel job {job_id} - not found or already processing")
+        logger.warning(
+            f"Could not cancel job {job_id} - not found or already processing"
+        )
         return False
 
     def get_job_status(self, job_id: str) -> Optional[Dict[str, Any]]:

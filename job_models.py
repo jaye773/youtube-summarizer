@@ -76,7 +76,9 @@ class ProcessingJob:
             self.total_steps = 3  # Get transcript, generate summary, cache result
         elif self.job_type == JobType.PLAYLIST:
             video_count = len(self.data.get("video_ids", []))
-            self.total_steps = video_count + 2  # Process each video + get playlist info + finalize
+            self.total_steps = (
+                video_count + 2
+            )  # Process each video + get playlist info + finalize
         else:  # BATCH
             self.total_steps = len(self.data.get("urls", []))
 
@@ -119,7 +121,9 @@ class ProcessingJob:
         if can_retry and self.retry_count < self.max_retries:
             self.status = JobStatus.RETRY
             self.retry_count += 1
-            self.current_step = f"Retrying (attempt {self.retry_count + 1}/{self.max_retries + 1})"
+            self.current_step = (
+                f"Retrying (attempt {self.retry_count + 1}/{self.max_retries + 1})"
+            )
         else:
             self.status = JobStatus.FAILED
             self.completed_at = datetime.now(timezone.utc)
@@ -154,7 +158,9 @@ class ProcessingJob:
             "data": self.data,
             "created_at": self.created_at.isoformat(),
             "started_at": self.started_at.isoformat() if self.started_at else None,
-            "completed_at": self.completed_at.isoformat() if self.completed_at else None,
+            "completed_at": (
+                self.completed_at.isoformat() if self.completed_at else None
+            ),
             "progress": self.progress,
             "current_step": self.current_step,
             "total_steps": self.total_steps,
@@ -174,13 +180,19 @@ class ProcessingJob:
         """Create ProcessingJob from dictionary"""
         # Parse datetime fields
         created_at = (
-            datetime.fromisoformat(data["created_at"].replace("Z", "+00:00")) if data.get("created_at") else None
+            datetime.fromisoformat(data["created_at"].replace("Z", "+00:00"))
+            if data.get("created_at")
+            else None
         )
         started_at = (
-            datetime.fromisoformat(data["started_at"].replace("Z", "+00:00")) if data.get("started_at") else None
+            datetime.fromisoformat(data["started_at"].replace("Z", "+00:00"))
+            if data.get("started_at")
+            else None
         )
         completed_at = (
-            datetime.fromisoformat(data["completed_at"].replace("Z", "+00:00")) if data.get("completed_at") else None
+            datetime.fromisoformat(data["completed_at"].replace("Z", "+00:00"))
+            if data.get("completed_at")
+            else None
         )
 
         return cls(
@@ -271,7 +283,9 @@ class WorkerMetrics:
         }
 
 
-def create_video_job(url: str, model_key: str = None, client_id: str = None, session_id: str = None) -> ProcessingJob:
+def create_video_job(
+    url: str, model_key: str = None, client_id: str = None, session_id: str = None
+) -> ProcessingJob:
     """
     Factory function to create a video processing job.
 
@@ -297,7 +311,11 @@ def create_video_job(url: str, model_key: str = None, client_id: str = None, ses
 
 
 def create_playlist_job(
-    url: str, video_ids: List[str], model_key: str = None, client_id: str = None, session_id: str = None
+    url: str,
+    video_ids: List[str],
+    model_key: str = None,
+    client_id: str = None,
+    session_id: str = None,
 ) -> ProcessingJob:
     """
     Factory function to create a playlist processing job.
@@ -312,7 +330,12 @@ def create_playlist_job(
     Returns:
         ProcessingJob configured for playlist processing
     """
-    job_data = {"url": url, "video_ids": video_ids, "model_key": model_key, "type": "playlist"}
+    job_data = {
+        "url": url,
+        "video_ids": video_ids,
+        "model_key": model_key,
+        "type": "playlist",
+    }
 
     # Determine priority based on playlist size
     priority = JobPriority.MEDIUM if len(video_ids) <= 10 else JobPriority.LOW
@@ -328,7 +351,10 @@ def create_playlist_job(
 
 
 def create_batch_job(
-    urls: List[str], model_key: str = None, client_id: str = None, session_id: str = None
+    urls: List[str],
+    model_key: str = None,
+    client_id: str = None,
+    session_id: str = None,
 ) -> ProcessingJob:
     """
     Factory function to create a batch processing job.
