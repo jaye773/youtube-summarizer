@@ -178,6 +178,51 @@
             font-weight: 500;
             color: #495057;
         }
+
+        /* SSE connection status styles are now in async_ui.css */
+
+        /* --- REAL-TIME PROGRESS BAR --- */
+        .real-time-progress-container {
+            margin: 20px 0;
+            padding: 15px;
+            background-color: #f8f9fa;
+            border-radius: 8px;
+            border-left: 4px solid #8e44ad;
+        }
+        .real-time-progress-bar {
+            width: 100%;
+            height: 8px;
+            background-color: #e9ecef;
+            border-radius: 4px;
+            overflow: hidden;
+            margin-bottom: 8px;
+        }
+        .real-time-progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #8e44ad, #9b59b6);
+            transition: width 0.3s ease;
+            animation: progress-shine 2s infinite;
+        }
+        @keyframes progress-shine {
+            0% { background-position: -200% 0; }
+            100% { background-position: 200% 0; }
+        }
+        .real-time-progress-text {
+            font-weight: 500;
+            color: #2c3e50;
+            margin-bottom: 4px;
+        }
+        .real-time-progress-details {
+            font-size: 0.9em;
+            color: #6c757d;
+            font-style: italic;
+        }
+
+        /* --- NOTIFICATION STYLES --- */
+        .notification {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        }
     </style>
 </head>
 <body>
@@ -202,6 +247,21 @@
         </div>
 
         <div id="loader"><p>Working my magic... this may take a while for large playlists. 🪄</p></div>
+
+        <!-- Async Processing UI -->
+        <div id="async-status-container">
+            <!-- Connection status indicator -->
+            <div id="connection-status" class="async-connection-status disconnected">
+                <span class="connection-status-dot disconnected"></span>
+                <span class="status-text">Connecting...</span>
+            </div>
+            
+            <!-- Active jobs container -->
+            <div id="active-jobs-container"></div>
+            
+            <!-- Toast notifications container -->
+            <div id="toast-container"></div>
+        </div>
 
         <!-- Search Section -->
         <div class="search-section">
@@ -272,6 +332,242 @@
         let currentPageSize = 10;
         let totalSummaries = 0;
         let totalPages = 0;
+
+        // --- SSE REAL-TIME NOTIFICATIONS ---
+        let eventSource = null;
+        let reconnectAttempts = 0;
+        const maxReconnectAttempts = 5;
+        const reconnectDelay = 1000; // Start with 1 second
+
+        function initializeSSE() {
+            if (eventSource) {
+                eventSource.close();
+            }
+
+            // Subscribe to summary completion and progress events
+            const subscriptions = 'summary_complete,summary_progress,system';
+            eventSource = new EventSource(`/events?subscribe=${subscriptions}`);
+
+            eventSource.onopen = function(event) {
+                console.log('SSE connection opened');
+                reconnectAttempts = 0;
+                showNotification('Connected to real-time updates', 'success');
+            };
+
+            eventSource.onmessage = function(event) {
+                console.log('SSE message received:', event.data);
+            };
+
+            eventSource.addEventListener('connected', function(event) {
+                const data = JSON.parse(event.data);
+                console.log('SSE connection established:', data);
+                updateConnectionStatus(true);
+            });
+
+            eventSource.addEventListener('summary_progress', function(event) {
+                const data = JSON.parse(event.data);
+                updateProgressIndicator(data);
+            });
+
+            eventSource.addEventListener('summary_complete', function(event) {
+                const data = JSON.parse(event.data);
+                handleSummaryComplete(data);
+                showNotification(`Summary completed: ${data.title}`, 'success');
+            });
+
+            eventSource.addEventListener('system', function(event) {
+                const data = JSON.parse(event.data);
+                showNotification(data.message || 'System notification', 'info');
+            });
+
+            eventSource.addEventListener('ping', function(event) {
+                // Keep-alive ping, no action needed
+                console.log('SSE keep-alive ping received');
+            });
+
+            eventSource.onerror = function(event) {
+                console.error('SSE error:', event);
+                updateConnectionStatus(false);
+                
+                if (eventSource.readyState === EventSource.CLOSED) {
+                    console.log('SSE connection closed, attempting to reconnect...');
+                    handleSSEReconnect();
+                } else if (eventSource.readyState === EventSource.CONNECTING) {
+                    console.log('SSE reconnecting...');
+                }
+            };
+        }
+
+        function handleSSEReconnect() {
+            if (reconnectAttempts >= maxReconnectAttempts) {
+                console.log('Max reconnection attempts reached');
+                showNotification('Real-time updates disconnected. Please refresh the page.', 'error');
+                return;
+            }
+
+            reconnectAttempts++;
+            const delay = Math.min(reconnectDelay * Math.pow(2, reconnectAttempts - 1), 30000);
+            
+            console.log(`Attempting to reconnect SSE (attempt ${reconnectAttempts}/${maxReconnectAttempts}) in ${delay}ms`);
+            showNotification(`Reconnecting to real-time updates... (${reconnectAttempts}/${maxReconnectAttempts})`, 'warning');
+            
+            setTimeout(() => {
+                initializeSSE();
+            }, delay);
+        }
+
+        function updateConnectionStatus(connected) {
+            // Use the existing connection status in async-status-container instead of creating new ones
+            const connectionStatus = document.getElementById('connection-status');
+            const statusDot = connectionStatus?.querySelector('.connection-status-dot');
+            const statusText = connectionStatus?.querySelector('.status-text');
+            
+            if (connectionStatus && statusDot && statusText) {
+                // Update container classes
+                connectionStatus.className = connected ? 'async-connection-status connected' : 'async-connection-status disconnected';
+                // Update dot classes  
+                statusDot.className = connected ? 'connection-status-dot connected' : 'connection-status-dot disconnected';
+                // Update text
+                statusText.textContent = connected ? 'Connected' : 'Disconnected';
+                // Update title
+                connectionStatus.title = connected ? 'Real-time updates connected' : 'Real-time updates disconnected';
+            }
+        }
+
+        function updateProgressIndicator(progressData) {
+            let progressBar = document.getElementById('real-time-progress');
+            
+            if (!progressBar && progressData.status !== 'completed') {
+                progressBar = createProgressBar();
+            }
+            
+            if (!progressBar) return;
+
+            const { status, message, progress, total, current_video, current_playlist } = progressData;
+            
+            if (status === 'completed') {
+                // Hide progress bar after completion
+                setTimeout(() => {
+                    if (progressBar && progressBar.parentNode) {
+                        progressBar.parentNode.removeChild(progressBar);
+                    }
+                }, 3000);
+                return;
+            }
+
+            // Update progress bar
+            const progressBarFill = progressBar.querySelector('.real-time-progress-fill');
+            const progressText = progressBar.querySelector('.real-time-progress-text');
+            const progressDetails = progressBar.querySelector('.real-time-progress-details');
+            
+            if (total && total > 0) {
+                const percentage = Math.min((progress / total) * 100, 100);
+                progressBarFill.style.width = `${percentage}%`;
+                progressText.textContent = `${progress}/${total} - ${message}`;
+            } else {
+                progressBarFill.style.width = '100%';
+                progressBarFill.style.animationDuration = '2s';
+                progressText.textContent = message;
+            }
+
+            // Update details
+            if (current_video) {
+                let details = `Processing: ${current_video.title}`;
+                if (current_playlist) {
+                    details += ` (from ${current_playlist})`;
+                }
+                progressDetails.textContent = details;
+            } else {
+                progressDetails.textContent = '';
+            }
+        }
+
+        function createProgressBar() {
+            const progressContainer = document.createElement('div');
+            progressContainer.id = 'real-time-progress';
+            progressContainer.className = 'real-time-progress-container';
+            progressContainer.innerHTML = `
+                <div class="real-time-progress-bar">
+                    <div class="real-time-progress-fill"></div>
+                </div>
+                <div class="real-time-progress-text">Preparing...</div>
+                <div class="real-time-progress-details"></div>
+            `;
+            
+            const container = document.querySelector('.container');
+            const summarizeControls = document.querySelector('.summarize-controls');
+            container.insertBefore(progressContainer, summarizeControls.nextSibling);
+            
+            return progressContainer;
+        }
+
+        function handleSummaryComplete(data) {
+            // Optionally refresh cached summaries or update UI
+            console.log('Summary completed:', data);
+            
+            // If we're currently on the first page, refresh to show new summaries
+            if (currentPage === 1) {
+                setTimeout(() => {
+                    loadPaginatedSummaries(currentPage, currentPageSize);
+                }, 1000);
+            }
+        }
+
+        function showNotification(message, type = 'info') {
+            const notification = document.createElement('div');
+            notification.className = `notification ${type}`;
+            notification.textContent = message;
+            
+            // Style the notification
+            Object.assign(notification.style, {
+                position: 'fixed',
+                top: '20px',
+                right: '20px',
+                padding: '12px 20px',
+                borderRadius: '6px',
+                color: 'white',
+                fontWeight: 'bold',
+                zIndex: '10000',
+                minWidth: '200px',
+                maxWidth: '400px',
+                wordWrap: 'break-word',
+                opacity: '0',
+                transition: 'opacity 0.3s ease-in-out'
+            });
+
+            // Set background color based on type
+            const colors = {
+                success: '#27ae60',
+                error: '#e74c3c',
+                warning: '#f39c12',
+                info: '#3498db'
+            };
+            notification.style.backgroundColor = colors[type] || colors.info;
+
+            document.body.appendChild(notification);
+
+            // Fade in
+            setTimeout(() => {
+                notification.style.opacity = '1';
+            }, 10);
+
+            // Auto remove after 5 seconds
+            setTimeout(() => {
+                notification.style.opacity = '0';
+                setTimeout(() => {
+                    if (notification.parentNode) {
+                        notification.parentNode.removeChild(notification);
+                    }
+                }, 300);
+            }, 5000);
+        }
+
+        // Close SSE connection when page unloads
+        window.addEventListener('beforeunload', function() {
+            if (eventSource) {
+                eventSource.close();
+            }
+        });
 
         // --- UPDATED State Object ---
         let currentAudioPlayer = {
@@ -599,6 +895,9 @@
             await populateModelOptions();
             loadModelPreference();
             await loadPaginatedSummaries(currentPage, currentPageSize);
+            
+            // Initialize SSE connection for real-time updates
+            initializeSSE();
         }
 
         summarizeBtn.addEventListener('click', async () => {
@@ -890,6 +1189,167 @@
             card.appendChild(summaryContent);
             return card;
         }
+    </script>
+
+    <!-- Async Processing Scripts -->
+    <script src="{{ url_for('static', filename='js/sse_client.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/job_tracker.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/ui_updater.js') }}"></script>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/async_ui.css') }}">
+
+    <!-- Enhanced Integration Script -->
+    <script>
+        // Enhanced summarize button functionality with async processing
+        document.addEventListener('DOMContentLoaded', function() {
+            const originalSummarizeBtn = document.getElementById('summarize-btn');
+            
+            // Override the existing click handler with async integration
+            originalSummarizeBtn.removeEventListener('click', arguments.callee);
+            
+            originalSummarizeBtn.addEventListener('click', async () => {
+                if (currentAudioPlayer.state !== 'stopped') {
+                    player.pause();
+                    resetAudioPlayerUI();
+                }
+                
+                const urls = linksTextarea.value.split('\n').filter(url => url.trim() !== '');
+                if (urls.length === 0) {
+                    alert('Please paste at least one YouTube link.');
+                    return;
+                }
+                
+                originalSummarizeBtn.disabled = true;
+                originalSummarizeBtn.textContent = 'Processing...';
+                loader.style.display = 'block';
+                
+                try {
+                    const selectedModel = document.getElementById('model-select').value;
+                    
+                    // Use enhanced async summarization if available
+                    if (window.asyncIntegration && window.asyncIntegration.initialized) {
+                        const result = await window.asyncIntegration.enhancedSummarize(urls, selectedModel);
+                        
+                        // If we get immediate results (fallback mode), display them
+                        if (result && Array.isArray(result) && result.length > 0) {
+                            const newResultsContainer = document.getElementById('new-results');
+                            displayResults(result, newResultsContainer, true);
+                        }
+                        
+                    } else {
+                        // Fallback to original synchronous processing
+                        console.log('🔄 Using fallback synchronous processing');
+                        const response = await fetch('/summarize', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ urls: urls, model: selectedModel }),
+                        });
+                        
+                        const contentType = response.headers.get('content-type');
+                        if (!contentType || !contentType.includes('application/json')) {
+                            const text = await response.text();
+                            console.error('Server returned non-JSON response:', text);
+                            throw new Error('Server error: Expected JSON response but received HTML.');
+                        }
+                        
+                        const data = await response.json();
+                        if (!response.ok) throw new Error(data.error || 'An unknown server error occurred.');
+                        
+                        const newResultsContainer = document.getElementById('new-results');
+                        displayResults(data, newResultsContainer, true);
+                    }
+                    
+                    linksTextarea.value = '';
+                    
+                    // Refresh pagination to show updated summaries
+                    await loadPaginatedSummaries(currentPage, currentPageSize);
+                    
+                } catch (error) {
+                    console.error('Error during summarization:', error);
+                    alert(`An Error Occurred: ${error.message}`);
+                } finally {
+                    originalSummarizeBtn.disabled = false;
+                    originalSummarizeBtn.textContent = 'Summarize Links';
+                    loader.style.display = 'none';
+                }
+            });
+
+            // Override delete handler with async integration
+            window.originalHandleDeleteClick = window.handleDeleteClick;
+            window.handleDeleteClick = async function(button, videoId, card) {
+                if (!confirm('Are you sure you want to delete this summary? This action cannot be undone.')) {
+                    return;
+                }
+                
+                button.disabled = true;
+                const originalText = button.textContent;
+                button.textContent = '⏳';
+                
+                try {
+                    // Use enhanced delete if available
+                    if (window.asyncIntegration && window.asyncIntegration.initialized) {
+                        await window.asyncIntegration.enhancedDelete(videoId);
+                    } else {
+                        // Fallback to original delete
+                        await window.originalHandleDeleteClick(button, videoId, card);
+                        return; // originalHandleDeleteClick handles the rest
+                    }
+                    
+                    // Remove the card from the DOM with a fade effect
+                    card.style.transition = 'opacity 0.3s ease-out';
+                    card.style.opacity = '0';
+                    setTimeout(async () => {
+                        if (card.parentNode) {
+                            card.parentNode.removeChild(card);
+                        }
+                        // Refresh pagination after deletion
+                        await loadPaginatedSummaries(currentPage, currentPageSize);
+                    }, 300);
+                    
+                } catch (error) {
+                    console.error('Error deleting summary:', error);
+                    button.textContent = originalText;
+                    button.disabled = false;
+                }
+            };
+
+            // Initialize async processing system
+            if (typeof SSEClient !== 'undefined' && typeof JobTracker !== 'undefined' && typeof UIUpdater !== 'undefined') {
+                console.log('🚀 Initializing async processing system...');
+                
+                // Initialize components
+                const sseClient = new SSEClient('/events');
+                const jobTracker = new JobTracker();
+                const uiUpdater = new UIUpdater();
+                
+                // Connect SSE client
+                sseClient.connect();
+                
+                // Make available globally for debugging
+                window.asyncSystem = {
+                    sseClient,
+                    jobTracker,
+                    uiUpdater
+                };
+                
+                console.log('✅ Async processing system initialized');
+            } else {
+                console.log('⚠️ Async processing system not available - falling back to sync mode');
+            }
+
+            // Add debug console commands for development
+            if (typeof console !== 'undefined') {
+                console.log('🎛️ Debug commands available:');
+                if (window.asyncSystem) {
+                    console.log('  asyncSystem.sseClient.getConnectionState() - Get SSE status');
+                    console.log('  asyncSystem.jobTracker.getActiveJobs() - Get active jobs');
+                    console.log('  asyncSystem.uiUpdater.showToast("message", "info") - Test notifications');
+                }
+                console.log('  asyncIntegration.getStatus() - Get system status');
+                console.log('  asyncIntegration.forceReconnect() - Force SSE reconnection');
+                console.log('  asyncIntegration.apiClient.getCacheStats() - Get cache stats');
+                console.log('  asyncIntegration.apiClient.clearCache() - Clear API cache');
+            }
+        });
     </script>
 </body>
 </html>

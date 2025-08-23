@@ -1,0 +1,71 @@
+{
+  "name": "youtube-summarizer",
+  "version": "1.0.0",
+  "description": "YouTube Summarizer with Async Worker System",
+  "main": "index.js",
+  "directories": {
+    "example": "examples",
+    "test": "tests"
+  },
+  "scripts": {
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "test:coverage": "jest --coverage",
+    "test:client": "jest tests/client",
+    "test:integration": "jest tests/client/test_integration.test.js"
+  },
+  "keywords": [
+    "youtube",
+    "summarizer",
+    "async",
+    "sse",
+    "worker"
+  ],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@playwright/test": "^1.55.0",
+    "playwright": "^1.55.0"
+  },
+  "devDependencies": {
+    "@jest/globals": "^29.7.0",
+    "@testing-library/dom": "^9.3.4",
+    "@testing-library/jest-dom": "^6.8.0",
+    "jest": "^29.7.0",
+    "jest-environment-jsdom": "^29.7.0"
+  },
+  "jest": {
+    "testEnvironment": "jsdom",
+    "setupFilesAfterEnv": [
+      "<rootDir>/tests/client/setup.js"
+    ],
+    "collectCoverageFrom": [
+      "static/js/*.js",
+      "!static/js/README.md"
+    ],
+    "coverageDirectory": "coverage/client",
+    "coverageReporters": [
+      "text",
+      "lcov",
+      "html"
+    ],
+    "testMatch": [
+      "**/tests/client/**/*.test.js"
+    ],
+    "moduleFileExtensions": [
+      "js"
+    ],
+    "testPathIgnorePatterns": [
+      "/node_modules/",
+      "/venv/"
+    ],
+    "coverageThreshold": {
+      "global": {
+        "branches": 90,
+        "functions": 90,
+        "lines": 90,
+        "statements": 90
+      }
+    }
+  }
+}

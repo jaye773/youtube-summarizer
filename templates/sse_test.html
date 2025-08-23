@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SSE Test - YouTube Summarizer</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            line-height: 1.6;
+            background-color: #f4f7f6;
+            color: #333;
+            margin: 0;
+            padding: 20px;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background-color: #fff;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #2c3e50;
+            text-align: center;
+        }
+        .status-section {
+            margin: 20px 0;
+            padding: 15px;
+            border-radius: 8px;
+            border-left: 4px solid #3498db;
+            background-color: #f8f9fa;
+        }
+        .connection-status {
+            display: inline-block;
+            padding: 5px 10px;
+            border-radius: 4px;
+            color: white;
+            font-weight: bold;
+            margin-left: 10px;
+        }
+        .connected { background-color: #27ae60; }
+        .disconnected { background-color: #e74c3c; }
+        .connecting { background-color: #f39c12; }
+        
+        .test-section {
+            margin: 20px 0;
+            padding: 15px;
+            border-radius: 8px;
+            background-color: #f8f9fa;
+            border-left: 4px solid #8e44ad;
+        }
+        button {
+            background-color: #8e44ad;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 16px;
+            margin: 5px;
+        }
+        button:hover {
+            background-color: #732d91;
+        }
+        button:disabled {
+            background-color: #bdc3c7;
+            cursor: not-allowed;
+        }
+        
+        .events-log {
+            max-height: 400px;
+            overflow-y: auto;
+            background-color: #2c3e50;
+            color: #ecf0f1;
+            padding: 15px;
+            border-radius: 6px;
+            font-family: 'Courier New', monospace;
+            font-size: 14px;
+            margin-top: 15px;
+        }
+        .event-entry {
+            margin-bottom: 8px;
+            padding: 5px;
+            border-radius: 3px;
+        }
+        .event-connected { background-color: rgba(39, 174, 96, 0.3); }
+        .event-summary_progress { background-color: rgba(52, 152, 219, 0.3); }
+        .event-summary_complete { background-color: rgba(46, 204, 113, 0.3); }
+        .event-system { background-color: rgba(241, 196, 15, 0.3); }
+        .event-error { background-color: rgba(231, 76, 60, 0.3); }
+        .event-ping { color: #7f8c8d; font-size: 12px; }
+        
+        .clear-log {
+            float: right;
+            background-color: #95a5a6;
+            font-size: 12px;
+            padding: 5px 10px;
+        }
+        .clear-log:hover {
+            background-color: #7f8c8d;
+        }
+        
+        .connection-info {
+            margin-top: 10px;
+            font-size: 14px;
+            color: #7f8c8d;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Server-Sent Events Test Page 🔮</h1>
+        
+        <div class="status-section">
+            <h3>Connection Status</h3>
+            <span>SSE Connection:</span>
+            <span id="connection-status" class="connection-status disconnected">Disconnected</span>
+            <div class="connection-info">
+                <div>Connection ID: <span id="connection-id">Not connected</span></div>
+                <div>Reconnect Attempts: <span id="reconnect-attempts">0</span></div>
+                <div>Messages Received: <span id="message-count">0</span></div>
+            </div>
+        </div>
+        
+        <div class="test-section">
+            <h3>Connection Controls</h3>
+            <button onclick="connectSSE()">Connect</button>
+            <button onclick="disconnectSSE()">Disconnect</button>
+            <button onclick="testBroadcast()">Test Broadcast</button>
+            <button onclick="getSSEStatus()">Get Server Status</button>
+        </div>
+        
+        <div class="test-section">
+            <h3>Event Log</h3>
+            <button class="clear-log" onclick="clearEventLog()">Clear Log</button>
+            <div id="events-log" class="events-log"></div>
+        </div>
+    </div>
+
+    <script>
+        let eventSource = null;
+        let messageCount = 0;
+        let reconnectAttempts = 0;
+
+        function connectSSE() {
+            if (eventSource) {
+                eventSource.close();
+            }
+
+            updateConnectionStatus('connecting');
+            logEvent('system', 'Attempting to connect to SSE...');
+
+            // Subscribe to all event types for testing
+            const subscriptions = 'summary_complete,summary_progress,system,test,admin';
+            eventSource = new EventSource(`/events?subscribe=${subscriptions}`);
+
+            eventSource.onopen = function(event) {
+                console.log('SSE connection opened');
+                updateConnectionStatus('connected');
+                reconnectAttempts = 0;
+                document.getElementById('reconnect-attempts').textContent = reconnectAttempts;
+                logEvent('system', 'SSE connection opened');
+            };
+
+            eventSource.onmessage = function(event) {
+                messageCount++;
+                document.getElementById('message-count').textContent = messageCount;
+                logEvent('message', `Generic message: ${event.data}`);
+            };
+
+            eventSource.addEventListener('connected', function(event) {
+                const data = JSON.parse(event.data);
+                document.getElementById('connection-id').textContent = data.connection_id;
+                logEvent('connected', `Connected with ID: ${data.connection_id}`, data);
+            });
+
+            eventSource.addEventListener('summary_progress', function(event) {
+                const data = JSON.parse(event.data);
+                logEvent('summary_progress', `Progress: ${data.message}`, data);
+            });
+
+            eventSource.addEventListener('summary_complete', function(event) {
+                const data = JSON.parse(event.data);
+                logEvent('summary_complete', `Summary completed: ${data.title}`, data);
+            });
+
+            eventSource.addEventListener('system', function(event) {
+                const data = JSON.parse(event.data);
+                logEvent('system', data.message || 'System notification', data);
+            });
+
+            eventSource.addEventListener('test', function(event) {
+                const data = JSON.parse(event.data);
+                logEvent('test', `Test event: ${JSON.stringify(data)}`, data);
+            });
+
+            eventSource.addEventListener('ping', function(event) {
+                logEvent('ping', 'Keep-alive ping');
+            });
+
+            eventSource.onerror = function(event) {
+                console.error('SSE error:', event);
+                
+                if (eventSource.readyState === EventSource.CLOSED) {
+                    updateConnectionStatus('disconnected');
+                    logEvent('error', 'SSE connection closed');
+                    reconnectAttempts++;
+                    document.getElementById('reconnect-attempts').textContent = reconnectAttempts;
+                } else if (eventSource.readyState === EventSource.CONNECTING) {
+                    updateConnectionStatus('connecting');
+                    logEvent('system', 'SSE reconnecting...');
+                }
+            };
+        }
+
+        function disconnectSSE() {
+            if (eventSource) {
+                eventSource.close();
+                eventSource = null;
+            }
+            updateConnectionStatus('disconnected');
+            document.getElementById('connection-id').textContent = 'Not connected';
+            logEvent('system', 'SSE connection manually closed');
+        }
+
+        function updateConnectionStatus(status) {
+            const statusElement = document.getElementById('connection-status');
+            statusElement.className = `connection-status ${status}`;
+            statusElement.textContent = status.charAt(0).toUpperCase() + status.slice(1);
+        }
+
+        function logEvent(type, message, data = null) {
+            const log = document.getElementById('events-log');
+            const entry = document.createElement('div');
+            entry.className = `event-entry event-${type}`;
+            
+            const timestamp = new Date().toLocaleTimeString();
+            let logMessage = `[${timestamp}] ${type.toUpperCase()}: ${message}`;
+            
+            if (data && type !== 'ping') {
+                logMessage += '\n' + JSON.stringify(data, null, 2);
+            }
+            
+            entry.textContent = logMessage;
+            log.appendChild(entry);
+            log.scrollTop = log.scrollHeight;
+
+            messageCount++;
+            document.getElementById('message-count').textContent = messageCount;
+        }
+
+        function clearEventLog() {
+            document.getElementById('events-log').innerHTML = '';
+            messageCount = 0;
+            document.getElementById('message-count').textContent = messageCount;
+        }
+
+        async function testBroadcast() {
+            try {
+                const response = await fetch('/events/broadcast', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        event_type: 'test',
+                        data: {
+                            message: 'Test broadcast from SSE test page',
+                            timestamp: new Date().toISOString(),
+                            test_id: Math.random().toString(36).substr(2, 9)
+                        }
+                    })
+                });
+
+                const result = await response.json();
+                if (response.ok) {
+                    logEvent('system', `Broadcast sent successfully. Reached ${result.total_connections} connections.`);
+                } else {
+                    logEvent('error', `Broadcast failed: ${result.error}`);
+                }
+            } catch (error) {
+                logEvent('error', `Error sending broadcast: ${error.message}`);
+            }
+        }
+
+        async function getSSEStatus() {
+            try {
+                const response = await fetch('/events/status');
+                const data = await response.json();
+                
+                if (response.ok) {
+                    logEvent('system', `Server has ${data.total_connections} active SSE connections`, data);
+                } else {
+                    logEvent('error', 'Failed to get SSE status');
+                }
+            } catch (error) {
+                logEvent('error', `Error getting SSE status: ${error.message}`);
+            }
+        }
+
+        // Auto-connect on page load
+        window.addEventListener('load', function() {
+            setTimeout(connectSSE, 500);
+        });
+
+        // Clean up on page unload
+        window.addEventListener('beforeunload', function() {
+            if (eventSource) {
+                eventSource.close();
+            }
+        });
+    </script>
+</body>
+</html>

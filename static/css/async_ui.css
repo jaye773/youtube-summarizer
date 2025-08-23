@@ -1,0 +1,595 @@
+/**
+ * Async UI Styles - CSS for async worker system UI components
+ * Part of Module 4: Client-Side JavaScript for YouTube Summarizer Async Worker System
+ */
+
+/* ==========================================================================
+   Connection Status Indicator
+   ========================================================================== */
+
+.async-connection-status {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 12px;
+    font-size: 12px;
+    border-radius: 20px;
+    background: rgba(255, 255, 255, 0.9);
+    border: 1px solid #e1e5e9;
+    transition: all 0.3s ease;
+    cursor: help;
+}
+
+.async-connection-status.connected {
+    border-color: #27ae60;
+    background: rgba(39, 174, 96, 0.1);
+    color: #27ae60;
+}
+
+.async-connection-status.disconnected {
+    border-color: #e74c3c;
+    background: rgba(231, 76, 60, 0.1);
+    color: #e74c3c;
+}
+
+.connection-status-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    transition: all 0.3s ease;
+}
+
+.connection-status-dot.connected {
+    background: #27ae60;
+    animation: pulse-connected 2s infinite;
+}
+
+.connection-status-dot.disconnected {
+    background: #e74c3c;
+    animation: pulse-disconnected 1s infinite;
+}
+
+.connection-status-text {
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.connection-status-stats {
+    font-size: 10px;
+    opacity: 0.8;
+    margin-left: 4px;
+}
+
+@keyframes pulse-connected {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.7; transform: scale(1.1); }
+}
+
+@keyframes pulse-disconnected {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+}
+
+/* ==========================================================================
+   Progress Bars Section
+   ========================================================================== */
+
+.async-progress-section {
+    margin: 20px 0;
+    padding: 20px;
+    background: linear-gradient(135deg, #f8f9fa 0%, #f1f3f4 100%);
+    border-radius: 12px;
+    border: 1px solid #e9ecef;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+    display: none; /* Hidden by default, shown when progress bars are added */
+}
+
+.async-progress-section-title {
+    margin: 0 0 15px 0;
+    color: #2c3e50;
+    font-size: 16px;
+    font-weight: 600;
+    border-bottom: 2px solid #8e44ad;
+    padding-bottom: 8px;
+    display: inline-block;
+}
+
+/* Individual Progress Bar Container */
+.async-progress-container {
+    margin-bottom: 16px;
+    padding: 16px;
+    background: white;
+    border-radius: 8px;
+    border-left: 4px solid #8e44ad;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    transition: all 0.3s ease;
+}
+
+.async-progress-container:last-child {
+    margin-bottom: 0;
+}
+
+.async-progress-container.pending {
+    border-left-color: #95a5a6;
+}
+
+.async-progress-container.in_progress {
+    border-left-color: #3498db;
+    background: linear-gradient(135deg, #ffffff 0%, #ebf3fd 100%);
+}
+
+.async-progress-container.completed {
+    border-left-color: #27ae60;
+    background: linear-gradient(135deg, #ffffff 0%, #e8f5e8 100%);
+}
+
+.async-progress-container.failed {
+    border-left-color: #e74c3c;
+    background: linear-gradient(135deg, #ffffff 0%, #fdf2f2 100%);
+}
+
+/* Progress Bar Header */
+.async-progress-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 12px;
+}
+
+.async-progress-title {
+    font-weight: 600;
+    color: #2c3e50;
+    font-size: 14px;
+    flex: 1;
+    margin-right: 12px;
+    word-wrap: break-word;
+}
+
+.async-progress-text {
+    font-size: 12px;
+    font-weight: 700;
+    color: #8e44ad;
+    background: rgba(142, 68, 173, 0.1);
+    padding: 4px 8px;
+    border-radius: 12px;
+    min-width: 40px;
+    text-align: center;
+}
+
+/* Progress Track and Bar */
+.async-progress-track {
+    width: 100%;
+    height: 8px;
+    background: #e9ecef;
+    border-radius: 4px;
+    overflow: hidden;
+    position: relative;
+    margin-bottom: 8px;
+}
+
+.async-progress-bar {
+    height: 100%;
+    background: linear-gradient(90deg, #8e44ad, #9b59b6, #8e44ad);
+    background-size: 200% 100%;
+    border-radius: 4px;
+    transition: width 0.4s ease;
+    animation: progress-shine 2s linear infinite;
+    position: relative;
+}
+
+.async-progress-container.pending .async-progress-bar {
+    background: linear-gradient(90deg, #95a5a6, #bdc3c7, #95a5a6);
+    background-size: 200% 100%;
+}
+
+.async-progress-container.in_progress .async-progress-bar {
+    background: linear-gradient(90deg, #3498db, #5dade2, #3498db);
+    background-size: 200% 100%;
+}
+
+.async-progress-container.completed .async-progress-bar {
+    background: linear-gradient(90deg, #27ae60, #58d68d, #27ae60);
+    background-size: 200% 100%;
+    animation: progress-complete 1s ease-in-out;
+}
+
+.async-progress-container.failed .async-progress-bar {
+    background: linear-gradient(90deg, #e74c3c, #ec7063, #e74c3c);
+    background-size: 200% 100%;
+    animation: progress-error 1s ease-in-out;
+}
+
+@keyframes progress-shine {
+    0% { background-position: -200% 0; }
+    100% { background-position: 200% 0; }
+}
+
+@keyframes progress-complete {
+    0% { transform: scaleY(1); }
+    50% { transform: scaleY(1.2); }
+    100% { transform: scaleY(1); }
+}
+
+@keyframes progress-error {
+    0%, 100% { transform: translateX(0); }
+    25% { transform: translateX(-2px); }
+    75% { transform: translateX(2px); }
+}
+
+/* Progress Message */
+.async-progress-message {
+    font-size: 12px;
+    color: #6c757d;
+    font-style: italic;
+    min-height: 16px;
+}
+
+.async-progress-container.completed .async-progress-message {
+    color: #27ae60;
+    font-weight: 600;
+}
+
+.async-progress-container.failed .async-progress-message {
+    color: #e74c3c;
+    font-weight: 600;
+}
+
+/* ==========================================================================
+   Toast Notifications
+   ========================================================================== */
+
+.async-toast-container {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    z-index: 10000;
+    max-width: 400px;
+    pointer-events: none;
+}
+
+.async-toast {
+    margin-bottom: 12px;
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    opacity: 0;
+    transform: translateX(100%);
+    transition: all 0.3s ease;
+    pointer-events: auto;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    max-width: 100%;
+    word-wrap: break-word;
+}
+
+.async-toast-success {
+    background: linear-gradient(135deg, #27ae60, #2ecc71);
+    color: white;
+    border-left: 4px solid #1e8449;
+}
+
+.async-toast-error {
+    background: linear-gradient(135deg, #e74c3c, #ec7063);
+    color: white;
+    border-left: 4px solid #cb4335;
+}
+
+.async-toast-warning {
+    background: linear-gradient(135deg, #f39c12, #f4d03f);
+    color: #2c3e50;
+    border-left: 4px solid #d68910;
+}
+
+.async-toast-info {
+    background: linear-gradient(135deg, #3498db, #5dade2);
+    color: white;
+    border-left: 4px solid #2980b9;
+}
+
+.async-toast-content {
+    display: flex;
+    align-items: flex-start;
+    padding: 16px;
+    gap: 12px;
+}
+
+.async-toast-message {
+    flex: 1;
+    line-height: 1.4;
+    font-size: 14px;
+    font-weight: 500;
+}
+
+.async-toast-close {
+    background: none;
+    border: none;
+    color: inherit;
+    font-size: 18px;
+    font-weight: bold;
+    cursor: pointer;
+    padding: 0;
+    width: 24px;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    transition: background-color 0.2s ease;
+    opacity: 0.8;
+    flex-shrink: 0;
+}
+
+.async-toast-close:hover {
+    opacity: 1;
+    background: rgba(0, 0, 0, 0.1);
+}
+
+.async-toast-success .async-toast-close:hover,
+.async-toast-error .async-toast-close:hover,
+.async-toast-info .async-toast-close:hover {
+    background: rgba(255, 255, 255, 0.1);
+}
+
+.async-toast-warning .async-toast-close:hover {
+    background: rgba(0, 0, 0, 0.1);
+}
+
+/* ==========================================================================
+   Enhanced SSE Connection Status (Legacy Support)
+   ========================================================================== */
+
+.sse-connection-status {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 10px;
+    font-size: 11px;
+    border-radius: 16px;
+    background: rgba(255, 255, 255, 0.9);
+    border: 1px solid #e1e5e9;
+    transition: all 0.3s ease;
+}
+
+.sse-connection-status.connected {
+    border-color: #27ae60;
+    background: rgba(39, 174, 96, 0.1);
+    color: #27ae60;
+}
+
+.sse-connection-status.disconnected {
+    border-color: #e74c3c;
+    background: rgba(231, 76, 60, 0.1);
+    color: #e74c3c;
+}
+
+.status-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: currentColor;
+}
+
+.status-text {
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+}
+
+/* ==========================================================================
+   Responsive Design
+   ========================================================================== */
+
+@media (max-width: 768px) {
+    .async-toast-container {
+        top: 10px;
+        right: 10px;
+        left: 10px;
+        max-width: none;
+    }
+    
+    .async-toast {
+        transform: translateY(-100%);
+    }
+    
+    .async-progress-section {
+        margin: 15px 0;
+        padding: 15px;
+    }
+    
+    .async-progress-container {
+        padding: 12px;
+        margin-bottom: 12px;
+    }
+    
+    .async-progress-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 8px;
+    }
+    
+    .async-progress-title {
+        margin-right: 0;
+    }
+    
+    .async-connection-status {
+        font-size: 10px;
+        padding: 6px 8px;
+    }
+    
+    .connection-status-stats {
+        display: none; /* Hide stats on mobile */
+    }
+}
+
+@media (max-width: 480px) {
+    .async-toast-message {
+        font-size: 13px;
+    }
+    
+    .async-progress-section-title {
+        font-size: 14px;
+    }
+    
+    .async-progress-title {
+        font-size: 13px;
+    }
+    
+    .async-progress-text {
+        font-size: 11px;
+        padding: 3px 6px;
+    }
+}
+
+/* ==========================================================================
+   Dark Mode Support (Optional)
+   ========================================================================== */
+
+@media (prefers-color-scheme: dark) {
+    .async-progress-section {
+        background: linear-gradient(135deg, #2c3e50 0%, #34495e 100%);
+        border-color: #4a5568;
+        color: #f7fafc;
+    }
+    
+    .async-progress-container {
+        background: #3a4551;
+        color: #f7fafc;
+    }
+    
+    .async-progress-title {
+        color: #f7fafc;
+    }
+    
+    .async-progress-track {
+        background: #4a5568;
+    }
+    
+    .async-connection-status {
+        background: rgba(44, 62, 80, 0.9);
+        border-color: #4a5568;
+        color: #f7fafc;
+    }
+    
+    .async-connection-status.connected {
+        background: rgba(39, 174, 96, 0.2);
+        border-color: #27ae60;
+        color: #2ecc71;
+    }
+    
+    .async-connection-status.disconnected {
+        background: rgba(231, 76, 60, 0.2);
+        border-color: #e74c3c;
+        color: #ec7063;
+    }
+}
+
+/* ==========================================================================
+   Animations and Transitions
+   ========================================================================== */
+
+.async-fade-in {
+    animation: asyncFadeIn 0.3s ease-out forwards;
+}
+
+.async-fade-out {
+    animation: asyncFadeOut 0.3s ease-out forwards;
+}
+
+.async-slide-in-right {
+    animation: asyncSlideInRight 0.3s ease-out forwards;
+}
+
+.async-slide-out-right {
+    animation: asyncSlideOutRight 0.3s ease-out forwards;
+}
+
+@keyframes asyncFadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+@keyframes asyncFadeOut {
+    from { opacity: 1; }
+    to { opacity: 0; }
+}
+
+@keyframes asyncSlideInRight {
+    from { 
+        opacity: 0;
+        transform: translateX(100%);
+    }
+    to { 
+        opacity: 1;
+        transform: translateX(0);
+    }
+}
+
+@keyframes asyncSlideOutRight {
+    from { 
+        opacity: 1;
+        transform: translateX(0);
+    }
+    to { 
+        opacity: 0;
+        transform: translateX(100%);
+    }
+}
+
+/* ==========================================================================
+   Accessibility Enhancements
+   ========================================================================== */
+
+/* High contrast mode support */
+@media (prefers-contrast: high) {
+    .async-progress-bar {
+        background: #000 !important;
+    }
+    
+    .async-progress-track {
+        background: #fff !important;
+        border: 2px solid #000 !important;
+    }
+    
+    .async-toast {
+        border: 2px solid #000 !important;
+    }
+}
+
+/* Reduced motion support */
+@media (prefers-reduced-motion: reduce) {
+    .async-progress-bar {
+        animation: none !important;
+    }
+    
+    .connection-status-dot {
+        animation: none !important;
+    }
+    
+    .async-toast {
+        transition: none !important;
+    }
+    
+    * {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+    }
+}
+
+/* Focus indicators for keyboard navigation */
+.async-toast-close:focus {
+    outline: 2px solid currentColor;
+    outline-offset: 2px;
+}
+
+/* Screen reader only text */
+.async-sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+}
