@@ -5,20 +5,54 @@
 .gitignore
 
 # Docker files
-Dockerfile
-docker-compose.yml
+Dockerfile*
+docker-compose*.yml
+.dockerignore
 
 # Environment files
 .env
+.env.backup
 .venv
 venv
+env/
 __pycache__
+*.pyc
+*.pyo
+*.pyd
 
 # Persistent data (should not be part of the image)
 data/
 audio_cache/
 summary_cache.json
+logs/
+backups/
 
 # IDE files
 .idea/
 .vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Testing
+tests/
+.pytest_cache/
+.coverage
+coverage.xml
+*.cover
+
+# Documentation
+docs/
+plan/
+*.md
+LICENSE
+
+# Temporary files
+*.tmp
+*.bak
+*.backup
+
+# OS files
+Thumbs.db
+Desktop.ini

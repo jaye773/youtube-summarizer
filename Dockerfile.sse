@@ -1,0 +1,43 @@
+# Enhanced Dockerfile for SSE Support
+FROM python:3.11-slim
+
+# Set the working directory inside the container
+WORKDIR /app
+
+# Install system dependencies for SSE
+RUN apt-get update && apt-get install -y \
+    nginx \
+    supervisor \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy the requirements file first to leverage Docker's build cache
+COPY requirements.txt .
+
+# Install the Python dependencies with SSE-optimized server
+RUN pip install --no-cache-dir -r requirements.txt && \
+    pip install --no-cache-dir \
+    eventlet==0.33.3 \
+    gunicorn[eventlet]==21.2.0 \
+    gevent==23.9.1
+
+# Copy the rest of the application code into the container
+COPY . .
+
+# Create necessary directories for enhanced SSE
+RUN mkdir -p /app/src/realtime/connections \
+             /app/src/realtime/sse \
+             /app/src/realtime/compression \
+             /app/src/realtime/monitoring \
+             /app/static/js/sse \
+             /app/data \
+             /app/logs
+
+# Copy nginx configuration for SSE
+COPY docker/nginx-sse.conf /etc/nginx/sites-available/default
+COPY docker/supervisord.conf /etc/supervisor/conf.d/supervisord.conf
+
+# Expose the port the app runs on
+EXPOSE 5001
+
+# Use supervisor to manage both nginx and gunicorn
+CMD ["/usr/bin/supervisord", "-c", "/etc/supervisor/conf.d/supervisord.conf"]

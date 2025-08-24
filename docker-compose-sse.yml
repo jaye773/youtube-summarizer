@@ -1,0 +1,109 @@
+version: '3.8'
+
+services:
+  summarizer-app:
+    # Build from the SSE-optimized Dockerfile
+    build:
+      context: .
+      dockerfile: Dockerfile.sse
+    
+    # Name the container for easier identification
+    container_name: youtube-summarizer-sse
+    
+    # Port mapping for the application
+    ports:
+      - "5001:5001"
+    
+    # Environment variables for API keys and SSE configuration
+    environment:
+      # API Keys
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      
+      # SSE Configuration
+      - SSE_MAX_CONNECTIONS=500
+      - SSE_MAX_CONNECTIONS_PER_IP=10
+      - SSE_HEARTBEAT_INTERVAL=30
+      - SSE_COMPRESSION_THRESHOLD=1024
+      - SSE_IDLE_TIMEOUT=300
+      
+      # Gunicorn Configuration for SSE
+      - GUNICORN_WORKERS=1  # Important: SSE requires single worker or sticky sessions
+      - GUNICORN_WORKER_CLASS=eventlet
+      - GUNICORN_WORKER_CONNECTIONS=1000
+      - GUNICORN_TIMEOUT=300
+      - GUNICORN_KEEPALIVE=75
+      
+      # Flask Configuration
+      - FLASK_ENV=production
+      - FLASK_DEBUG=0
+    
+    # Volume mounts
+    volumes:
+      # Data persistence
+      - ./data:/app/data
+      - ./audio_cache:/app/audio_cache
+      
+      # Enhanced SSE modules (for development)
+      - ./src:/app/src
+      - ./static/js/sse:/app/static/js/sse
+      
+      # Logs
+      - ./logs:/app/logs
+    
+    # Restart policy
+    restart: unless-stopped
+    
+    # Health check for SSE endpoint
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5001/sse/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    
+    # Resource limits
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 2G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+    
+    # Network configuration
+    networks:
+      - summarizer-network
+    
+    # Additional capabilities for better performance
+    cap_add:
+      - SYS_NICE  # Allow nice value adjustments
+
+  # Optional: Redis for future session/cache storage
+  redis:
+    image: redis:7-alpine
+    container_name: youtube-summarizer-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    networks:
+      - summarizer-network
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
+
+networks:
+  summarizer-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
+
+volumes:
+  redis-data:

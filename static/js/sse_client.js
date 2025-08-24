@@ -318,49 +318,35 @@ class SSEClient {
      * Update connection status indicator
      */
     updateConnectionStatus(connected) {
-        // Try to find existing status indicator
-        let statusIndicator = document.getElementById('sse-connection-status');
-        
+        // Use the existing connection status element in the HTML template
+        const statusIndicator = document.getElementById('connection-status');
         if (!statusIndicator) {
-            statusIndicator = this.createConnectionStatusIndicator();
+            console.warn('SSE: Connection status indicator not found in DOM');
+            return;
         }
         
+        // Update the async-connection-status classes
         statusIndicator.className = connected ? 
-            'sse-connection-status connected' : 
-            'sse-connection-status disconnected';
+            'async-connection-status connected' : 
+            'async-connection-status disconnected';
         
         statusIndicator.title = connected ? 
             'Real-time updates: Connected' : 
             'Real-time updates: Disconnected';
+        
+        // Update the dot element
+        const statusDot = statusIndicator.querySelector('.connection-status-dot');
+        if (statusDot) {
+            statusDot.className = connected ? 
+                'connection-status-dot connected' : 
+                'connection-status-dot disconnected';
+        }
         
         // Update text content
         const statusText = statusIndicator.querySelector('.status-text');
         if (statusText) {
             statusText.textContent = connected ? 'Connected' : 'Disconnected';
         }
-    }
-
-    /**
-     * Create connection status indicator if it doesn't exist
-     */
-    createConnectionStatusIndicator() {
-        const indicator = document.createElement('div');
-        indicator.id = 'sse-connection-status';
-        indicator.className = 'sse-connection-status disconnected';
-        indicator.innerHTML = `
-            <span class="status-dot">●</span>
-            <span class="status-text">Disconnected</span>
-        `;
-        
-        // Try to add to header, fallback to body
-        const header = document.querySelector('.header');
-        if (header) {
-            header.appendChild(indicator);
-        } else {
-            document.body.appendChild(indicator);
-        }
-        
-        return indicator;
     }
 
     /**

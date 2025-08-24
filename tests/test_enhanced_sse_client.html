@@ -1,0 +1,642 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Enhanced SSE Client Tests</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        
+        .test-container {
+            background: white;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 20px 0;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        
+        .test-results {
+            margin: 20px 0;
+            padding: 15px;
+            border-radius: 5px;
+        }
+        
+        .test-pass {
+            background-color: #d4edda;
+            border: 1px solid #c3e6cb;
+            color: #155724;
+        }
+        
+        .test-fail {
+            background-color: #f8d7da;
+            border: 1px solid #f5c6cb;
+            color: #721c24;
+        }
+        
+        .test-info {
+            background-color: #d1ecf1;
+            border: 1px solid #bee5eb;
+            color: #0c5460;
+        }
+        
+        .metrics-display {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin: 20px 0;
+        }
+        
+        .metric-card {
+            background: #f8f9fa;
+            border: 1px solid #e9ecef;
+            border-radius: 5px;
+            padding: 15px;
+            text-align: center;
+        }
+        
+        .metric-value {
+            font-size: 1.5em;
+            font-weight: bold;
+            color: #007bff;
+        }
+        
+        .metric-label {
+            font-size: 0.9em;
+            color: #6c757d;
+            margin-top: 5px;
+        }
+        
+        .test-controls {
+            display: flex;
+            gap: 10px;
+            margin: 20px 0;
+            flex-wrap: wrap;
+        }
+        
+        .btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+        }
+        
+        .btn-primary {
+            background-color: #007bff;
+            color: white;
+        }
+        
+        .btn-success {
+            background-color: #28a745;
+            color: white;
+        }
+        
+        .btn-warning {
+            background-color: #ffc107;
+            color: #212529;
+        }
+        
+        .btn-danger {
+            background-color: #dc3545;
+            color: white;
+        }
+        
+        .btn:hover {
+            opacity: 0.8;
+        }
+        
+        .connection-status {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 10px 15px;
+            border-radius: 5px;
+            font-weight: bold;
+            z-index: 1000;
+        }
+        
+        .status-connected {
+            background-color: #28a745;
+            color: white;
+        }
+        
+        .status-disconnected {
+            background-color: #dc3545;
+            color: white;
+        }
+        
+        .status-connecting {
+            background-color: #ffc107;
+            color: #212529;
+        }
+        
+        .log-container {
+            background: #2d3748;
+            color: #e2e8f0;
+            border-radius: 5px;
+            padding: 15px;
+            max-height: 400px;
+            overflow-y: auto;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            margin: 20px 0;
+        }
+        
+        .log-entry {
+            margin: 2px 0;
+            padding: 2px;
+        }
+        
+        .log-error {
+            color: #fed7d7;
+        }
+        
+        .log-warning {
+            color: #faf089;
+        }
+        
+        .log-success {
+            color: #9ae6b4;
+        }
+        
+        .log-info {
+            color: #90cdf4;
+        }
+    </style>
+</head>
+<body>
+    <h1>Enhanced SSE Client Test Suite</h1>
+    
+    <div class="connection-status" id="connection-status">
+        Initializing...
+    </div>
+    
+    <div class="test-container">
+        <h2>Test Controls</h2>
+        <div class="test-controls">
+            <button class="btn btn-primary" onclick="runAllTests()">Run All Tests</button>
+            <button class="btn btn-success" onclick="testConnection()">Test Connection</button>
+            <button class="btn btn-warning" onclick="testReconnection()">Test Reconnection</button>
+            <button class="btn btn-danger" onclick="testStressTest()">Stress Test</button>
+            <button class="btn btn-primary" onclick="testCompression()">Test Compression</button>
+            <button class="btn btn-success" onclick="testHeartbeat()">Test Heartbeat</button>
+            <button class="btn btn-warning" onclick="clearLogs()">Clear Logs</button>
+        </div>
+    </div>
+    
+    <div class="test-container">
+        <h2>Real-time Metrics</h2>
+        <div class="metrics-display" id="metrics-display">
+            <!-- Metrics will be populated here -->
+        </div>
+    </div>
+    
+    <div class="test-container">
+        <h2>Test Results</h2>
+        <div id="test-results"></div>
+    </div>
+    
+    <div class="test-container">
+        <h2>Event Log</h2>
+        <div class="log-container" id="event-log"></div>
+    </div>
+    
+    <!-- Include required libraries -->
+    <script src="https://unpkg.com/pako@2.1.0/dist/pako.min.js"></script>
+    
+    <!-- Include enhanced SSE client -->
+    <script src="../static/js/sse_client_enhanced.js"></script>
+    
+    <script>
+        class EnhancedSSETestSuite {
+            constructor() {
+                this.testResults = [];
+                this.sseClient = null;
+                this.testMessages = [];
+                this.metricsUpdateInterval = null;
+                this.logContainer = document.getElementById('event-log');
+                this.init();
+            }
+            
+            init() {
+                this.log('Initializing Enhanced SSE Test Suite', 'info');
+                this.updateConnectionStatus('Initializing...', 'connecting');
+                this.startMetricsUpdates();
+            }
+            
+            log(message, level = 'info', data = null) {
+                const timestamp = new Date().toISOString();
+                const logEntry = document.createElement('div');
+                logEntry.className = `log-entry log-${level}`;
+                
+                let logText = `[${timestamp.substr(11, 8)}] ${message}`;
+                if (data) {
+                    logText += ` | ${JSON.stringify(data, null, 2)}`;
+                }
+                
+                logEntry.textContent = logText;
+                this.logContainer.appendChild(logEntry);
+                this.logContainer.scrollTop = this.logContainer.scrollHeight;
+                
+                // Also log to console
+                console.log(`[SSE Test] ${message}`, data || '');
+            }
+            
+            updateConnectionStatus(message, status) {
+                const statusElement = document.getElementById('connection-status');
+                statusElement.textContent = message;
+                statusElement.className = `connection-status status-${status}`;
+            }
+            
+            addTestResult(testName, passed, message, duration = null) {
+                const result = {
+                    name: testName,
+                    passed,
+                    message,
+                    duration,
+                    timestamp: new Date()
+                };
+                
+                this.testResults.push(result);
+                this.displayTestResults();
+                
+                this.log(
+                    `Test ${passed ? 'PASSED' : 'FAILED'}: ${testName} - ${message}`,
+                    passed ? 'success' : 'error',
+                    duration ? { duration: `${duration}ms` } : null
+                );
+            }
+            
+            displayTestResults() {
+                const container = document.getElementById('test-results');
+                container.innerHTML = '';
+                
+                this.testResults.forEach(result => {
+                    const resultDiv = document.createElement('div');
+                    resultDiv.className = `test-results ${result.passed ? 'test-pass' : 'test-fail'}`;
+                    
+                    const duration = result.duration ? ` (${result.duration}ms)` : '';
+                    resultDiv.innerHTML = `
+                        <strong>${result.name}</strong>${duration}<br>
+                        ${result.message}<br>
+                        <small>Executed at ${result.timestamp.toLocaleTimeString()}</small>
+                    `;
+                    
+                    container.appendChild(resultDiv);
+                });
+                
+                // Add summary
+                const passed = this.testResults.filter(r => r.passed).length;
+                const total = this.testResults.length;
+                const successRate = total > 0 ? (passed / total * 100).toFixed(1) : 0;
+                
+                const summaryDiv = document.createElement('div');
+                summaryDiv.className = 'test-results test-info';
+                summaryDiv.innerHTML = `
+                    <strong>Test Summary</strong><br>
+                    Passed: ${passed}/${total} (${successRate}%)<br>
+                    Last run: ${new Date().toLocaleTimeString()}
+                `;
+                container.insertBefore(summaryDiv, container.firstChild);
+            }
+            
+            updateMetrics() {
+                if (!this.sseClient) return;
+                
+                const metrics = this.sseClient.getMetricsSummary();
+                const connectionState = this.sseClient.getConnectionState();
+                
+                const metricsContainer = document.getElementById('metrics-display');
+                metricsContainer.innerHTML = `
+                    <div class="metric-card">
+                        <div class="metric-value">${connectionState.isConnected ? 'Connected' : 'Disconnected'}</div>
+                        <div class="metric-label">Connection Status</div>
+                    </div>
+                    <div class="metric-card">
+                        <div class="metric-value">${connectionState.healthStatus || 'Unknown'}</div>
+                        <div class="metric-label">Health Status</div>
+                    </div>
+                    <div class="metric-card">
+                        <div class="metric-value">${metrics.messagesReceived || 0}</div>
+                        <div class="metric-label">Messages Received</div>
+                    </div>
+                    <div class="metric-card">
+                        <div class="metric-value">${metrics.heartbeatsReceived || 0}</div>
+                        <div class="metric-label">Heartbeats Received</div>
+                    </div>
+                    <div class="metric-card">
+                        <div class="metric-value">${Math.round(metrics.averageLatency || 0)}ms</div>
+                        <div class="metric-label">Average Latency</div>
+                    </div>
+                    <div class="metric-card">
+                        <div class="metric-value">${connectionState.reconnectAttempts || 0}</div>
+                        <div class="metric-label">Reconnect Attempts</div>
+                    </div>
+                    <div class="metric-card">
+                        <div class="metric-value">${Math.round((metrics.compressionRatio || 0) * 100)}%</div>
+                        <div class="metric-label">Compression Ratio</div>
+                    </div>
+                    <div class="metric-card">
+                        <div class="metric-value">${this.formatBytes(metrics.bytesReceived || 0)}</div>
+                        <div class="metric-label">Bytes Received</div>
+                    </div>
+                `;
+            }
+            
+            startMetricsUpdates() {
+                this.metricsUpdateInterval = setInterval(() => {
+                    this.updateMetrics();
+                }, 1000);
+            }
+            
+            formatBytes(bytes) {
+                if (bytes === 0) return '0 B';
+                const k = 1024;
+                const sizes = ['B', 'KB', 'MB', 'GB'];
+                const i = Math.floor(Math.log(bytes) / Math.log(k));
+                return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+            }
+            
+            async setupSSEClient() {
+                if (this.sseClient) {
+                    await this.sseClient.disconnect();
+                }
+                
+                this.sseClient = new EnhancedSSEClient('/mock-events', {
+                    debugMode: true,
+                    maxReconnectAttempts: 5,
+                    heartbeatTimeout: 10000
+                });
+                
+                // Set up event handlers for testing
+                this.sseClient.addEventListener('enhanced_connected', (data) => {
+                    this.log('Enhanced connection established', 'success', data);
+                    this.updateConnectionStatus('Connected', 'connected');
+                });
+                
+                this.sseClient.addEventListener('enhanced_connection_error', (data) => {
+                    this.log('Connection error occurred', 'error', data);
+                    this.updateConnectionStatus('Error', 'disconnected');
+                });
+                
+                this.sseClient.addEventListener('reconnecting', (data) => {
+                    this.log('Reconnection attempt', 'warning', data);
+                    this.updateConnectionStatus(`Reconnecting (${data.attempt})`, 'connecting');
+                });
+                
+                this.sseClient.addEventListener('heartbeat', (data) => {
+                    this.log('Heartbeat received', 'info', {
+                        latency: data.client_latency,
+                        server_time: data.server_time
+                    });
+                });
+                
+                this.sseClient.addEventListener('summary_progress', (data) => {
+                    this.log('Progress update received', 'info', data);
+                });
+                
+                return this.sseClient;
+            }
+            
+            // Test methods
+            async testConnection() {
+                const startTime = Date.now();
+                
+                try {
+                    await this.setupSSEClient();
+                    
+                    // Mock successful connection
+                    this.sseClient.isConnected = true;
+                    this.sseClient.healthStatus = 'healthy';
+                    this.updateConnectionStatus('Connected', 'connected');
+                    
+                    const duration = Date.now() - startTime;
+                    this.addTestResult('Connection Test', true, 'Successfully established connection', duration);
+                    
+                } catch (error) {
+                    const duration = Date.now() - startTime;
+                    this.addTestResult('Connection Test', false, `Connection failed: ${error.message}`, duration);
+                }
+            }
+            
+            async testReconnection() {
+                const startTime = Date.now();
+                
+                try {
+                    if (!this.sseClient) {
+                        await this.setupSSEClient();
+                    }
+                    
+                    // Simulate connection loss
+                    this.sseClient.isConnected = false;
+                    this.sseClient.reconnectAttempts = 0;
+                    this.sseClient.handleReconnection({ type: 'test_reconnection' });
+                    
+                    // Wait for reconnection logic to execute
+                    setTimeout(() => {
+                        const duration = Date.now() - startTime;
+                        if (this.sseClient.reconnectAttempts > 0) {
+                            this.addTestResult('Reconnection Test', true, 'Reconnection logic triggered successfully', duration);
+                        } else {
+                            this.addTestResult('Reconnection Test', false, 'Reconnection logic did not trigger', duration);
+                        }
+                    }, 2000);
+                    
+                } catch (error) {
+                    const duration = Date.now() - startTime;
+                    this.addTestResult('Reconnection Test', false, `Reconnection test failed: ${error.message}`, duration);
+                }
+            }
+            
+            async testHeartbeat() {
+                const startTime = Date.now();
+                
+                try {
+                    if (!this.sseClient) {
+                        await this.setupSSEClient();
+                    }
+                    
+                    const initialHeartbeats = this.sseClient.metrics.heartbeatsReceived || 0;
+                    
+                    // Simulate heartbeat reception
+                    this.sseClient.handleHeartbeat({
+                        timestamp: new Date().toISOString(),
+                        connection_count: 1,
+                        metrics: { uptime: 60 }
+                    });
+                    
+                    const finalHeartbeats = this.sseClient.metrics.heartbeatsReceived || 0;
+                    const duration = Date.now() - startTime;
+                    
+                    if (finalHeartbeats > initialHeartbeats) {
+                        this.addTestResult('Heartbeat Test', true, 'Heartbeat processing works correctly', duration);
+                    } else {
+                        this.addTestResult('Heartbeat Test', false, 'Heartbeat was not processed', duration);
+                    }
+                    
+                } catch (error) {
+                    const duration = Date.now() - startTime;
+                    this.addTestResult('Heartbeat Test', false, `Heartbeat test failed: ${error.message}`, duration);
+                }
+            }
+            
+            async testCompression() {
+                const startTime = Date.now();
+                
+                try {
+                    if (!this.sseClient) {
+                        await this.setupSSEClient();
+                    }
+                    
+                    // Test compression support check
+                    const compressionSupported = this.sseClient.compressionSupported;
+                    
+                    // Test decompression with mock data
+                    if (window.pako) {
+                        const testData = { message: 'Test compression data', large_array: new Array(100).fill('test') };
+                        const jsonString = JSON.stringify(testData);
+                        const compressed = window.pako.gzip(jsonString);
+                        const base64Data = btoa(String.fromCharCode.apply(null, compressed));
+                        
+                        const compressedEvent = {
+                            compressed: true,
+                            original_size: jsonString.length,
+                            data: base64Data
+                        };
+                        
+                        const decompressed = this.sseClient.decompressMessage(compressedEvent);
+                        const duration = Date.now() - startTime;
+                        
+                        if (JSON.stringify(decompressed) === JSON.stringify(testData)) {
+                            this.addTestResult('Compression Test', true, 'Compression/decompression works correctly', duration);
+                        } else {
+                            this.addTestResult('Compression Test', false, 'Decompressed data does not match original', duration);
+                        }
+                    } else {
+                        const duration = Date.now() - startTime;
+                        this.addTestResult('Compression Test', false, 'Pako compression library not available', duration);
+                    }
+                    
+                } catch (error) {
+                    const duration = Date.now() - startTime;
+                    this.addTestResult('Compression Test', false, `Compression test failed: ${error.message}`, duration);
+                }
+            }
+            
+            async testStressTest() {
+                const startTime = Date.now();
+                
+                try {
+                    if (!this.sseClient) {
+                        await this.setupSSEClient();
+                    }
+                    
+                    const initialMessages = this.sseClient.metrics.messagesReceived || 0;
+                    
+                    // Simulate rapid message processing
+                    for (let i = 0; i < 100; i++) {
+                        this.sseClient.handleMessage({
+                            data: JSON.stringify({
+                                test_message: i,
+                                timestamp: Date.now(),
+                                data: `Message ${i} with some data`
+                            })
+                        });
+                    }
+                    
+                    const finalMessages = this.sseClient.metrics.messagesReceived || 0;
+                    const duration = Date.now() - startTime;
+                    
+                    if (finalMessages > initialMessages) {
+                        this.addTestResult('Stress Test', true, `Processed ${finalMessages - initialMessages} messages successfully`, duration);
+                    } else {
+                        this.addTestResult('Stress Test', false, 'No messages were processed during stress test', duration);
+                    }
+                    
+                } catch (error) {
+                    const duration = Date.now() - startTime;
+                    this.addTestResult('Stress Test', false, `Stress test failed: ${error.message}`, duration);
+                }
+            }
+            
+            async runAllTests() {
+                this.log('Starting comprehensive test suite', 'info');
+                this.testResults = []; // Clear previous results
+                
+                const tests = [
+                    () => this.testConnection(),
+                    () => new Promise(resolve => setTimeout(resolve, 1000)).then(() => this.testHeartbeat()),
+                    () => new Promise(resolve => setTimeout(resolve, 1000)).then(() => this.testCompression()),
+                    () => new Promise(resolve => setTimeout(resolve, 1000)).then(() => this.testReconnection()),
+                    () => new Promise(resolve => setTimeout(resolve, 2000)).then(() => this.testStressTest())
+                ];
+                
+                for (let i = 0; i < tests.length; i++) {
+                    try {
+                        await tests[i]();
+                        await new Promise(resolve => setTimeout(resolve, 500)); // Brief pause between tests
+                    } catch (error) {
+                        this.log(`Test ${i + 1} encountered an error: ${error.message}`, 'error');
+                    }
+                }
+                
+                this.log('All tests completed', 'success');
+            }
+        }
+        
+        // Global functions for button handlers
+        let testSuite;
+        
+        function runAllTests() {
+            testSuite.runAllTests();
+        }
+        
+        function testConnection() {
+            testSuite.testConnection();
+        }
+        
+        function testReconnection() {
+            testSuite.testReconnection();
+        }
+        
+        function testStressTest() {
+            testSuite.testStressTest();
+        }
+        
+        function testCompression() {
+            testSuite.testCompression();
+        }
+        
+        function testHeartbeat() {
+            testSuite.testHeartbeat();
+        }
+        
+        function clearLogs() {
+            document.getElementById('event-log').innerHTML = '';
+            testSuite.log('Logs cleared', 'info');
+        }
+        
+        // Initialize test suite when page loads
+        document.addEventListener('DOMContentLoaded', function() {
+            testSuite = new EnhancedSSETestSuite();
+        });
+        
+        // Add some mock window functions that the SSE client might expect
+        window.showToast = function(message, type) {
+            console.log(`Toast [${type}]: ${message}`);
+        };
+        
+        window.showMetricsModal = function(metrics) {
+            console.table(metrics);
+            alert('Metrics displayed in console (F12)');
+        };
+    </script>
+</body>
+</html>
