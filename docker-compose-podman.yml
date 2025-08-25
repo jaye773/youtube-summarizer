@@ -1,0 +1,81 @@
+version: '3.8'
+
+services:
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: youtube-summarizer-web
+    ports:
+      - "5001:5001"
+    environment:
+      # Flask Configuration
+      - FLASK_ENV=production
+      - PORT=5001
+      
+      # API Keys
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      
+      # Authentication
+      - LOGIN_ENABLED=${LOGIN_ENABLED:-true}
+      - LOGIN_USERNAME=${LOGIN_USERNAME:-admin}
+      - LOGIN_PASSWORD_HASH=${LOGIN_PASSWORD_HASH}
+      - SESSION_SECRET_KEY=${SESSION_SECRET_KEY:-$(openssl rand -hex 32)}
+      
+      # Gunicorn Configuration
+      - GUNICORN_WORKERS=${GUNICORN_WORKERS:-3}
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+      
+    volumes:
+      # Use :Z flag for SELinux (Podman compatibility)
+      - ./data:/app/data:Z
+      - ./audio_cache:/app/audio_cache:Z
+      - ./gunicorn_config.py:/app/gunicorn_config.py:Z
+      
+    # Use Gunicorn with gevent workers for SSE support
+    command: >
+      sh -c "pip install gevent &&
+             gunicorn -c gunicorn_config.py app:app"
+    
+    networks:
+      - youtube-net
+      
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+      
+    # Podman-specific: Remove if using Docker
+    userns_mode: keep-id
+    
+  nginx:
+    image: nginx:alpine
+    container_name: youtube-summarizer-nginx
+    ports:
+      - "8431:80"
+    volumes:
+      - ./nginx-sse-fixed.conf:/etc/nginx/conf.d/default.conf:Z
+    depends_on:
+      - web
+    networks:
+      - youtube-net
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      
+networks:
+  youtube-net:
+    driver: bridge
+    
+# Optional: Volume definitions for persistent data
+volumes:
+  data:
+    driver: local
+  audio_cache:
+    driver: local

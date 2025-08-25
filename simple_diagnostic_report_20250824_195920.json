@@ -1,0 +1,108 @@
+{
+  "timestamp": "2025-08-24T19:52:22.585129",
+  "base_url": "http://192.168.50.56:8431",
+  "tests": {
+    "connectivity": {
+      "status": "pass",
+      "status_code": 200,
+      "headers": {
+        "Server": "gunicorn",
+        "Date": "Mon, 25 Aug 2025 02:53:46 GMT",
+        "Connection": "close",
+        "Content-Type": "text/html; charset=utf-8",
+        "Content-Length": "7680",
+        "Vary": "Cookie"
+      },
+      "response_time": 32.139628,
+      "content_length": 7680
+    },
+    "http_content": {
+      "status": "pass",
+      "indicators": {
+        "html_structure": true,
+        "title_present": true,
+        "form_present": true,
+        "input_present": true,
+        "script_tags": true,
+        "css_links": false,
+        "youtube_mentions": true
+      },
+      "headers": {
+        "content_type": "text/html; charset=utf-8",
+        "server": "gunicorn",
+        "cache_control": ""
+      },
+      "content_preview": "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n    <meta charset=\"UTF-8\">\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\n    <title>Login - YouTube Summarizer</title>\n    <style>\n        body { \n            font-family: -apple-system, BlinkMacSystemFont, \"Segoe UI\", Roboto, Helvetica, Arial, sans-serif; \n            line-height: 1.6; \n            background-color: #f4f7f6; \n            color: #333; \n            margin: 0; \n            padding: 20px; \n            display: fle..."
+    },
+    "static_resources": {
+      "status": "pass",
+      "accessible_count": 4,
+      "total_count": 4,
+      "resources": {
+        "/static/css/async_ui.css": {
+          "status_code": 200,
+          "accessible": true,
+          "content_type": "text/css; charset=utf-8",
+          "size": 13504
+        },
+        "/static/js/sse_client.js": {
+          "status_code": 200,
+          "accessible": true,
+          "content_type": "application/javascript; charset=utf-8",
+          "size": 12968
+        },
+        "/static/js/job_tracker.js": {
+          "status_code": 200,
+          "accessible": true,
+          "content_type": "application/javascript; charset=utf-8",
+          "size": 11387
+        },
+        "/static/js/ui_updater.js": {
+          "status_code": 200,
+          "accessible": true,
+          "content_type": "application/javascript; charset=utf-8",
+          "size": 18156
+        }
+      }
+    },
+    "api_endpoints": {
+      "status": "pass",
+      "accessible_count": 1,
+      "endpoints": {
+        "main_page": {
+          "url": "http://192.168.50.56:8431/",
+          "status_code": 200,
+          "response_time": 32.166428,
+          "accessible": true
+        },
+        "health_check": {
+          "url": "http://192.168.50.56:8431/health",
+          "status_code": 404,
+          "response_time": 32.030445,
+          "accessible": false
+        },
+        "api_status": {
+          "url": "http://192.168.50.56:8431/api/status",
+          "status_code": 404,
+          "response_time": 32.08258,
+          "accessible": false
+        }
+      }
+    },
+    "sse_endpoint": {
+      "status": "warning",
+      "error": "Connection timeout (expected for SSE)"
+    },
+    "curl_analysis": {
+      "status": "pass",
+      "return_code": 28,
+      "analysis": {
+        "connection_successful": true,
+        "http_response": true,
+        "ssl_issues": false,
+        "dns_resolution": true,
+        "raw_output": "*   Trying 192.168.50.56:8431...\n* Connected to 192.168.50.56 (192.168.50.56) port 8431\n> GET / HTTP/1.1\n> Host: 192.168.50.56:8431\n> User-Agent: curl/8.7.1\n> Accept: */*\n> \n* Request completely sent off\n* Operation timed out after 10003 milliseconds with 0 bytes received\n* Closing connection\n"
+      }
+    }
+  }
+}

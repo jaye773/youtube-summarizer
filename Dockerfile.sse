@@ -1,43 +1,40 @@
-# Enhanced Dockerfile for SSE Support
+# Dockerfile optimized for SSE support with async workers
 FROM python:3.11-slim
 
-# Set the working directory inside the container
+# Set working directory
 WORKDIR /app
 
-# Install system dependencies for SSE
+# Install system dependencies
 RUN apt-get update && apt-get install -y \
-    nginx \
-    supervisor \
+    gcc \
+    g++ \
+    curl \
+    libffi-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy the requirements file first to leverage Docker's build cache
+# Copy requirements first for better caching
 COPY requirements.txt .
 
-# Install the Python dependencies with SSE-optimized server
+# Install Python dependencies including async worker support
 RUN pip install --no-cache-dir -r requirements.txt && \
     pip install --no-cache-dir \
-    eventlet==0.33.3 \
-    gunicorn[eventlet]==21.2.0 \
-    gevent==23.9.1
+    gunicorn[gevent] \
+    gevent \
+    greenlet
 
-# Copy the rest of the application code into the container
+# Copy application code
 COPY . .
 
-# Create necessary directories for enhanced SSE
-RUN mkdir -p /app/src/realtime/connections \
-             /app/src/realtime/sse \
-             /app/src/realtime/compression \
-             /app/src/realtime/monitoring \
-             /app/static/js/sse \
-             /app/data \
-             /app/logs
+# Create necessary directories with proper permissions
+RUN mkdir -p /app/data /app/audio_cache && \
+    chmod 755 /app/data /app/audio_cache
 
-# Copy nginx configuration for SSE
-COPY docker/nginx-sse.conf /etc/nginx/sites-available/default
-COPY docker/supervisord.conf /etc/supervisor/conf.d/supervisord.conf
-
-# Expose the port the app runs on
+# Expose port
 EXPOSE 5001
 
-# Use supervisor to manage both nginx and gunicorn
-CMD ["/usr/bin/supervisord", "-c", "/etc/supervisor/conf.d/supervisord.conf"]
+# Health check
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+    CMD curl -f http://localhost:5001/health || exit 1
+
+# Default command using Gunicorn with gevent workers
+CMD ["gunicorn", "-c", "gunicorn_config.py", "app:app"]

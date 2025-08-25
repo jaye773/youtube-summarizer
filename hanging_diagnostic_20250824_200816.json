@@ -1,0 +1,101 @@
+{
+  "timestamp": "2025-08-24T20:08:16.092260",
+  "host": "192.168.50.56",
+  "port": 8431,
+  "results": {
+    "tcp_connection": {
+      "status": "pass",
+      "connection_time": 0.004455089569091797,
+      "port_open": true
+    },
+    "http_timeouts": {
+      "status": "fail",
+      "timeout_results": {
+        "1": {
+          "elapsed_time": 1.004579782485962,
+          "response_received": false,
+          "response_length": 0,
+          "response_preview": ""
+        },
+        "3": {
+          "elapsed_time": 3.004831075668335,
+          "response_received": false,
+          "response_length": 0,
+          "response_preview": ""
+        },
+        "5": {
+          "elapsed_time": 5.005802154541016,
+          "response_received": false,
+          "response_length": 0,
+          "response_preview": ""
+        },
+        "10": {
+          "elapsed_time": 10.004838943481445,
+          "response_received": false,
+          "response_length": 0,
+          "response_preview": ""
+        }
+      },
+      "any_response_received": false
+    },
+    "partial_response": {
+      "status": "info",
+      "chunks_received": 0,
+      "total_bytes": 0,
+      "chunk_times": [],
+      "response_preview": "",
+      "appears_incomplete": false
+    },
+    "multiple_connections": {
+      "status": "pass",
+      "total_attempts": 3,
+      "successful_connections": 3,
+      "connections_with_response": 0,
+      "connection_results": [
+        {
+          "conn_id": 0,
+          "success": true,
+          "connection_time": 0.0030062198638916016,
+          "total_time": 3.003589153289795,
+          "got_response": false,
+          "response_length": 0
+        },
+        {
+          "conn_id": 1,
+          "success": true,
+          "connection_time": 0.0030791759490966797,
+          "total_time": 3.0039329528808594,
+          "got_response": false,
+          "response_length": 0
+        },
+        {
+          "conn_id": 2,
+          "success": true,
+          "connection_time": 0.003141164779663086,
+          "total_time": 3.0043132305145264,
+          "got_response": false,
+          "response_length": 0
+        }
+      ]
+    },
+    "server_process": {
+      "status": "info",
+      "port_listeners": [
+        "tcp4       0      0  192.168.50.241.56941   192.168.50.56.8431     ESTABLISHED",
+        "tcp4       0      0  192.168.50.241.56939   192.168.50.56.8431     FIN_WAIT_1 ",
+        "tcp4       0      0  192.168.50.241.56940   192.168.50.56.8431     FIN_WAIT_1 ",
+        "tcp4       0      0  192.168.50.241.56938   192.168.50.56.8431     FIN_WAIT_1 ",
+        "tcp4       0      0  192.168.50.241.56937   192.168.50.56.8431     FIN_WAIT_2 ",
+        "tcp4       0      0  192.168.50.241.56936   192.168.50.56.8431     FIN_WAIT_2 ",
+        "tcp4       0      0  192.168.50.241.56934   192.168.50.56.8431     FIN_WAIT_2 ",
+        "tcp4       0      0  192.168.50.241.56933   192.168.50.56.8431     FIN_WAIT_2 ",
+        "tcp4       0      0  192.168.50.241.56932   192.168.50.56.8431     FIN_WAIT_2 ",
+        "tcp4       0      0  192.168.50.241.56931   192.168.50.56.8431     FIN_WAIT_2 ",
+        "tcp4       0      0  192.168.50.241.56928   192.168.50.56.8431     ESTABLISHED"
+      ],
+      "python_processes": [],
+      "netstat_success": true,
+      "ps_success": true
+    }
+  }
+}

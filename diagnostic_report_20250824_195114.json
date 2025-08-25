@@ -1,0 +1,135 @@
+{
+  "timestamp": "2025-08-24T19:49:43.794681",
+  "base_url": "http://192.168.50.56:8431",
+  "tests": {
+    "basic_connectivity": {
+      "status": "fail",
+      "error": "Page.goto: Timeout 10000ms exceeded.\nCall log:\n  - navigating to \"http://192.168.50.56:8431/\", waiting until \"domcontentloaded\"\n"
+    },
+    "page_loading": {
+      "status": "fail",
+      "error": "Timeout 15000ms exceeded."
+    },
+    "ui_elements": {
+      "status": "fail",
+      "elements": {
+        "url_input": {
+          "present": false,
+          "error": "Locator.count: Execution context was destroyed, most likely because of a navigation"
+        },
+        "model_select": {
+          "present": false,
+          "visible": false,
+          "enabled": false,
+          "selector_used": "select[name='model'], #model, .model-select"
+        },
+        "submit_button": {
+          "present": true,
+          "visible": true,
+          "enabled": true,
+          "selector_used": "button[type='submit'], input[type='submit'], .submit-btn"
+        },
+        "progress_container": {
+          "present": false,
+          "visible": false,
+          "enabled": false,
+          "selector_used": ".progress-container, #progress, .progress-bar"
+        },
+        "status_indicator": {
+          "present": false,
+          "visible": false,
+          "enabled": false,
+          "selector_used": ".status, #status, .connection-status"
+        }
+      },
+      "form_interactive": false
+    },
+    "console_errors": {
+      "status": "pass",
+      "total_errors": 0,
+      "total_warnings": 0,
+      "critical_errors": [],
+      "all_console_logs": [
+        {
+          "type": "verbose",
+          "text": "[DOM] Input elements should have autocomplete attributes (suggested: \"new-password\"): (More info: https://goo.gl/9p2vKq) %o",
+          "location": {
+            "url": "http://192.168.50.56:8431/login",
+            "lineNumber": 0,
+            "columnNumber": 0
+          },
+          "timestamp": "2025-08-24T19:51:05.910237"
+        }
+      ]
+    },
+    "network_requests": {
+      "status": "pass",
+      "failed_requests": [],
+      "blocked_requests": [],
+      "cors_issues": [],
+      "resource_loading": {
+        "css": [],
+        "js": [],
+        "api": []
+      },
+      "total_requests": 2
+    },
+    "authentication": {
+      "status": "info",
+      "login_required": true,
+      "is_login_page": true,
+      "current_url": "http://192.168.50.56:8431/login",
+      "auth_elements": {
+        "username_field": false,
+        "password_field": true,
+        "login_button": true
+      }
+    },
+    "youtube_submission": {
+      "status": "fail",
+      "error": "Required form elements not found",
+      "url_input_present": false,
+      "submit_button_present": true
+    },
+    "sse_connectivity": {
+      "status": "fail",
+      "connection_result": {
+        "connected": false,
+        "error": "Connection timeout",
+        "readyState": 2
+      },
+      "sse_endpoint_accessible": true,
+      "sse_requests": [
+        {
+          "type": "request",
+          "url": "http://192.168.50.56:8431/sse",
+          "method": "GET",
+          "headers": {
+            "cache-control": "no-cache",
+            "referer": "http://192.168.50.56:8431/login",
+            "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
+            "accept": "text/event-stream"
+          },
+          "timestamp": "2025-08-24T19:51:07.969668"
+        }
+      ]
+    },
+    "javascript_functionality": {
+      "status": "pass",
+      "basic_js_working": true,
+      "jquery_present": false,
+      "custom_functions": {
+        "sse_client": false,
+        "job_tracker": false,
+        "ui_updater": false,
+        "event_listeners": false
+      },
+      "js_errors": []
+    },
+    "screenshots": {
+      "status": "pass",
+      "full_screenshot": "/Users/jaye/projects/youtube-summarizer/diagnostic_full_20250824_195112.png",
+      "viewport_screenshot": "/Users/jaye/projects/youtube-summarizer/diagnostic_viewport_20250824_195112.png"
+    }
+  }
+}

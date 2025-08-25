@@ -1,0 +1,105 @@
+{
+  "timestamp": "2025-08-24T18:37:20.751642",
+  "host": "192.168.50.56",
+  "port": 8431,
+  "results": {
+    "tcp_connection": {
+      "status": "pass",
+      "connection_time": 0.0027391910552978516,
+      "port_open": true
+    },
+    "http_timeouts": {
+      "status": "fail",
+      "timeout_results": {
+        "1": {
+          "elapsed_time": 1.0061559677124023,
+          "response_received": false,
+          "response_length": 0,
+          "response_preview": ""
+        },
+        "3": {
+          "elapsed_time": 3.0064382553100586,
+          "response_received": false,
+          "response_length": 0,
+          "response_preview": ""
+        },
+        "5": {
+          "elapsed_time": 5.004849910736084,
+          "response_received": false,
+          "response_length": 0,
+          "response_preview": ""
+        },
+        "10": {
+          "elapsed_time": 10.003907918930054,
+          "response_received": false,
+          "response_length": 0,
+          "response_preview": ""
+        }
+      },
+      "any_response_received": false
+    },
+    "partial_response": {
+      "status": "info",
+      "chunks_received": 0,
+      "total_bytes": 0,
+      "chunk_times": [],
+      "response_preview": "",
+      "appears_incomplete": false
+    },
+    "multiple_connections": {
+      "status": "pass",
+      "total_attempts": 3,
+      "successful_connections": 3,
+      "connections_with_response": 0,
+      "connection_results": [
+        {
+          "conn_id": 1,
+          "success": true,
+          "connection_time": 0.003217935562133789,
+          "total_time": 3.0043649673461914,
+          "got_response": false,
+          "response_length": 0
+        },
+        {
+          "conn_id": 2,
+          "success": true,
+          "connection_time": 0.0032787322998046875,
+          "total_time": 3.0043528079986572,
+          "got_response": false,
+          "response_length": 0
+        },
+        {
+          "conn_id": 0,
+          "success": true,
+          "connection_time": 0.0035161972045898438,
+          "total_time": 3.0044021606445312,
+          "got_response": false,
+          "response_length": 0
+        }
+      ]
+    },
+    "server_process": {
+      "status": "info",
+      "port_listeners": [
+        "tcp4       0      0  192.168.50.241.55586   192.168.50.56.8431     FIN_WAIT_1 ",
+        "tcp4       0      0  192.168.50.241.55585   192.168.50.56.8431     FIN_WAIT_1 ",
+        "tcp4       0      0  192.168.50.241.55584   192.168.50.56.8431     FIN_WAIT_1 ",
+        "tcp4       0      0  192.168.50.241.55574   192.168.50.56.8431     FIN_WAIT_2 ",
+        "tcp4       0      0  192.168.50.241.55533   192.168.50.56.8431     FIN_WAIT_2 ",
+        "tcp4       0      0  192.168.50.241.55512   192.168.50.56.8431     FIN_WAIT_2 ",
+        "tcp4       0      0  192.168.50.241.55477   192.168.50.56.8431     FIN_WAIT_2 ",
+        "tcp4       0      0  192.168.50.241.55467   192.168.50.56.8431     FIN_WAIT_2 ",
+        "tcp4       0      0  192.168.50.241.55466   192.168.50.56.8431     FIN_WAIT_2 ",
+        "tcp4       0      0  192.168.50.241.55416   192.168.50.56.8431     ESTABLISHED",
+        "tcp4       0      0  192.168.50.241.55347   192.168.50.56.8431     ESTABLISHED"
+      ],
+      "python_processes": [
+        "jaye             17957   0.7  0.3 412160640 108928 s001  S+    6:31PM   0:14.51 /Library/Frameworks/Python.framework/Versions/3.11/Resources/Python.app/Contents/MacOS/Python -m flask run --port 5001",
+        "jaye             17955   0.0  0.3 411464144 103840 s001  S+    6:31PM   0:01.15 /Library/Frameworks/Python.framework/Versions/3.11/Resources/Python.app/Contents/MacOS/Python -m flask run --port 5001",
+        "jaye             17954   0.0  0.0 410724784   1808 s001  S+    6:31PM   0:00.00 /bin/sh -c export FLASK_APP=app.py && export FLASK_ENV=development && python3 -m flask run --port 5001"
+      ],
+      "netstat_success": true,
+      "ps_success": true
+    }
+  }
+}
