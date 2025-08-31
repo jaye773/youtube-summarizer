@@ -428,6 +428,9 @@ LOCKOUT_DURATION = int(os.environ.get("LOCKOUT_DURATION", "15"))  # minutes
 # --- TTS CONFIGURATION ---
 TTS_VOICE = os.environ.get("TTS_VOICE", "en-US-Chirp3-HD-Zephyr")
 
+# --- UI CONFIGURATION ---
+DARK_MODE = os.environ.get("DARK_MODE", "false").lower() == "true"
+
 # Configure Flask session
 if LOGIN_ENABLED:
     if not SESSION_SECRET_KEY:
@@ -2448,6 +2451,7 @@ def settings_page():
         "WEBSHARE_PROXY_PASSWORD": os.environ.get("WEBSHARE_PROXY_PASSWORD", ""),
         "DATA_DIR": os.environ.get("DATA_DIR", ""),
         "FLASK_DEBUG": os.environ.get("FLASK_DEBUG", "true"),
+        "DARK_MODE": os.environ.get("DARK_MODE", "false"),
         "TTS_VOICE": os.environ.get("TTS_VOICE", "en-US-Chirp3-HD-Zephyr"),
     }
 
@@ -2485,6 +2489,7 @@ def update_settings():
             "webshare_proxy_password": "WEBSHARE_PROXY_PASSWORD",
             "data_dir": "DATA_DIR",
             "flask_debug": "FLASK_DEBUG",
+            "dark_mode": "DARK_MODE",
             "tts_voice": "TTS_VOICE",
         }
 
@@ -2516,7 +2521,7 @@ def update_settings():
         # Update global variables that depend on environment variables
         global LOGIN_ENABLED, LOGIN_CODE, SESSION_SECRET_KEY, MAX_LOGIN_ATTEMPTS, LOCKOUT_DURATION
         global WEBSHARE_PROXY_ENABLED, WEBSHARE_PROXY_HOST, WEBSHARE_PROXY_PORT
-        global WEBSHARE_PROXY_USERNAME, WEBSHARE_PROXY_PASSWORD, DATA_DIR, TTS_VOICE
+        global WEBSHARE_PROXY_USERNAME, WEBSHARE_PROXY_PASSWORD, DATA_DIR, TTS_VOICE, DARK_MODE
         global google_api_key, openai_api_key, gemini_model, openai_client, tts_client, youtube
 
         LOGIN_ENABLED = os.environ.get("LOGIN_ENABLED", "false").lower() == "true"
@@ -2533,6 +2538,7 @@ def update_settings():
 
         DATA_DIR = os.environ.get("DATA_DIR", "data" if os.path.exists("/.dockerenv") else ".")
         TTS_VOICE = os.environ.get("TTS_VOICE", "en-US-Chirp3-HD-Zephyr")
+        DARK_MODE = os.environ.get("DARK_MODE", "false").lower() == "true"
 
         # Update Flask secret key if SESSION_SECRET_KEY changed
         if SESSION_SECRET_KEY:
