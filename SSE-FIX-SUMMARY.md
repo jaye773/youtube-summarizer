@@ -13,7 +13,7 @@ Your SSE endpoint was hanging because:
 2. **`nginx-sse-fixed.conf`** - Fixed proxy configuration
 3. **`docker-compose-podman.yml`** - Podman-compatible deployment
 4. **`Dockerfile.sse`** - Optimized Docker image with gevent
-5. **`test_sse_fixed.py`** - SSE functionality test script
+5. **`tests/test_sse_fixed.py`** - SSE functionality test script
 6. **`deploy-sse-fix.sh`** - Automated deployment script
 
 ## 🚀 Quick Deployment
@@ -51,7 +51,7 @@ podman run -d \
   youtube-summarizer:sse
 
 # Test SSE
-python test_sse_fixed.py http://localhost:8431 --username admin --password yourpassword
+python tests/test_sse_fixed.py http://localhost:8431 --username admin --password yourpassword
 ```
 
 ### Option 3: Docker Compose
@@ -83,7 +83,7 @@ curl http://localhost:8431/health
 curl -N http://localhost:8431/events 2>/dev/null | head -20
 
 # Full test suite
-python test_sse_fixed.py http://localhost:8431
+python tests/test_sse_fixed.py http://localhost:8431
 ```
 
 ### 4. Check Logs for Async Workers
@@ -160,7 +160,7 @@ After applying fixes, you should see:
 ## 📚 Additional Resources
 
 - **Detailed Guide**: See `sse-fix-guide.md`
-- **Test Results**: Run `test_sse_fixed.py` and check JSON output
+- **Test Results**: Run `tests/test_sse_fixed.py` and check JSON output
 - **Logs**: `podman logs youtube-summarizer`
 - **Original Issue**: TCP connects but HTTP hangs = sync worker problem
 
