@@ -396,6 +396,8 @@ make coverage
 - `tests/test_transcript_and_summary.py` - Transcript and summary generation tests
 - `tests/test_cache.py` - Cache functionality tests
 - `tests/test_integration.py` - End-to-end integration tests
+- `tests/test_voice_validation.py` - Voice selection feature tests
+- `tests/test_sse_auth.py` - SSE authentication tests
 
 ## 🔍 Code Quality
 

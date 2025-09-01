@@ -18,7 +18,8 @@ os.environ['LOGIN_PASSWORD_HASH'] = '5e884898da28047151d0e56f8dc6292773603d0d6aa
 os.environ['GOOGLE_API_KEY'] = 'test-key'
 os.environ['OPENAI_API_KEY'] = 'test-key'
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, PROJECT_ROOT)
 
 from app import app
 
@@ -32,9 +33,15 @@ def test_sse_auth():
     """Test SSE authentication requirements"""
     base_url = 'http://127.0.0.1:5557'
 
-    print("="*60)
+    # Start server in background for test runs
+    server_thread = Thread(target=run_server, daemon=True)
+    server_thread.start()
+
+    print("=" * 60)
     print("Testing SSE Authentication")
-    print("="*60)
+    print("=" * 60)
+
+    time.sleep(1)  # allow server to start
 
     # Create session
     session = requests.Session()
@@ -143,16 +150,7 @@ def test_sse_auth():
     print("="*60)
 
 if __name__ == "__main__":
-    # Start server in background
-    server_thread = Thread(target=run_server, daemon=True)
-    server_thread.start()
-
-    # Wait for server to start
-    print("⏳ Starting test server...")
-    time.sleep(2)
-
     try:
-        # Run tests
         test_sse_auth()
     except KeyboardInterrupt:
         print("\n⚠️ Tests interrupted")
