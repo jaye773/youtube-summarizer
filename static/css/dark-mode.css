@@ -1,0 +1,478 @@
+/**
+ * Dark Mode CSS
+ * Theme-specific overrides and dark mode enhancements
+ * Works in conjunction with theme-variables.css
+ */
+
+/* ========================================
+   BASE DARK MODE STYLING
+   ======================================== */
+
+[data-theme="dark"] {
+  color-scheme: dark;
+}
+
+/* ========================================
+   BODY AND LAYOUT ELEMENTS
+   ======================================== */
+
+[data-theme="dark"] body {
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+}
+
+[data-theme="dark"] .container,
+[data-theme="dark"] .main-container {
+  background-color: var(--bg-primary);
+}
+
+/* ========================================
+   CARDS AND PANELS
+   ======================================== */
+
+[data-theme="dark"] .card,
+[data-theme="dark"] .panel,
+[data-theme="dark"] .summary-card {
+  background: var(--gradient-card);
+  border-color: var(--border-default);
+  box-shadow: var(--shadow-md);
+}
+
+[data-theme="dark"] .card:hover,
+[data-theme="dark"] .panel:hover {
+  box-shadow: var(--shadow-lg);
+  border-color: var(--border-subtle);
+}
+
+/* ========================================
+   FORM ELEMENTS
+   ======================================== */
+
+[data-theme="dark"] input,
+[data-theme="dark"] select,
+[data-theme="dark"] textarea {
+  background-color: var(--bg-tertiary);
+  border-color: var(--border-default);
+  color: var(--text-primary);
+}
+
+[data-theme="dark"] input:focus,
+[data-theme="dark"] select:focus,
+[data-theme="dark"] textarea:focus {
+  border-color: var(--accent-primary);
+  box-shadow: 0 0 0 3px rgba(169, 112, 201, 0.2);
+  background-color: var(--bg-secondary);
+}
+
+[data-theme="dark"] input::placeholder,
+[data-theme="dark"] textarea::placeholder {
+  color: var(--text-muted);
+}
+
+/* ========================================
+   BUTTONS AND INTERACTIVE ELEMENTS
+   ======================================== */
+
+[data-theme="dark"] .btn-primary,
+[data-theme="dark"] button.primary {
+  background: var(--gradient-progress);
+  border-color: var(--accent-primary);
+  color: var(--text-primary);
+}
+
+[data-theme="dark"] .btn-primary:hover,
+[data-theme="dark"] button.primary:hover {
+  background: var(--accent-hover);
+  box-shadow: var(--shadow-md);
+  transform: translateY(-1px);
+}
+
+[data-theme="dark"] .btn-secondary,
+[data-theme="dark"] button.secondary {
+  background-color: var(--bg-secondary);
+  border-color: var(--border-default);
+  color: var(--text-primary);
+}
+
+[data-theme="dark"] .btn-secondary:hover,
+[data-theme="dark"] button.secondary:hover {
+  background-color: var(--bg-tertiary);
+  border-color: var(--border-subtle);
+}
+
+/* ========================================
+   PROGRESS BARS AND STATUS INDICATORS
+   ======================================== */
+
+[data-theme="dark"] .progress-container {
+  background-color: var(--bg-tertiary);
+  border: 1px solid var(--border-default);
+}
+
+[data-theme="dark"] .progress-bar {
+  background: var(--gradient-progress);
+}
+
+[data-theme="dark"] .progress-bar.success {
+  background: var(--gradient-success);
+}
+
+[data-theme="dark"] .progress-bar.error {
+  background: var(--gradient-error);
+}
+
+/* Status badges */
+[data-theme="dark"] .status-success {
+  background-color: var(--status-success);
+  color: var(--bg-primary);
+}
+
+[data-theme="dark"] .status-error {
+  background-color: var(--status-error);
+  color: var(--text-primary);
+}
+
+[data-theme="dark"] .status-warning {
+  background-color: var(--status-warning);
+  color: var(--bg-primary);
+}
+
+[data-theme="dark"] .status-info {
+  background-color: var(--status-info);
+  color: var(--text-primary);
+}
+
+/* ========================================
+   NAVIGATION AND HEADERS
+   ======================================== */
+
+[data-theme="dark"] .navbar,
+[data-theme="dark"] .header {
+  background-color: var(--bg-secondary);
+  border-bottom: 1px solid var(--border-default);
+}
+
+[data-theme="dark"] .nav-link,
+[data-theme="dark"] .menu-item {
+  color: var(--text-secondary);
+}
+
+[data-theme="dark"] .nav-link:hover,
+[data-theme="dark"] .menu-item:hover {
+  color: var(--accent-primary);
+  background-color: var(--bg-tertiary);
+}
+
+[data-theme="dark"] .nav-link.active,
+[data-theme="dark"] .menu-item.active {
+  color: var(--accent-primary);
+  background-color: var(--bg-tertiary);
+}
+
+/* ========================================
+   MODALS AND OVERLAYS
+   ======================================== */
+
+[data-theme="dark"] .modal-overlay {
+  background-color: var(--overlay-modal);
+}
+
+[data-theme="dark"] .modal-content,
+[data-theme="dark"] .popup {
+  background-color: var(--bg-secondary);
+  border: 1px solid var(--border-default);
+  box-shadow: var(--shadow-xl);
+}
+
+[data-theme="dark"] .modal-header {
+  border-bottom: 1px solid var(--border-default);
+  color: var(--text-primary);
+}
+
+[data-theme="dark"] .modal-footer {
+  border-top: 1px solid var(--border-default);
+}
+
+/* ========================================
+   TABLES AND LISTS
+   ======================================== */
+
+[data-theme="dark"] .table,
+[data-theme="dark"] table {
+  background-color: var(--bg-secondary);
+  color: var(--text-primary);
+}
+
+[data-theme="dark"] .table th,
+[data-theme="dark"] table th {
+  background-color: var(--bg-tertiary);
+  border-bottom: 2px solid var(--border-default);
+  color: var(--text-secondary);
+}
+
+[data-theme="dark"] .table td,
+[data-theme="dark"] table td {
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+[data-theme="dark"] .table tr:hover,
+[data-theme="dark"] table tr:hover {
+  background-color: var(--bg-tertiary);
+}
+
+[data-theme="dark"] .list-item {
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+[data-theme="dark"] .list-item:hover {
+  background-color: var(--bg-tertiary);
+}
+
+/* ========================================
+   TEXT AND TYPOGRAPHY
+   ======================================== */
+
+[data-theme="dark"] h1,
+[data-theme="dark"] h2,
+[data-theme="dark"] h3,
+[data-theme="dark"] h4,
+[data-theme="dark"] h5,
+[data-theme="dark"] h6 {
+  color: var(--text-primary);
+}
+
+[data-theme="dark"] .text-muted,
+[data-theme="dark"] .muted {
+  color: var(--text-muted);
+}
+
+[data-theme="dark"] .text-secondary {
+  color: var(--text-secondary);
+}
+
+[data-theme="dark"] a {
+  color: var(--accent-primary);
+}
+
+[data-theme="dark"] a:hover {
+  color: var(--accent-hover);
+}
+
+[data-theme="dark"] code {
+  background-color: var(--bg-tertiary);
+  border: 1px solid var(--border-default);
+  color: var(--accent-primary);
+}
+
+[data-theme="dark"] pre {
+  background-color: var(--bg-tertiary);
+  border: 1px solid var(--border-default);
+  color: var(--text-primary);
+}
+
+/* ========================================
+   ALERTS AND NOTIFICATIONS
+   ======================================== */
+
+[data-theme="dark"] .alert {
+  border-width: 1px;
+  border-style: solid;
+}
+
+[data-theme="dark"] .alert-success {
+  background-color: rgba(46, 204, 113, 0.1);
+  border-color: var(--status-success);
+  color: var(--status-success);
+}
+
+[data-theme="dark"] .alert-error,
+[data-theme="dark"] .alert-danger {
+  background-color: rgba(236, 112, 99, 0.1);
+  border-color: var(--status-error);
+  color: var(--status-error);
+}
+
+[data-theme="dark"] .alert-warning {
+  background-color: rgba(244, 208, 63, 0.1);
+  border-color: var(--status-warning);
+  color: var(--status-warning);
+}
+
+[data-theme="dark"] .alert-info {
+  background-color: rgba(93, 173, 226, 0.1);
+  border-color: var(--status-info);
+  color: var(--status-info);
+}
+
+/* ========================================
+   TOAST NOTIFICATIONS
+   ======================================== */
+
+[data-theme="dark"] .toast {
+  background-color: var(--bg-secondary);
+  border: 1px solid var(--border-default);
+  box-shadow: var(--shadow-lg);
+  color: var(--text-primary);
+}
+
+[data-theme="dark"] .toast.success {
+  border-left: 4px solid var(--status-success);
+}
+
+[data-theme="dark"] .toast.error {
+  border-left: 4px solid var(--status-error);
+}
+
+[data-theme="dark"] .toast.warning {
+  border-left: 4px solid var(--status-warning);
+}
+
+[data-theme="dark"] .toast.info {
+  border-left: 4px solid var(--status-info);
+}
+
+/* ========================================
+   SCROLLBARS (WEBKIT BROWSERS)
+   ======================================== */
+
+[data-theme="dark"] ::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+[data-theme="dark"] ::-webkit-scrollbar-track {
+  background: var(--bg-tertiary);
+}
+
+[data-theme="dark"] ::-webkit-scrollbar-thumb {
+  background: var(--border-default);
+  border-radius: 4px;
+}
+
+[data-theme="dark"] ::-webkit-scrollbar-thumb:hover {
+  background: var(--border-subtle);
+}
+
+/* ========================================
+   THEME TOGGLE BUTTON
+   ======================================== */
+
+.theme-toggle {
+  background: none;
+  border: 1px solid var(--border-default);
+  border-radius: var(--border-radius-md);
+  color: var(--text-secondary);
+  cursor: pointer;
+  padding: 8px 12px;
+  transition: var(--transition-theme);
+}
+
+.theme-toggle:hover {
+  background-color: var(--bg-tertiary);
+  border-color: var(--accent-primary);
+  color: var(--accent-primary);
+}
+
+.theme-toggle:focus {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
+}
+
+/* ========================================
+   SSE CONNECTION STATUS (DARK MODE)
+   ======================================== */
+
+[data-theme="dark"] .connection-status {
+  background-color: var(--bg-secondary);
+  border: 1px solid var(--border-default);
+  color: var(--text-primary);
+}
+
+[data-theme="dark"] .connection-status.connected {
+  border-color: var(--status-success);
+  color: var(--status-success);
+}
+
+[data-theme="dark"] .connection-status.disconnected {
+  border-color: var(--status-error);
+  color: var(--status-error);
+}
+
+[data-theme="dark"] .connection-status.connecting {
+  border-color: var(--status-warning);
+  color: var(--status-warning);
+}
+
+/* ========================================
+   JOB PROGRESS SPECIFIC STYLING
+   ======================================== */
+
+[data-theme="dark"] .job-progress {
+  background-color: var(--bg-secondary);
+  border: 1px solid var(--border-default);
+}
+
+[data-theme="dark"] .job-progress .job-title {
+  color: var(--text-primary);
+}
+
+[data-theme="dark"] .job-progress .job-status {
+  color: var(--text-secondary);
+}
+
+[data-theme="dark"] .job-progress .job-metadata {
+  color: var(--text-muted);
+}
+
+/* ========================================
+   LOADING STATES AND SPINNERS
+   ======================================== */
+
+[data-theme="dark"] .spinner,
+[data-theme="dark"] .loading {
+  border-color: var(--border-subtle);
+  border-top-color: var(--accent-primary);
+}
+
+[data-theme="dark"] .skeleton {
+  background: linear-gradient(
+    90deg,
+    var(--bg-tertiary) 25%,
+    var(--bg-secondary) 50%,
+    var(--bg-tertiary) 75%
+  );
+}
+
+/* ========================================
+   ACCESSIBILITY ENHANCEMENTS
+   ======================================== */
+
+/* Improved focus visibility in dark mode */
+[data-theme="dark"] *:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
+  background-color: rgba(169, 112, 201, 0.1);
+}
+
+/* High contrast media query support */
+@media (prefers-contrast: high) {
+  [data-theme="dark"] {
+    --text-primary: #ffffff;
+    --text-secondary: #e4e6eb;
+    --border-default: #5a5d64;
+    --accent-primary: #c89edb;
+  }
+}
+
+/* ========================================
+   PRINT STYLES (DARK MODE)
+   ======================================== */
+
+@media print {
+  [data-theme="dark"] * {
+    background-color: white !important;
+    color: black !important;
+    border-color: #ccc !important;
+    box-shadow: none !important;
+  }
+}

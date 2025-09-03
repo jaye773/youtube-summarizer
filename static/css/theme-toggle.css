@@ -1,0 +1,445 @@
+/**
+ * YouTube Summarizer Theme Toggle Button Styles
+ * Styles for the theme toggle component with smooth animations and accessibility
+ * 
+ * @author YouTube Summarizer Team
+ * @version 1.0.0
+ */
+
+/* ========================================
+   THEME TOGGLE BUTTON BASE STYLES
+   ======================================== */
+
+.theme-toggle-btn {
+    /* Layout */
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    padding: 0;
+    margin-right: 10px;
+    
+    /* Appearance */
+    background-color: var(--bg-secondary, #ffffff);
+    color: var(--text-primary, #333333);
+    border: 1px solid var(--border-default, #cccccc);
+    border-radius: var(--border-radius-full, 50%);
+    cursor: pointer;
+    text-decoration: none;
+    
+    /* Transitions - smooth theme switching */
+    transition: var(--transition-theme, all 0.3s ease);
+    
+    /* Box shadow for depth */
+    box-shadow: var(--shadow-sm, 0 1px 2px rgba(0, 0, 0, 0.05));
+    
+    /* Prevent text selection */
+    user-select: none;
+    -webkit-user-select: none;
+    -moz-user-select: none;
+    -ms-user-select: none;
+}
+
+/* Hidden by default if JavaScript is disabled */
+html.no-js .theme-toggle-btn,
+.theme-toggle-btn:not(.js-enabled) {
+    display: none !important;
+}
+
+/* Show when JavaScript is enabled */
+html.js-enabled .theme-toggle-btn {
+    display: inline-flex;
+}
+
+/* ========================================
+   HOVER AND INTERACTION STATES
+   ======================================== */
+
+.theme-toggle-btn:hover {
+    background-color: var(--bg-tertiary, #f8f9fa);
+    border-color: var(--border-strong, #95a5a6);
+    box-shadow: var(--shadow-md, 0 4px 6px rgba(0, 0, 0, 0.07));
+    transform: translateY(-1px) scale(1.05);
+}
+
+.theme-toggle-btn:active {
+    transform: translateY(0) scale(0.98);
+    box-shadow: var(--shadow-sm, 0 1px 2px rgba(0, 0, 0, 0.05));
+}
+
+/* Focus styles for keyboard navigation */
+.theme-toggle-btn:focus-visible,
+.theme-toggle-btn.focused {
+    outline: 2px solid var(--accent-primary, #8e44ad);
+    outline-offset: 2px;
+    border-color: var(--accent-primary, #8e44ad);
+    box-shadow: 
+        var(--shadow-md, 0 4px 6px rgba(0, 0, 0, 0.07)),
+        0 0 0 3px rgba(142, 68, 173, 0.2);
+}
+
+/* Remove default focus outline */
+.theme-toggle-btn:focus {
+    outline: none;
+}
+
+/* ========================================
+   ICON CONTAINER AND ANIMATIONS
+   ======================================== */
+
+.theme-toggle-icon {
+    position: relative;
+    width: 22px;
+    height: 22px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: var(--transition-normal, 0.3s ease);
+}
+
+/* Prevent pointer events on icons to avoid click conflicts */
+.theme-toggle-icon * {
+    pointer-events: none;
+}
+
+/* Icon rotation animation */
+.theme-toggle-icon.rotating {
+    animation: themeToggleRotate 0.3s ease-in-out;
+}
+
+@keyframes themeToggleRotate {
+    0% {
+        transform: rotate(0deg) scale(1);
+    }
+    50% {
+        transform: rotate(90deg) scale(1.1);
+    }
+    100% {
+        transform: rotate(180deg) scale(1);
+    }
+}
+
+/* ========================================
+   THEME ICONS STYLING
+   ======================================== */
+
+.theme-icon {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    transition: 
+        opacity var(--transition-normal, 0.3s ease),
+        transform var(--transition-normal, 0.3s ease);
+    color: currentColor;
+}
+
+/* Sun icon - visible in light mode */
+.sun-icon {
+    opacity: 1;
+    transform: rotate(0deg) scale(1);
+}
+
+.dark-mode .sun-icon {
+    opacity: 0;
+    transform: rotate(-90deg) scale(0.8);
+}
+
+/* Moon icon - visible in dark mode */
+.moon-icon {
+    opacity: 0;
+    transform: rotate(90deg) scale(0.8);
+}
+
+.dark-mode .moon-icon {
+    opacity: 1;
+    transform: rotate(0deg) scale(1);
+}
+
+/* ========================================
+   THEME-SPECIFIC BUTTON STYLES
+   ======================================== */
+
+/* Light mode button appearance */
+.theme-toggle-btn.light-mode {
+    background-color: var(--bg-secondary, #ffffff);
+    border-color: var(--border-default, #cccccc);
+    color: var(--text-primary, #333333);
+}
+
+.theme-toggle-btn.light-mode:hover {
+    background-color: var(--bg-tertiary, #f8f9fa);
+    border-color: var(--border-strong, #95a5a6);
+}
+
+/* Dark mode button appearance */
+.theme-toggle-btn.dark-mode {
+    background-color: var(--bg-secondary, #242830);
+    border-color: var(--border-default, #3a3d44);
+    color: var(--text-primary, #e4e6eb);
+}
+
+.theme-toggle-btn.dark-mode:hover {
+    background-color: var(--bg-tertiary, #2c3340);
+    border-color: var(--border-strong, #5a5d64);
+}
+
+/* ========================================
+   ANIMATION STATES
+   ======================================== */
+
+/* Prevent interactions during animation */
+.theme-toggle-btn.animating {
+    pointer-events: none;
+}
+
+/* Scale animation on theme change */
+.theme-toggle-btn.animating .theme-toggle-icon {
+    animation: themeTogglePulse 0.3s ease-in-out;
+}
+
+@keyframes themeTogglePulse {
+    0%, 100% {
+        transform: scale(1);
+    }
+    50% {
+        transform: scale(1.15);
+    }
+}
+
+/* ========================================
+   RESPONSIVE DESIGN
+   ======================================== */
+
+/* Mobile adjustments */
+@media (max-width: 768px) {
+    .theme-toggle-btn {
+        width: 36px;
+        height: 36px;
+        margin-right: 8px;
+    }
+    
+    .theme-toggle-icon {
+        width: 20px;
+        height: 20px;
+    }
+    
+    /* Slightly larger touch target for mobile */
+    .theme-toggle-btn::before {
+        content: '';
+        position: absolute;
+        top: -4px;
+        left: -4px;
+        right: -4px;
+        bottom: -4px;
+        border-radius: inherit;
+    }
+}
+
+/* Very small screens */
+@media (max-width: 480px) {
+    .theme-toggle-btn {
+        width: 32px;
+        height: 32px;
+        margin-right: 6px;
+    }
+    
+    .theme-toggle-icon {
+        width: 18px;
+        height: 18px;
+    }
+}
+
+/* ========================================
+   HIGH CONTRAST MODE SUPPORT
+   ======================================== */
+
+@media (prefers-contrast: high) {
+    .theme-toggle-btn {
+        border-width: 2px;
+        border-color: var(--text-primary, #333333);
+    }
+    
+    .theme-toggle-btn:hover,
+    .theme-toggle-btn:focus-visible {
+        border-color: var(--accent-primary, #8e44ad);
+        background-color: var(--accent-primary, #8e44ad);
+        color: var(--bg-primary, #ffffff);
+    }
+    
+    /* Ensure icons have proper contrast */
+    .theme-icon {
+        stroke-width: 2.5;
+    }
+}
+
+/* ========================================
+   REDUCED MOTION SUPPORT
+   ======================================== */
+
+@media (prefers-reduced-motion: reduce) {
+    .theme-toggle-btn,
+    .theme-toggle-icon,
+    .theme-icon {
+        transition: none !important;
+        animation: none !important;
+    }
+    
+    /* Still allow smooth color transitions for theme switching */
+    .theme-toggle-btn {
+        transition: 
+            background-color 0.1s ease,
+            border-color 0.1s ease,
+            color 0.1s ease !important;
+    }
+    
+    /* Remove transform animations but keep opacity for theme switching */
+    .theme-icon {
+        transition: opacity 0.15s ease !important;
+        transform: none !important;
+    }
+}
+
+/* ========================================
+   HEADER LAYOUT INTEGRATION
+   ======================================== */
+
+/* Ensure proper alignment with settings button */
+.header .theme-toggle-btn {
+    order: -1; /* Place before settings button */
+}
+
+/* Adjust header layout for toggle button */
+.header {
+    gap: 0; /* Remove gap since buttons have their own margins */
+}
+
+/* Ensure buttons are properly aligned */
+.header .theme-toggle-btn,
+.header .settings-btn {
+    flex-shrink: 0;
+}
+
+/* ========================================
+   LOADING AND ERROR STATES
+   ======================================== */
+
+/* Loading state (while theme manager initializes) */
+.theme-toggle-btn.loading {
+    opacity: var(--opacity-disabled, 0.5);
+    cursor: wait;
+    pointer-events: none;
+}
+
+.theme-toggle-btn.loading .theme-toggle-icon {
+    animation: themeToggleLoading 1s linear infinite;
+}
+
+@keyframes themeToggleLoading {
+    0% {
+        transform: rotate(0deg);
+    }
+    100% {
+        transform: rotate(360deg);
+    }
+}
+
+/* Error state (if theme manager fails) */
+.theme-toggle-btn.error {
+    opacity: var(--opacity-disabled, 0.5);
+    cursor: not-allowed;
+    border-color: var(--status-error, #e74c3c);
+    color: var(--status-error, #e74c3c);
+}
+
+/* ========================================
+   ACCESSIBILITY ENHANCEMENTS
+   ======================================== */
+
+/* Screen reader announcements */
+.theme-toggle-btn .sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+}
+
+/* Ensure sufficient color contrast for icons */
+.theme-icon {
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+
+/* Enhanced focus indicators for keyboard users */
+@media (prefers-reduced-motion: no-preference) {
+    .theme-toggle-btn:focus-visible .theme-toggle-icon {
+        animation: themeFocusPulse 2s ease-in-out infinite;
+    }
+}
+
+@keyframes themeFocusPulse {
+    0%, 100% {
+        opacity: 1;
+    }
+    50% {
+        opacity: 0.7;
+    }
+}
+
+/* ========================================
+   PRINT STYLES
+   ======================================== */
+
+@media print {
+    .theme-toggle-btn {
+        display: none !important;
+    }
+}
+
+/* ========================================
+   CUSTOM PROPERTIES FOR THEMING
+   ======================================== */
+
+/* Allow customization of button appearance */
+.theme-toggle-btn {
+    --toggle-size: 40px;
+    --toggle-icon-size: 22px;
+    --toggle-margin: 10px;
+    --toggle-animation-duration: 0.3s;
+    
+    width: var(--toggle-size);
+    height: var(--toggle-size);
+    margin-right: var(--toggle-margin);
+}
+
+.theme-toggle-icon {
+    width: var(--toggle-icon-size);
+    height: var(--toggle-icon-size);
+}
+
+/* Mobile custom properties */
+@media (max-width: 768px) {
+    .theme-toggle-btn {
+        --toggle-size: 36px;
+        --toggle-icon-size: 20px;
+        --toggle-margin: 8px;
+    }
+}
+
+@media (max-width: 480px) {
+    .theme-toggle-btn {
+        --toggle-size: 32px;
+        --toggle-icon-size: 18px;
+        --toggle-margin: 6px;
+    }
+}
