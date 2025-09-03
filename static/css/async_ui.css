@@ -14,22 +14,22 @@
     padding: 8px 12px;
     font-size: 12px;
     border-radius: 20px;
-    background: rgba(255, 255, 255, 0.9);
-    border: 1px solid #e1e5e9;
-    transition: all 0.3s ease;
+    background: var(--overlay-light);
+    border: 1px solid var(--border-subtle);
+    transition: all var(--transition-normal);
     cursor: help;
 }
 
 .async-connection-status.connected {
-    border-color: #27ae60;
-    background: rgba(39, 174, 96, 0.1);
-    color: #27ae60;
+    border-color: var(--status-success);
+    background: rgba(46, 204, 113, 0.1);
+    color: var(--status-success);
 }
 
 .async-connection-status.disconnected {
-    border-color: #e74c3c;
+    border-color: var(--status-error);
     background: rgba(231, 76, 60, 0.1);
-    color: #e74c3c;
+    color: var(--status-error);
 }
 
 .connection-status-dot {
@@ -40,12 +40,12 @@
 }
 
 .connection-status-dot.connected {
-    background: #27ae60;
+    background: var(--status-success);
     animation: pulse-connected 2s infinite;
 }
 
 .connection-status-dot.disconnected {
-    background: #e74c3c;
+    background: var(--status-error);
     animation: pulse-disconnected 1s infinite;
 }
 
@@ -78,19 +78,19 @@
 .async-progress-section {
     margin: 20px 0;
     padding: 20px;
-    background: linear-gradient(135deg, #f8f9fa 0%, #f1f3f4 100%);
-    border-radius: 12px;
-    border: 1px solid #e9ecef;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+    background: var(--gradient-card);
+    border-radius: var(--border-radius-lg);
+    border: 1px solid var(--border-subtle);
+    box-shadow: var(--shadow-md);
     display: none; /* Hidden by default, shown when progress bars are added */
 }
 
 .async-progress-section-title {
     margin: 0 0 15px 0;
-    color: #2c3e50;
+    color: var(--text-secondary);
     font-size: 16px;
     font-weight: 600;
-    border-bottom: 2px solid #8e44ad;
+    border-bottom: 2px solid var(--accent-primary);
     padding-bottom: 8px;
     display: inline-block;
 }
@@ -99,11 +99,11 @@
 .async-progress-container {
     margin-bottom: 16px;
     padding: 16px;
-    background: white;
-    border-radius: 8px;
-    border-left: 4px solid #8e44ad;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-    transition: all 0.3s ease;
+    background: var(--bg-secondary);
+    border-radius: var(--border-radius-md);
+    border-left: 4px solid var(--accent-primary);
+    box-shadow: var(--shadow-sm);
+    transition: all var(--transition-normal);
 }
 
 .async-progress-container:last-child {
@@ -111,22 +111,22 @@
 }
 
 .async-progress-container.pending {
-    border-left-color: #95a5a6;
+    border-left-color: var(--border-strong);
 }
 
 .async-progress-container.in_progress {
-    border-left-color: #3498db;
-    background: linear-gradient(135deg, #ffffff 0%, #ebf3fd 100%);
+    border-left-color: var(--status-info);
+    background: linear-gradient(135deg, var(--bg-secondary) 0%, rgba(52, 152, 219, 0.1) 100%);
 }
 
 .async-progress-container.completed {
-    border-left-color: #27ae60;
-    background: linear-gradient(135deg, #ffffff 0%, #e8f5e8 100%);
+    border-left-color: var(--status-success);
+    background: linear-gradient(135deg, var(--bg-secondary) 0%, rgba(39, 174, 96, 0.1) 100%);
 }
 
 .async-progress-container.failed {
-    border-left-color: #e74c3c;
-    background: linear-gradient(135deg, #ffffff 0%, #fdf2f2 100%);
+    border-left-color: var(--status-error);
+    background: linear-gradient(135deg, var(--bg-secondary) 0%, rgba(231, 76, 60, 0.1) 100%);
 }
 
 /* Progress Bar Header */
@@ -139,7 +139,7 @@
 
 .async-progress-title {
     font-weight: 600;
-    color: #2c3e50;
+    color: var(--text-secondary);
     font-size: 14px;
     flex: 1;
     margin-right: 12px;
@@ -149,7 +149,7 @@
 .async-progress-text {
     font-size: 12px;
     font-weight: 700;
-    color: #8e44ad;
+    color: var(--accent-primary);
     background: rgba(142, 68, 173, 0.1);
     padding: 4px 8px;
     border-radius: 12px;
@@ -161,8 +161,8 @@
 .async-progress-track {
     width: 100%;
     height: 8px;
-    background: #e9ecef;
-    border-radius: 4px;
+    background: var(--border-subtle);
+    border-radius: var(--border-radius-sm);
     overflow: hidden;
     position: relative;
     margin-bottom: 8px;
@@ -170,32 +170,32 @@
 
 .async-progress-bar {
     height: 100%;
-    background: linear-gradient(90deg, #8e44ad, #9b59b6, #8e44ad);
+    background: var(--gradient-progress);
     background-size: 200% 100%;
-    border-radius: 4px;
+    border-radius: var(--border-radius-sm);
     transition: width 0.4s ease;
     animation: progress-shine 2s linear infinite;
     position: relative;
 }
 
 .async-progress-container.pending .async-progress-bar {
-    background: linear-gradient(90deg, #95a5a6, #bdc3c7, #95a5a6);
+    background: linear-gradient(90deg, var(--border-strong), #bdc3c7, var(--border-strong));
     background-size: 200% 100%;
 }
 
 .async-progress-container.in_progress .async-progress-bar {
-    background: linear-gradient(90deg, #3498db, #5dade2, #3498db);
+    background: linear-gradient(90deg, var(--status-info), #5dade2, var(--status-info));
     background-size: 200% 100%;
 }
 
 .async-progress-container.completed .async-progress-bar {
-    background: linear-gradient(90deg, #27ae60, #58d68d, #27ae60);
+    background: var(--gradient-success);
     background-size: 200% 100%;
     animation: progress-complete 1s ease-in-out;
 }
 
 .async-progress-container.failed .async-progress-bar {
-    background: linear-gradient(90deg, #e74c3c, #ec7063, #e74c3c);
+    background: var(--gradient-error);
     background-size: 200% 100%;
     animation: progress-error 1s ease-in-out;
 }
@@ -220,18 +220,18 @@
 /* Progress Message */
 .async-progress-message {
     font-size: 12px;
-    color: #6c757d;
+    color: var(--text-muted);
     font-style: italic;
     min-height: 16px;
 }
 
 .async-progress-container.completed .async-progress-message {
-    color: #27ae60;
+    color: var(--status-success);
     font-weight: 600;
 }
 
 .async-progress-container.failed .async-progress-message {
-    color: #e74c3c;
+    color: var(--status-error);
     font-weight: 600;
 }
 
@@ -250,11 +250,11 @@
 
 .async-toast {
     margin-bottom: 12px;
-    border-radius: 8px;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    border-radius: var(--border-radius-md);
+    box-shadow: var(--shadow-lg);
     opacity: 0;
     transform: translateX(100%);
-    transition: all 0.3s ease;
+    transition: all var(--transition-normal);
     pointer-events: auto;
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
     max-width: 100%;
@@ -262,25 +262,25 @@
 }
 
 .async-toast-success {
-    background: linear-gradient(135deg, #27ae60, #2ecc71);
+    background: var(--gradient-success);
     color: white;
     border-left: 4px solid #1e8449;
 }
 
 .async-toast-error {
-    background: linear-gradient(135deg, #e74c3c, #ec7063);
+    background: var(--gradient-error);
     color: white;
     border-left: 4px solid #cb4335;
 }
 
 .async-toast-warning {
-    background: linear-gradient(135deg, #f39c12, #f4d03f);
-    color: #2c3e50;
+    background: linear-gradient(135deg, var(--status-warning), #f4d03f);
+    color: var(--text-secondary);
     border-left: 4px solid #d68910;
 }
 
 .async-toast-info {
-    background: linear-gradient(135deg, #3498db, #5dade2);
+    background: linear-gradient(135deg, var(--status-info), #5dade2);
     color: white;
     border-left: 4px solid #2980b9;
 }
@@ -344,21 +344,21 @@
     padding: 6px 10px;
     font-size: 11px;
     border-radius: 16px;
-    background: rgba(255, 255, 255, 0.9);
-    border: 1px solid #e1e5e9;
-    transition: all 0.3s ease;
+    background: var(--overlay-light);
+    border: 1px solid var(--border-subtle);
+    transition: all var(--transition-normal);
 }
 
 .sse-connection-status.connected {
-    border-color: #27ae60;
+    border-color: var(--status-success);
     background: rgba(39, 174, 96, 0.1);
-    color: #27ae60;
+    color: var(--status-success);
 }
 
 .sse-connection-status.disconnected {
-    border-color: #e74c3c;
+    border-color: var(--status-error);
     background: rgba(231, 76, 60, 0.1);
-    color: #e74c3c;
+    color: var(--status-error);
 }
 
 .status-dot {
@@ -439,48 +439,7 @@
     }
 }
 
-/* ==========================================================================
-   Dark Mode Support (Optional)
-   ========================================================================== */
-
-@media (prefers-color-scheme: dark) {
-    .async-progress-section {
-        background: linear-gradient(135deg, #2c3e50 0%, #34495e 100%);
-        border-color: #4a5568;
-        color: #f7fafc;
-    }
-    
-    .async-progress-container {
-        background: #3a4551;
-        color: #f7fafc;
-    }
-    
-    .async-progress-title {
-        color: #f7fafc;
-    }
-    
-    .async-progress-track {
-        background: #4a5568;
-    }
-    
-    .async-connection-status {
-        background: rgba(44, 62, 80, 0.9);
-        border-color: #4a5568;
-        color: #f7fafc;
-    }
-    
-    .async-connection-status.connected {
-        background: rgba(39, 174, 96, 0.2);
-        border-color: #27ae60;
-        color: #2ecc71;
-    }
-    
-    .async-connection-status.disconnected {
-        background: rgba(231, 76, 60, 0.2);
-        border-color: #e74c3c;
-        color: #ec7063;
-    }
-}
+/* Dark mode support is now handled by theme-variables.css and data-theme attributes */
 
 /* ==========================================================================
    Animations and Transitions

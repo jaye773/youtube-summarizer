@@ -1,0 +1,664 @@
+/* Cards Theme CSS - Enhanced card styling with CSS variables
+ * Part of YouTube Summarizer dark mode implementation
+ * Workstream G: Content Cards
+ */
+
+/* ========================================
+   RESULT CARDS
+   ======================================== */
+.result-card {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-subtle);
+    border-left: 4px solid var(--accent-primary);
+    border-radius: var(--border-radius-md);
+    box-shadow: var(--shadow-md);
+    margin-bottom: var(--spacing-md);
+    padding: var(--spacing-lg);
+    transition: all 0.3s ease;
+    position: relative;
+    overflow: hidden;
+}
+
+.result-card:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-lg);
+    border-left-color: var(--accent-hover);
+}
+
+.result-card.loading {
+    background: linear-gradient(90deg, 
+        var(--bg-secondary) 0%, 
+        var(--bg-tertiary) 50%, 
+        var(--bg-secondary) 100%
+    );
+    animation: shimmer 2s infinite;
+}
+
+@keyframes shimmer {
+    0% { background-position: -100% 0; }
+    100% { background-position: 100% 0; }
+}
+
+/* ========================================
+   PLAYLIST CONTAINERS
+   ======================================== */
+.playlist-container {
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--border-radius-md);
+    margin-bottom: var(--spacing-lg);
+    padding: var(--spacing-lg);
+    box-shadow: var(--shadow-sm);
+}
+
+.playlist-container .playlist-title {
+    color: var(--accent-primary);
+    font-size: 1.25rem;
+    font-weight: 600;
+    margin-bottom: var(--spacing-md);
+    padding-bottom: var(--spacing-sm);
+    border-bottom: 2px solid var(--accent-primary);
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm);
+}
+
+.playlist-container .playlist-title::before {
+    content: "📁";
+    font-size: 1.1em;
+}
+
+.playlist-container .result-card {
+    margin-left: var(--spacing-md);
+    border-left-width: 2px;
+    background: var(--bg-primary);
+}
+
+.playlist-container .video-count {
+    color: var(--text-muted);
+    font-size: 0.9rem;
+    margin-left: auto;
+}
+
+/* ========================================
+   ERROR CARDS
+   ======================================== */
+.error-card {
+    background: color-mix(in srgb, var(--color-error) 10%, var(--bg-secondary));
+    border: 1px solid var(--color-error);
+    border-left: 4px solid var(--color-error);
+    border-radius: var(--border-radius-md);
+    padding: var(--spacing-lg);
+    margin-bottom: var(--spacing-md);
+    box-shadow: var(--shadow-md);
+}
+
+.error-card .error-title {
+    color: var(--color-error);
+    font-weight: 600;
+    font-size: 1.1rem;
+    margin-bottom: var(--spacing-sm);
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm);
+}
+
+.error-card .error-title::before {
+    content: "⚠️";
+}
+
+.error-card .error-message {
+    color: var(--text-primary);
+    line-height: 1.6;
+    margin-bottom: var(--spacing-sm);
+}
+
+.error-card .error-details {
+    color: var(--text-muted);
+    font-size: 0.9rem;
+    font-family: var(--font-mono);
+    background: var(--bg-tertiary);
+    padding: var(--spacing-sm);
+    border-radius: var(--border-radius-sm);
+    border: 1px solid var(--border-subtle);
+}
+
+/* ========================================
+   VIDEO THUMBNAILS
+   ======================================== */
+.thumbnail {
+    border-radius: var(--border-radius-sm);
+    box-shadow: var(--shadow-sm);
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+    overflow: hidden;
+    position: relative;
+    background: var(--bg-tertiary);
+}
+
+.thumbnail:hover {
+    transform: scale(1.02);
+    box-shadow: var(--shadow-md);
+}
+
+.thumbnail img {
+    width: 100%;
+    height: auto;
+    display: block;
+    transition: opacity 0.3s ease;
+}
+
+.thumbnail.loading {
+    background: linear-gradient(135deg, 
+        var(--bg-tertiary) 0%, 
+        var(--bg-secondary) 100%
+    );
+    min-height: 90px;
+    position: relative;
+}
+
+.thumbnail.loading::after {
+    content: "🎬";
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    font-size: 2rem;
+    opacity: 0.5;
+    animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+    0%, 100% { opacity: 0.3; }
+    50% { opacity: 0.7; }
+}
+
+/* ========================================
+   SUMMARY CONTENT BLOCKS
+   ======================================== */
+.summary-content {
+    color: var(--text-primary);
+    line-height: 1.7;
+    font-size: 1rem;
+}
+
+.summary-content p {
+    margin-bottom: var(--spacing-md);
+}
+
+.summary-content a {
+    color: var(--accent-primary);
+    text-decoration: none;
+    border-bottom: 1px solid transparent;
+    transition: all 0.2s ease;
+}
+
+.summary-content a:hover {
+    color: var(--accent-hover);
+    border-bottom-color: var(--accent-hover);
+}
+
+.summary-content code {
+    background: var(--bg-tertiary);
+    color: var(--accent-primary);
+    padding: 0.2em 0.4em;
+    border-radius: var(--border-radius-sm);
+    font-family: var(--font-mono);
+    font-size: 0.9em;
+}
+
+.summary-content pre {
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
+    padding: var(--spacing-md);
+    border-radius: var(--border-radius-md);
+    border: 1px solid var(--border-subtle);
+    overflow-x: auto;
+    font-family: var(--font-mono);
+    font-size: 0.9rem;
+    line-height: 1.5;
+}
+
+.summary-content blockquote {
+    border-left: 3px solid var(--accent-primary);
+    padding-left: var(--spacing-md);
+    margin: var(--spacing-md) 0;
+    background: color-mix(in srgb, var(--accent-primary) 5%, transparent);
+    border-radius: 0 var(--border-radius-sm) var(--border-radius-sm) 0;
+}
+
+.summary-content ul, .summary-content ol {
+    padding-left: var(--spacing-lg);
+    margin-bottom: var(--spacing-md);
+}
+
+.summary-content li {
+    margin-bottom: var(--spacing-sm);
+}
+
+/* ========================================
+   CARD HEADERS
+   ======================================== */
+.card-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    margin-bottom: var(--spacing-md);
+    padding-bottom: var(--spacing-sm);
+    border-bottom: 1px solid var(--border-subtle);
+}
+
+.card-header .card-title {
+    color: var(--text-primary);
+    font-size: 1.2rem;
+    font-weight: 600;
+    line-height: 1.4;
+    margin: 0;
+    flex: 1;
+}
+
+.card-header .card-meta {
+    color: var(--text-muted);
+    font-size: 0.85rem;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: var(--spacing-xs);
+    margin-left: var(--spacing-md);
+}
+
+.card-header .card-actions {
+    display: flex;
+    gap: var(--spacing-sm);
+    align-items: center;
+}
+
+.card-header .speak-btn {
+    background: var(--accent-primary);
+    color: var(--bg-primary);
+    border: none;
+    border-radius: var(--border-radius-sm);
+    padding: var(--spacing-xs) var(--spacing-sm);
+    font-size: 0.85rem;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-xs);
+}
+
+.card-header .speak-btn:hover {
+    background: var(--accent-hover);
+    transform: translateY(-1px);
+}
+
+.card-header .speak-btn:disabled {
+    background: var(--text-muted);
+    cursor: not-allowed;
+    transform: none;
+}
+
+.card-header .speak-btn::before {
+    content: "🔊";
+    font-size: 0.9em;
+}
+
+/* ========================================
+   LOADING CARDS
+   ======================================== */
+.loading-card {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--border-radius-md);
+    padding: var(--spacing-lg);
+    margin-bottom: var(--spacing-md);
+    position: relative;
+    overflow: hidden;
+}
+
+.loading-card::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(90deg, 
+        transparent 0%, 
+        color-mix(in srgb, var(--accent-primary) 20%, transparent) 50%, 
+        transparent 100%
+    );
+    animation: shimmerMove 2s infinite;
+}
+
+@keyframes shimmerMove {
+    0% { left: -100%; }
+    100% { left: 100%; }
+}
+
+.loading-card .loading-title {
+    background: var(--bg-tertiary);
+    height: 1.2em;
+    width: 70%;
+    border-radius: var(--border-radius-sm);
+    margin-bottom: var(--spacing-sm);
+}
+
+.loading-card .loading-text {
+    background: var(--bg-tertiary);
+    height: 0.8em;
+    border-radius: var(--border-radius-sm);
+    margin-bottom: var(--spacing-xs);
+}
+
+.loading-card .loading-text:nth-child(2) { width: 100%; }
+.loading-card .loading-text:nth-child(3) { width: 85%; }
+.loading-card .loading-text:nth-child(4) { width: 60%; }
+
+/* ========================================
+   EMPTY STATE CARDS
+   ======================================== */
+.empty-state-card {
+    background: var(--bg-secondary);
+    border: 2px dashed var(--border-subtle);
+    border-radius: var(--border-radius-md);
+    padding: var(--spacing-xl);
+    text-align: center;
+    color: var(--text-muted);
+    margin: var(--spacing-lg) 0;
+}
+
+.empty-state-card .empty-icon {
+    font-size: 3rem;
+    margin-bottom: var(--spacing-md);
+    opacity: 0.7;
+}
+
+.empty-state-card .empty-title {
+    font-size: 1.2rem;
+    font-weight: 500;
+    color: var(--text-secondary);
+    margin-bottom: var(--spacing-sm);
+}
+
+.empty-state-card .empty-message {
+    font-size: 0.95rem;
+    line-height: 1.6;
+    margin-bottom: var(--spacing-lg);
+}
+
+.empty-state-card .empty-cta {
+    background: var(--accent-primary);
+    color: var(--bg-primary);
+    border: none;
+    border-radius: var(--border-radius-sm);
+    padding: var(--spacing-sm) var(--spacing-lg);
+    font-size: 0.95rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.empty-state-card .empty-cta:hover {
+    background: var(--accent-hover);
+    transform: translateY(-1px);
+}
+
+/* ========================================
+   STATS/INFO CARDS
+   ======================================== */
+.info-card {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--border-radius-sm);
+    padding: var(--spacing-md);
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm);
+    font-size: 0.9rem;
+    transition: all 0.2s ease;
+}
+
+.info-card:hover {
+    background: var(--bg-tertiary);
+}
+
+.info-card.success {
+    border-left: 3px solid var(--color-success);
+    background: color-mix(in srgb, var(--color-success) 8%, var(--bg-secondary));
+}
+
+.info-card.warning {
+    border-left: 3px solid var(--color-warning);
+    background: color-mix(in srgb, var(--color-warning) 8%, var(--bg-secondary));
+}
+
+.info-card.error {
+    border-left: 3px solid var(--color-error);
+    background: color-mix(in srgb, var(--color-error) 8%, var(--bg-secondary));
+}
+
+.info-card.info {
+    border-left: 3px solid var(--accent-primary);
+    background: color-mix(in srgb, var(--accent-primary) 8%, var(--bg-secondary));
+}
+
+.info-card .info-icon {
+    font-size: 1.2em;
+    opacity: 0.8;
+}
+
+.info-card .info-text {
+    color: var(--text-primary);
+    flex: 1;
+}
+
+.info-card .info-value {
+    color: var(--accent-primary);
+    font-weight: 600;
+    margin-left: auto;
+}
+
+/* ========================================
+   CARD ANIMATIONS
+   ======================================== */
+.card-fade-in {
+    animation: fadeInUp 0.5s ease-out;
+}
+
+@keyframes fadeInUp {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.card-expand {
+    animation: expandHeight 0.3s ease-out;
+}
+
+@keyframes expandHeight {
+    from {
+        max-height: 0;
+        opacity: 0;
+    }
+    to {
+        max-height: 1000px;
+        opacity: 1;
+    }
+}
+
+.card-collapse {
+    animation: collapseHeight 0.3s ease-out;
+}
+
+@keyframes collapseHeight {
+    from {
+        max-height: 1000px;
+        opacity: 1;
+    }
+    to {
+        max-height: 0;
+        opacity: 0;
+    }
+}
+
+/* ========================================
+   RESPONSIVE DESIGN
+   ======================================== */
+@media (max-width: 768px) {
+    .result-card {
+        padding: var(--spacing-md);
+    }
+    
+    .playlist-container {
+        padding: var(--spacing-md);
+    }
+    
+    .playlist-container .result-card {
+        margin-left: var(--spacing-sm);
+    }
+    
+    .card-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: var(--spacing-sm);
+    }
+    
+    .card-header .card-meta {
+        align-items: flex-start;
+        margin-left: 0;
+    }
+    
+    .card-header .card-actions {
+        width: 100%;
+        justify-content: flex-end;
+    }
+    
+    .empty-state-card {
+        padding: var(--spacing-lg);
+    }
+    
+    .empty-state-card .empty-icon {
+        font-size: 2.5rem;
+    }
+}
+
+@media (max-width: 480px) {
+    .result-card {
+        border-left-width: 3px;
+        padding: var(--spacing-sm);
+    }
+    
+    .card-header .card-title {
+        font-size: 1.1rem;
+    }
+    
+    .summary-content {
+        font-size: 0.95rem;
+    }
+    
+    .info-card {
+        padding: var(--spacing-sm);
+    }
+}
+
+/* ========================================
+   GRID LAYOUT SUPPORT
+   ======================================== */
+.cards-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: var(--spacing-lg);
+    margin-bottom: var(--spacing-lg);
+}
+
+.cards-grid .result-card {
+    margin-bottom: 0;
+    height: fit-content;
+}
+
+@media (max-width: 768px) {
+    .cards-grid {
+        grid-template-columns: 1fr;
+        gap: var(--spacing-md);
+    }
+}
+
+/* ========================================
+   PRINT STYLES
+   ======================================== */
+@media print {
+    .result-card,
+    .playlist-container,
+    .error-card {
+        break-inside: avoid;
+        box-shadow: none;
+        border: 1px solid #ddd;
+        background: white !important;
+        color: black !important;
+    }
+    
+    .card-header .speak-btn,
+    .empty-state-card .empty-cta {
+        display: none;
+    }
+    
+    .summary-content a {
+        color: #0066cc;
+        text-decoration: underline;
+    }
+    
+    .thumbnail {
+        box-shadow: none;
+        border: 1px solid #ddd;
+    }
+}
+
+/* ========================================
+   ACCESSIBILITY ENHANCEMENTS
+   ======================================== */
+@media (prefers-reduced-motion: reduce) {
+    .result-card,
+    .thumbnail,
+    .speak-btn,
+    .empty-cta,
+    .info-card {
+        transition: none;
+    }
+    
+    .loading-card::before,
+    .shimmer,
+    .pulse,
+    .shimmerMove,
+    .fadeInUp,
+    .expandHeight,
+    .collapseHeight {
+        animation: none;
+    }
+}
+
+/* Focus indicators for keyboard navigation */
+.result-card:focus-within,
+.playlist-container:focus-within,
+.error-card:focus-within {
+    outline: 2px solid var(--accent-primary);
+    outline-offset: 2px;
+}
+
+/* High contrast mode support */
+@media (prefers-contrast: high) {
+    .result-card,
+    .playlist-container,
+    .error-card,
+    .info-card {
+        border-width: 2px;
+    }
+    
+    .result-card {
+        border-left-width: 6px;
+    }
+}
