@@ -28,6 +28,42 @@ class UIUpdater {
     }
 
     /**
+     * Update theme for dynamic elements created by this updater
+     */
+    updateDynamicElementsTheme(theme) {
+        const themeClassLight = 'theme-light';
+        const themeClassDark = 'theme-dark';
+        const targetClass = theme === 'dark' ? themeClassDark : themeClassLight;
+
+        // Toast container and toasts
+        if (this.toastContainer) {
+            this.toastContainer.classList.remove(themeClassLight, themeClassDark);
+            this.toastContainer.classList.add(targetClass);
+            Array.from(this.toastContainer.querySelectorAll('.async-toast')).forEach(t => {
+                t.classList.remove(themeClassLight, themeClassDark);
+                t.classList.add(targetClass);
+            });
+        }
+
+        // Progress section
+        const progressSection = document.getElementById('async-progress-section');
+        if (progressSection) {
+            progressSection.classList.remove(themeClassLight, themeClassDark);
+            progressSection.classList.add(targetClass);
+            Array.from(progressSection.querySelectorAll('.async-progress-container')).forEach(el => {
+                el.classList.remove(themeClassLight, themeClassDark);
+                el.classList.add(targetClass);
+            });
+        }
+
+        // Connection status indicator
+        if (this.connectionStatusIndicator) {
+            this.connectionStatusIndicator.classList.remove(themeClassLight, themeClassDark);
+            this.connectionStatusIndicator.classList.add(targetClass);
+        }
+    }
+
+    /**
      * Initialize UI components
      */
     initializeComponents() {
@@ -552,3 +588,9 @@ class UIUpdater {
 window.UIUpdater = new UIUpdater();
 
 console.log('🎯 UIUpdater: UIUpdater loaded and ready');
+
+// Apply current theme to any existing elements on load
+if (window.UIUpdater) {
+    const currentTheme = document.documentElement.getAttribute('data-theme') || 'light';
+    window.UIUpdater.updateDynamicElementsTheme(currentTheme);
+}

@@ -701,6 +701,10 @@ class EnhancedSSEClient {
             </div>
         `;
         
+        // Add theme-aware class based on current theme
+        const currentTheme = this.getCurrentTheme();
+        indicator.classList.add(`theme-${currentTheme}`);
+        
         // Add to header or body
         const header = document.querySelector('.header') || document.body;
         header.appendChild(indicator);
@@ -771,9 +775,49 @@ class EnhancedSSEClient {
         // Implementation depends on notification system
         if (window.showToast) {
             window.showToast(message, type);
+        } else if (window.UIUpdater && window.UIUpdater.showToast) {
+            window.UIUpdater.showToast(message, type);
         } else {
-            console.log(`[${type.toUpperCase()}] ${message}`);
+            // Create theme-aware notification
+            this.createThemeAwareNotification(message, type);
         }
+    }
+    
+    /**
+     * Create theme-aware notification
+     */
+    createThemeAwareNotification(message, type) {
+        const notification = document.createElement('div');
+        notification.className = `enhanced-notification enhanced-notification-${type}`;
+        
+        // Add theme-aware classes
+        const currentTheme = this.getCurrentTheme();
+        notification.classList.add(`theme-${currentTheme}`);
+        
+        notification.innerHTML = `
+            <span class="notification-message">${this.escapeHtml(message)}</span>
+            <button class="notification-close" onclick="this.parentElement.remove()">×</button>
+        `;
+        
+        // Add to toast container or body
+        const container = document.getElementById('async-toast-container') || document.body;
+        container.appendChild(notification);
+        
+        // Auto-remove after 5 seconds
+        setTimeout(() => {
+            if (notification.parentNode) {
+                notification.remove();
+            }
+        }, 5000);
+    }
+    
+    /**
+     * Escape HTML to prevent XSS
+     */
+    escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
     }
     
     /**
@@ -910,6 +954,32 @@ class EnhancedSSEClient {
             const timestamp = new Date().toISOString();
             console.log(`[${timestamp}] Enhanced SSE:`, message, data || '');
         }
+    }
+    
+    /**
+     * Get current theme
+     */
+    getCurrentTheme() {
+        return document.documentElement.getAttribute('data-theme') || 'light';
+    }
+    
+    /**
+     * Update theme-dependent elements
+     */
+    updateDynamicElements(theme) {
+        // Update status indicator classes to be theme-aware
+        const statusIndicator = document.getElementById('enhanced-sse-status');
+        if (statusIndicator) {
+            // Remove any theme-specific classes and let CSS handle theming
+            statusIndicator.classList.remove('theme-light', 'theme-dark');
+            statusIndicator.classList.add(`theme-${theme}`);
+        }
+        
+        // Update any dynamically created toast notifications
+        document.querySelectorAll('.enhanced-toast').forEach(toast => {
+            toast.classList.remove('theme-light', 'theme-dark');
+            toast.classList.add(`theme-${theme}`);
+        });
     }
     
     /**
@@ -1076,6 +1146,14 @@ window.PerformanceMonitor = PerformanceMonitor;
 // Auto-initialize if supported
 if (typeof window !== 'undefined' && EnhancedSSEClient.isSupported()) {
     console.log('Enhanced SSE Client loaded and ready');
+    
+    // Listen for theme changes to update dynamic elements
+    document.addEventListener('theme-changed', (event) => {
+        const { currentEffectiveTheme } = event.detail;
+        if (window.enhancedSSE && typeof window.enhancedSSE.updateDynamicElements === 'function') {
+            window.enhancedSSE.updateDynamicElements(currentEffectiveTheme);
+        }
+    });
 } else {
     console.warn('Enhanced SSE: EventSource not supported in this browser');
 }

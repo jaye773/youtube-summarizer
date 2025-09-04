@@ -22,6 +22,37 @@ class SSEClient {
         this.handleOpen = this.handleOpen.bind(this);
         this.handleError = this.handleError.bind(this);
         this.handleMessage = this.handleMessage.bind(this);
+        
+        // Setup theme integration
+        this.setupThemeIntegration();
+    }
+    
+    /**
+     * Setup theme integration
+     */
+    setupThemeIntegration() {
+        document.addEventListener('theme-changed', (event) => {
+            const { currentEffectiveTheme } = event.detail;
+            this.updateConnectionStatusTheme(currentEffectiveTheme);
+        });
+    }
+    
+    /**
+     * Get current theme
+     */
+    getCurrentTheme() {
+        return document.documentElement.getAttribute('data-theme') || 'light';
+    }
+    
+    /**
+     * Update connection status with theme awareness
+     */
+    updateConnectionStatusTheme(theme) {
+        const statusIndicator = document.getElementById('connection-status');
+        if (statusIndicator) {
+            statusIndicator.classList.remove('theme-light', 'theme-dark');
+            statusIndicator.classList.add(`theme-${theme}`);
+        }
     }
 
     /**
@@ -325,10 +356,11 @@ class SSEClient {
             return;
         }
         
-        // Update the async-connection-status classes
+        // Update the async-connection-status classes with theme awareness
+        const currentTheme = this.getCurrentTheme();
         statusIndicator.className = connected ? 
-            'async-connection-status connected' : 
-            'async-connection-status disconnected';
+            `async-connection-status connected theme-${currentTheme}` : 
+            `async-connection-status disconnected theme-${currentTheme}`;
         
         statusIndicator.title = connected ? 
             'Real-time updates: Connected' : 
@@ -377,6 +409,12 @@ window.SSEClient = SSEClient;
 // Auto-initialize if EventSource is supported
 if (typeof window !== 'undefined' && SSEClient.isSupported()) {
     console.log('🎯 SSE: SSEClient loaded and ready');
+    
+    // Apply current theme on load
+    if (window.sseClient) {
+        const currentTheme = document.documentElement.getAttribute('data-theme') || 'light';
+        window.sseClient.updateConnectionStatusTheme(currentTheme);
+    }
 } else {
     console.warn('⚠️ SSE: EventSource not supported in this browser');
 }

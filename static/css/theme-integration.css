@@ -1,0 +1,624 @@
+/**
+ * YouTube Summarizer Theme Integration CSS
+ * Styles for dynamically created theme-aware elements
+ * Complements the main theme.css file
+ */
+
+/* ============================================
+   Dynamic Element Theme Classes
+   ============================================ */
+
+/* Enhanced SSE Status Indicator */
+.enhanced-sse-status {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-subtle);
+    border-radius: 8px;
+    padding: 12px 16px;
+    box-shadow: var(--shadow-sm);
+    z-index: 1000;
+    font-size: 14px;
+    min-width: 200px;
+    transition: all 0.3s ease;
+}
+
+.enhanced-sse-status.connected {
+    border-left: 4px solid var(--color-success);
+}
+
+.enhanced-sse-status.disconnected {
+    border-left: 4px solid var(--color-error);
+}
+
+.enhanced-sse-status.warning {
+    border-left: 4px solid var(--color-warning);
+}
+
+.enhanced-sse-status .status-main {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 6px;
+}
+
+.enhanced-sse-status .status-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+.enhanced-sse-status .status-dot.connected {
+    background: var(--color-success);
+    box-shadow: 0 0 6px var(--color-success);
+}
+
+.enhanced-sse-status .status-dot.disconnected {
+    background: var(--color-error);
+}
+
+.enhanced-sse-status .status-dot.warning {
+    background: var(--color-warning);
+}
+
+.enhanced-sse-status .status-text {
+    font-weight: 500;
+    color: var(--text-primary);
+}
+
+.enhanced-sse-status .status-metrics {
+    font-size: 12px;
+    color: var(--text-secondary);
+    margin-bottom: 8px;
+}
+
+.enhanced-sse-status .status-actions {
+    display: flex;
+    gap: 8px;
+}
+
+.enhanced-sse-status .status-actions button {
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+    border: 1px solid var(--border-subtle);
+    border-radius: 4px;
+    padding: 4px 8px;
+    font-size: 11px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.enhanced-sse-status .status-actions button:hover {
+    background: var(--bg-tertiary);
+}
+
+/* Enhanced Notifications */
+.enhanced-notification {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-subtle);
+    border-radius: 8px;
+    padding: 16px;
+    margin-bottom: 10px;
+    box-shadow: var(--shadow-sm);
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    animation: slideInFromRight 0.3s ease-out;
+}
+
+.enhanced-notification-success {
+    border-left: 4px solid var(--color-success);
+}
+
+.enhanced-notification-error {
+    border-left: 4px solid var(--color-error);
+}
+
+.enhanced-notification-warning {
+    border-left: 4px solid var(--color-warning);
+}
+
+.enhanced-notification-info {
+    border-left: 4px solid var(--color-info);
+}
+
+.enhanced-notification .notification-message {
+    flex: 1;
+    color: var(--text-primary);
+    font-size: 14px;
+    line-height: 1.4;
+}
+
+.enhanced-notification .notification-close {
+    background: none;
+    border: none;
+    color: var(--text-secondary);
+    cursor: pointer;
+    font-size: 18px;
+    line-height: 1;
+    padding: 0;
+    transition: color 0.2s ease;
+}
+
+.enhanced-notification .notification-close:hover {
+    color: var(--text-primary);
+}
+
+/* Progress Containers */
+.async-progress-container {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-subtle);
+    border-radius: 8px;
+    padding: 16px;
+    margin-bottom: 12px;
+    box-shadow: var(--shadow-sm);
+    transition: all 0.3s ease;
+}
+
+.async-progress-container.pending {
+    border-left: 4px solid var(--color-warning);
+}
+
+.async-progress-container.in_progress {
+    border-left: 4px solid var(--accent-primary);
+}
+
+.async-progress-container.completed {
+    border-left: 4px solid var(--color-success);
+}
+
+.async-progress-container.failed {
+    border-left: 4px solid var(--color-error);
+}
+
+.async-progress-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+}
+
+.async-progress-title {
+    font-weight: 500;
+    color: var(--text-primary);
+    font-size: 14px;
+}
+
+.async-progress-text {
+    font-size: 12px;
+    color: var(--text-secondary);
+    font-weight: 500;
+}
+
+.async-progress-track {
+    background: var(--bg-tertiary);
+    border-radius: 4px;
+    height: 6px;
+    overflow: hidden;
+    margin-bottom: 8px;
+}
+
+.async-progress-bar {
+    background: var(--accent-primary);
+    height: 100%;
+    border-radius: 4px;
+    transition: width 0.3s ease;
+    position: relative;
+}
+
+.async-progress-bar::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: linear-gradient(
+        90deg,
+        transparent,
+        rgba(255, 255, 255, 0.3),
+        transparent
+    );
+    animation: shimmer 2s infinite;
+}
+
+.async-progress-message {
+    font-size: 12px;
+    color: var(--text-secondary);
+    font-style: italic;
+}
+
+.async-progress-section {
+    margin-bottom: 24px;
+}
+
+.async-progress-section-title {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 16px;
+    padding-bottom: 8px;
+    border-bottom: 2px solid var(--border-subtle);
+}
+
+/* Toast Notifications */
+.async-toast-container {
+    position: fixed;
+    top: 80px;
+    right: 20px;
+    z-index: 1001;
+    max-width: 400px;
+}
+
+.async-toast {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-subtle);
+    border-radius: 8px;
+    box-shadow: var(--shadow-md);
+    margin-bottom: 10px;
+    overflow: hidden;
+    transform: translateX(100%);
+    opacity: 0;
+    transition: all 0.3s ease;
+    animation: slideInFromRight 0.3s ease-out forwards;
+}
+
+.async-toast-success {
+    border-left: 4px solid var(--color-success);
+}
+
+.async-toast-error {
+    border-left: 4px solid var(--color-error);
+}
+
+.async-toast-warning {
+    border-left: 4px solid var(--color-warning);
+}
+
+.async-toast-info {
+    border-left: 4px solid var(--color-info);
+}
+
+.async-toast-content {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 16px;
+}
+
+.async-toast-message {
+    flex: 1;
+    color: var(--text-primary);
+    font-size: 14px;
+    line-height: 1.4;
+}
+
+.async-toast-close {
+    background: none;
+    border: none;
+    color: var(--text-secondary);
+    cursor: pointer;
+    font-size: 18px;
+    line-height: 1;
+    padding: 0;
+    transition: color 0.2s ease;
+    flex-shrink: 0;
+}
+
+.async-toast-close:hover {
+    color: var(--text-primary);
+}
+
+/* Connection Status Indicators */
+.async-connection-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 12px;
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 500;
+    transition: all 0.2s ease;
+}
+
+.async-connection-status.connected {
+    background: var(--status-success-bg);
+    color: var(--color-success);
+    border: 1px solid var(--color-success);
+}
+
+.async-connection-status.disconnected {
+    background: var(--status-error-bg);
+    color: var(--color-error);
+    border: 1px solid var(--color-error);
+}
+
+.connection-status-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+}
+
+.connection-status-dot.connected {
+    background: var(--color-success);
+    box-shadow: 0 0 4px var(--color-success);
+}
+
+.connection-status-dot.disconnected {
+    background: var(--color-error);
+}
+
+/* Async Integration Notifications */
+.async-notification-container {
+    position: fixed;
+    top: 120px;
+    right: 20px;
+    z-index: 1002;
+    max-width: 350px;
+}
+
+.async-notification {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-subtle);
+    border-radius: 8px;
+    box-shadow: var(--shadow-md);
+    margin-bottom: 10px;
+    overflow: hidden;
+    animation: slideInFromRight 0.3s ease-out;
+}
+
+.async-notification-success {
+    border-left: 4px solid var(--color-success);
+}
+
+.async-notification-error {
+    border-left: 4px solid var(--color-error);
+}
+
+.async-notification-warning {
+    border-left: 4px solid var(--color-warning);
+}
+
+.async-notification-info {
+    border-left: 4px solid var(--color-info);
+}
+
+.async-notification .notification-header {
+    padding: 12px 16px 8px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.async-notification .notification-header strong {
+    color: var(--text-primary);
+    font-size: 14px;
+    font-weight: 600;
+}
+
+.async-notification .notification-body {
+    padding: 0 16px 12px;
+    color: var(--text-secondary);
+    font-size: 13px;
+    line-height: 1.4;
+}
+
+.async-notification .notification-close {
+    background: none;
+    border: none;
+    color: var(--text-secondary);
+    cursor: pointer;
+    font-size: 16px;
+    line-height: 1;
+    padding: 0;
+    transition: color 0.2s ease;
+}
+
+.async-notification .notification-close:hover {
+    color: var(--text-primary);
+}
+
+/* UI State Manager Notifications */
+.notification-container {
+    /* Inherit theme-aware styles from parent */
+}
+
+.notification-container .notification {
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+    border: 1px solid var(--border-subtle);
+    box-shadow: var(--shadow-md);
+}
+
+.notification-container .notification.success {
+    border-left-color: var(--color-success);
+}
+
+.notification-container .notification.error {
+    border-left-color: var(--color-error);
+}
+
+.notification-container .notification.info {
+    border-left-color: var(--color-info);
+}
+
+.notification-container .notification-title {
+    color: var(--text-primary);
+}
+
+.notification-container .notification-close {
+    color: var(--text-secondary);
+}
+
+.notification-container .notification-close:hover {
+    color: var(--text-primary);
+}
+
+.notification-container .notification-body {
+    color: var(--text-secondary);
+}
+
+/* Job-related Elements */
+[data-job-id] {
+    /* Inherit theme-aware styling for job elements */
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+    border: 1px solid var(--border-subtle);
+}
+
+.job-status,
+.job-progress,
+.job-metric {
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
+    border: 1px solid var(--border-subtle);
+    border-radius: 4px;
+    padding: 4px 8px;
+    font-size: 12px;
+}
+
+/* Integration Status Elements */
+.async-status,
+.integration-status {
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+    border: 1px solid var(--border-subtle);
+    border-radius: 6px;
+    padding: 8px 12px;
+}
+
+.integration-notification {
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+    border: 1px solid var(--border-subtle);
+}
+
+/* ============================================
+   Animations
+   ============================================ */
+
+@keyframes slideInFromRight {
+    from {
+        transform: translateX(100%);
+        opacity: 0;
+    }
+    to {
+        transform: translateX(0);
+        opacity: 1;
+    }
+}
+
+@keyframes shimmer {
+    0% {
+        transform: translateX(-100%);
+    }
+    100% {
+        transform: translateX(100%);
+    }
+}
+
+@keyframes pulse {
+    0%, 100% {
+        opacity: 1;
+    }
+    50% {
+        opacity: 0.7;
+    }
+}
+
+/* ============================================
+   Responsive Design
+   ============================================ */
+
+@media (max-width: 768px) {
+    .enhanced-sse-status,
+    .async-toast-container,
+    .async-notification-container {
+        left: 10px;
+        right: 10px;
+        max-width: none;
+        position: fixed;
+    }
+    
+    .enhanced-sse-status {
+        top: 10px;
+    }
+    
+    .async-toast-container {
+        top: 70px;
+    }
+    
+    .async-notification-container {
+        top: 110px;
+    }
+}
+
+/* ============================================
+   Theme-specific Overrides
+   ============================================ */
+
+/* Light theme specific adjustments */
+[data-theme="light"] .enhanced-sse-status,
+[data-theme="light"] .async-progress-container,
+[data-theme="light"] .async-toast,
+[data-theme="light"] .async-notification {
+    background: #ffffff;
+    border-color: #e1e5e9;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+/* Dark theme specific adjustments */
+[data-theme="dark"] .enhanced-sse-status,
+[data-theme="dark"] .async-progress-container,
+[data-theme="dark"] .async-toast,
+[data-theme="dark"] .async-notification {
+    background: #2d2d2d;
+    border-color: #404040;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+[data-theme="dark"] .async-progress-track {
+    background: #404040;
+}
+
+[data-theme="dark"] .async-progress-bar::after {
+    background: linear-gradient(
+        90deg,
+        transparent,
+        rgba(255, 255, 255, 0.1),
+        transparent
+    );
+}
+
+/* High contrast mode support */
+@media (prefers-contrast: high) {
+    .enhanced-sse-status,
+    .async-progress-container,
+    .async-toast,
+    .async-notification {
+        border-width: 2px;
+        font-weight: 600;
+    }
+    
+    .async-progress-bar {
+        border: 1px solid var(--text-primary);
+    }
+}
+
+/* Reduced motion support */
+@media (prefers-reduced-motion: reduce) {
+    .enhanced-sse-status,
+    .async-progress-container,
+    .async-toast,
+    .async-notification,
+    .async-progress-bar {
+        transition: none;
+        animation: none;
+    }
+    
+    .async-progress-bar::after {
+        animation: none;
+    }
+}

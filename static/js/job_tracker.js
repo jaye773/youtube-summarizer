@@ -20,6 +20,13 @@ class JobTracker {
     }
 
     /**
+     * No-op for theme updates (UI handled elsewhere)
+     */
+    updateJobElementsTheme(theme) {
+        // Intentionally left blank; UI components subscribe via UIUpdater/UIStateManager
+    }
+
+    /**
      * Add a new job to track
      * @param {string} jobId - Unique job identifier
      * @param {Object} jobData - Job metadata
@@ -382,3 +389,9 @@ class JobTracker {
 window.JobTracker = new JobTracker();
 
 console.log('🎯 JobTracker: JobTracker loaded and ready');
+
+// Apply current theme on load
+if (window.JobTracker) {
+    const currentTheme = document.documentElement.getAttribute('data-theme') || 'light';
+    window.JobTracker.updateJobElementsTheme(currentTheme);
+}

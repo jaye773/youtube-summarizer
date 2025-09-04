@@ -19,6 +19,43 @@ class AsyncIntegration {
         this.handleSummaryCompleted = this.handleSummaryCompleted.bind(this);
         this.handleSummaryFailed = this.handleSummaryFailed.bind(this);
         this.handleCacheUpdated = this.handleCacheUpdated.bind(this);
+        
+        // Setup theme integration
+        this.setupThemeIntegration();
+    }
+    
+    /**
+     * Setup theme integration
+     */
+    setupThemeIntegration() {
+        document.addEventListener('theme-changed', (event) => {
+            const { currentEffectiveTheme } = event.detail;
+            this.updateIntegrationElementsTheme(currentEffectiveTheme);
+        });
+    }
+    
+    /**
+     * Get current theme
+     */
+    getCurrentTheme() {
+        return document.documentElement.getAttribute('data-theme') || 'light';
+    }
+    
+    /**
+     * Update theme for integration-related elements
+     */
+    updateIntegrationElementsTheme(theme) {
+        // Update any async integration status indicators
+        document.querySelectorAll('.async-status, .integration-status').forEach(element => {
+            element.classList.remove('theme-light', 'theme-dark');
+            element.classList.add(`theme-${theme}`);
+        });
+        
+        // Update any dynamically created notification elements
+        document.querySelectorAll('.async-notification, .integration-notification').forEach(element => {
+            element.classList.remove('theme-light', 'theme-dark');
+            element.classList.add(`theme-${theme}`);
+        });
     }
 
     /**
@@ -228,7 +265,14 @@ class AsyncIntegration {
      */
     async enhancedSummarize(urls, model) {
         try {
-            // Show immediate feedback
+            // Show immediate feedback with theme awareness
+            const notification = this.createThemeAwareNotification(
+                '🚀 Processing Started',
+                `Submitted ${urls.length} URL(s) for processing`,
+                'info',
+                3000
+            );
+            
             this.uiStateManager.showNotification(
                 '🚀 Processing Started',
                 `Submitted ${urls.length} URL(s) for processing`,
@@ -256,6 +300,14 @@ class AsyncIntegration {
             }
 
         } catch (error) {
+            // Show error notification with theme awareness
+            this.createThemeAwareNotification(
+                '❌ Processing Failed',
+                `Failed to submit URLs: ${error.message}`,
+                'error',
+                8000
+            );
+            
             this.uiStateManager.showNotification(
                 '❌ Processing Failed',
                 `Failed to submit URLs: ${error.message}`,
@@ -296,6 +348,14 @@ class AsyncIntegration {
         try {
             const result = await this.apiClient.deleteSummary(videoId);
             
+            // Show success notification with theme awareness
+            this.createThemeAwareNotification(
+                '✅ Summary Deleted',
+                'Summary has been successfully removed',
+                'success',
+                3000
+            );
+            
             this.uiStateManager.showNotification(
                 '✅ Summary Deleted',
                 'Summary has been successfully removed',
@@ -306,6 +366,14 @@ class AsyncIntegration {
             return result;
 
         } catch (error) {
+            // Show error notification with theme awareness
+            this.createThemeAwareNotification(
+                '❌ Delete Failed',
+                `Failed to delete summary: ${error.message}`,
+                'error',
+                5000
+            );
+            
             this.uiStateManager.showNotification(
                 '❌ Delete Failed',
                 `Failed to delete summary: ${error.message}`,
@@ -364,6 +432,60 @@ class AsyncIntegration {
         
         this.initialized = false;
     }
+    
+    /**
+     * Create theme-aware notification
+     */
+    createThemeAwareNotification(title, message, type, duration) {
+        const notification = document.createElement('div');
+        notification.className = `async-notification async-notification-${type}`;
+        
+        // Add theme-aware class
+        const currentTheme = this.getCurrentTheme();
+        notification.classList.add(`theme-${currentTheme}`);
+        
+        notification.innerHTML = `
+            <div class="notification-header">
+                <strong>${this.escapeHtml(title)}</strong>
+            </div>
+            <div class="notification-body">
+                ${this.escapeHtml(message)}
+            </div>
+            <button class="notification-close" onclick="this.parentElement.remove()">×</button>
+        `;
+        
+        // Find or create notification container
+        let container = document.getElementById('async-notification-container');
+        if (!container) {
+            container = document.createElement('div');
+            container.id = 'async-notification-container';
+            container.className = 'async-notification-container';
+            container.classList.add(`theme-${currentTheme}`);
+            document.body.appendChild(container);
+        }
+        
+        container.appendChild(notification);
+        
+        // Auto-remove after duration
+        if (duration > 0) {
+            setTimeout(() => {
+                if (notification.parentNode) {
+                    notification.remove();
+                }
+            }, duration);
+        }
+        
+        return notification;
+    }
+    
+    /**
+     * Escape HTML to prevent XSS
+     */
+    escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
 }
 
 // Create global instance
@@ -377,6 +499,12 @@ if (document.readyState === 'loading') {
 } else {
     // DOM is already ready
     window.asyncIntegration.initialize();
+}
+
+// Apply current theme on load
+if (window.asyncIntegration) {
+    const currentTheme = document.documentElement.getAttribute('data-theme') || 'light';
+    window.asyncIntegration.updateIntegrationElementsTheme(currentTheme);
 }
 
 // Export for ES6 modules

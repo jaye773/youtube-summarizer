@@ -53,10 +53,10 @@ h1 {
 
 .settings-btn { 
     background-color: var(--border-strong); 
-    color: var(--bg-secondary); 
+    color: white; 
     border: none; 
     padding: 10px; 
-    border-radius: var(--border-radius-full); 
+    border-radius: 50%; 
     cursor: pointer; 
     text-decoration: none; 
     display: inline-flex; 
@@ -64,7 +64,7 @@ h1 {
     justify-content: center; 
     width: 40px; 
     height: 40px; 
-    transition: var(--transition-theme);
+    transition: all 0.3s ease;
 }
 
 .settings-btn:hover { 
@@ -180,11 +180,30 @@ button:disabled {
 
 #loader { 
     text-align: center; 
-    display: none; 
-    margin-top: 20px; 
+    visibility: hidden;
+    opacity: 0;
+    height: 0;
+    margin: 0;
+    padding: 0;
     font-size: 18px; 
     color: var(--text-muted); 
-    transition: var(--transition-theme);
+    background-color: var(--bg-tertiary);
+    border-radius: var(--border-radius-md);
+    border: 1px solid var(--border-subtle);
+    transition: opacity 0.3s ease, height 0.3s ease, margin 0.3s ease, padding 0.3s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+}
+
+#loader.active {
+    visibility: visible;
+    opacity: 1;
+    height: auto;
+    min-height: 60px;
+    margin: 20px 0;
+    padding: 20px;
 }
 
 #results { 
@@ -196,6 +215,28 @@ button:disabled {
     border-bottom: 2px solid var(--border-subtle); 
     padding-bottom: 10px; 
     transition: var(--transition-theme);
+}
+
+.new-summaries-heading {
+    color: var(--accent-primary);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.clear-new-btn {
+    padding: 6px 12px;
+    font-size: 14px;
+    background-color: var(--border-strong);
+    color: var(--bg-secondary);
+    border: none;
+    border-radius: var(--border-radius-sm);
+    cursor: pointer;
+    transition: var(--transition-theme);
+}
+
+.clear-new-btn:hover {
+    background-color: var(--text-muted);
 }
 
 /* ========================================
@@ -221,14 +262,24 @@ button:disabled {
 
 .result-card { 
     background-color: var(--bg-tertiary); 
-    padding: 15px; 
+    padding: 20px; 
     border-radius: var(--border-radius-md); 
-    margin-bottom: 20px; 
+    margin-bottom: 30px; 
     border-left: 5px solid var(--accent-primary); 
     display: flex; 
     align-items: flex-start; 
     gap: 15px; 
     transition: var(--transition-theme);
+    box-shadow: var(--shadow-md);
+}
+
+.result-card:hover {
+    box-shadow: var(--shadow-lg);
+    transform: translateY(-2px);
+}
+
+.result-card:last-child {
+    margin-bottom: 0;
 }
 
 .thumbnail { 
@@ -269,21 +320,47 @@ button:disabled {
     text-decoration: underline; 
 }
 
-.speak-btn { 
+.icon-btn { 
     background: none; 
     border: none; 
-    font-size: 24px; 
     cursor: pointer; 
-    padding: 0 5px; 
-    width: auto; 
+    padding: 10px; 
+    width: 44px;
+    height: 44px;
+    border-radius: var(--border-radius-sm);
     transition: var(--transition-normal); 
-    margin-left: 10px; 
+    margin-left: 10px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
     color: var(--text-primary);
 }
 
-.speak-btn:hover { 
-    transform: scale(1.2); 
-    background: none; 
+.icon-btn svg {
+    width: 28px;
+    height: 28px;
+    fill: currentColor;
+}
+
+.icon-btn:hover { 
+    transform: scale(1.1); 
+    background-color: var(--bg-tertiary);
+}
+
+.icon-btn.speak-btn {
+    color: var(--accent-primary);
+}
+
+.icon-btn.speak-btn:hover {
+    background-color: var(--accent-light);
+}
+
+.icon-btn.trash-btn {
+    color: var(--status-error);
+}
+
+.icon-btn.trash-btn:hover {
+    background-color: var(--status-error-bg);
 }
 
 .result-card pre { 

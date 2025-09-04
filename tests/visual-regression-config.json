@@ -1,0 +1,646 @@
+{
+  "projectName": "YouTube Summarizer Dark Mode",
+  "description": "Visual regression testing configuration for dark mode implementation",
+  "version": "1.0.0",
+  "baseUrl": "http://localhost:5000",
+  "testEnvironments": {
+    "local": {
+      "baseUrl": "http://localhost:5000",
+      "description": "Local development environment"
+    },
+    "staging": {
+      "baseUrl": "https://staging.youtube-summarizer.com",
+      "description": "Staging environment"
+    },
+    "production": {
+      "baseUrl": "https://youtube-summarizer.com",
+      "description": "Production environment"
+    }
+  },
+  "browsers": [
+    {
+      "name": "chromium",
+      "version": "latest",
+      "enabled": true,
+      "priority": 1,
+      "viewport": {
+        "width": 1920,
+        "height": 1080
+      }
+    },
+    {
+      "name": "firefox",
+      "version": "latest",
+      "enabled": true,
+      "priority": 2,
+      "viewport": {
+        "width": 1920,
+        "height": 1080
+      }
+    },
+    {
+      "name": "webkit",
+      "version": "latest",
+      "enabled": true,
+      "priority": 3,
+      "viewport": {
+        "width": 1920,
+        "height": 1080
+      }
+    }
+  ],
+  "viewports": [
+    {
+      "name": "desktop-large",
+      "width": 1920,
+      "height": 1080,
+      "description": "Large desktop screen"
+    },
+    {
+      "name": "desktop-medium",
+      "width": 1366,
+      "height": 768,
+      "description": "Medium desktop/laptop screen"
+    },
+    {
+      "name": "tablet-landscape",
+      "width": 1024,
+      "height": 768,
+      "description": "Tablet landscape orientation"
+    },
+    {
+      "name": "tablet-portrait",
+      "width": 768,
+      "height": 1024,
+      "description": "Tablet portrait orientation"
+    },
+    {
+      "name": "mobile-large",
+      "width": 414,
+      "height": 896,
+      "description": "Large mobile device (iPhone 11 Pro Max)"
+    },
+    {
+      "name": "mobile-medium",
+      "width": 375,
+      "height": 667,
+      "description": "Medium mobile device (iPhone 8)"
+    },
+    {
+      "name": "mobile-small",
+      "width": 320,
+      "height": 568,
+      "description": "Small mobile device (iPhone SE)"
+    }
+  ],
+  "themes": [
+    {
+      "name": "light",
+      "description": "Light theme (default)",
+      "setup": {
+        "localStorage": {
+          "youtube-summarizer-theme": "light"
+        },
+        "systemPreference": "light"
+      }
+    },
+    {
+      "name": "dark",
+      "description": "Dark theme",
+      "setup": {
+        "localStorage": {
+          "youtube-summarizer-theme": "dark"
+        },
+        "systemPreference": "dark"
+      }
+    },
+    {
+      "name": "auto-light",
+      "description": "Auto theme with light system preference",
+      "setup": {
+        "localStorage": {
+          "youtube-summarizer-theme": "auto"
+        },
+        "systemPreference": "light"
+      }
+    },
+    {
+      "name": "auto-dark",
+      "description": "Auto theme with dark system preference",
+      "setup": {
+        "localStorage": {
+          "youtube-summarizer-theme": "auto"
+        },
+        "systemPreference": "dark"
+      }
+    }
+  ],
+  "pages": [
+    {
+      "name": "index",
+      "path": "/",
+      "title": "YouTube Summarizer - Home",
+      "description": "Main application page with YouTube URL input and results",
+      "waitForSelector": ".container",
+      "waitForTimeout": 2000,
+      "hideSelectors": [
+        "#connection-status",
+        ".real-time-progress"
+      ],
+      "captureFullPage": false,
+      "themes": ["light", "dark", "auto-light", "auto-dark"],
+      "viewports": ["desktop-large", "desktop-medium", "tablet-landscape", "mobile-large", "mobile-medium"],
+      "states": [
+        {
+          "name": "initial",
+          "description": "Initial page load state",
+          "setup": []
+        },
+        {
+          "name": "with-input",
+          "description": "Page with YouTube URL entered",
+          "setup": [
+            {
+              "action": "type",
+              "selector": "#youtube-links",
+              "text": "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+            }
+          ]
+        },
+        {
+          "name": "with-results",
+          "description": "Page displaying sample results",
+          "setup": [
+            {
+              "action": "addToLocalStorage",
+              "key": "youtube-summarizer-results",
+              "value": "[{\"title\":\"Sample Video\",\"summary\":\"This is a sample video summary for visual testing purposes.\",\"url\":\"https://www.youtube.com/watch?v=dQw4w9WgXcQ\"}]"
+            },
+            {
+              "action": "reload"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "settings",
+      "path": "/settings",
+      "title": "Settings - YouTube Summarizer",
+      "description": "Settings page with theme selector and configuration options",
+      "waitForSelector": ".settings-form",
+      "waitForTimeout": 2000,
+      "hideSelectors": [
+        "#test-progress",
+        ".progress-container"
+      ],
+      "captureFullPage": true,
+      "themes": ["light", "dark"],
+      "viewports": ["desktop-large", "tablet-landscape", "mobile-large"],
+      "states": [
+        {
+          "name": "default",
+          "description": "Default settings page",
+          "setup": []
+        },
+        {
+          "name": "theme-selection-focused",
+          "description": "Theme selection area focused",
+          "setup": [
+            {
+              "action": "scrollToSelector",
+              "selector": ".theme-selector"
+            }
+          ]
+        },
+        {
+          "name": "voice-selection-expanded",
+          "description": "Voice selection area visible",
+          "setup": [
+            {
+              "action": "scrollToSelector",
+              "selector": ".voice-selection-group"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "login",
+      "path": "/login",
+      "title": "Login - YouTube Summarizer",
+      "description": "Login page for protected access",
+      "waitForSelector": "form",
+      "waitForTimeout": 1000,
+      "captureFullPage": false,
+      "themes": ["light", "dark"],
+      "viewports": ["desktop-medium", "mobile-large"],
+      "states": [
+        {
+          "name": "default",
+          "description": "Default login page",
+          "setup": []
+        },
+        {
+          "name": "with-error",
+          "description": "Login page with error message",
+          "setup": [
+            {
+              "action": "type",
+              "selector": "input[type='password']",
+              "text": "wrongpassword"
+            },
+            {
+              "action": "click",
+              "selector": "button[type='submit']"
+            },
+            {
+              "action": "waitForSelector",
+              "selector": ".error-message"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "components": [
+    {
+      "name": "theme-selector",
+      "description": "Theme selection component in settings",
+      "page": "settings",
+      "selector": ".theme-selector",
+      "themes": ["light", "dark"],
+      "viewports": ["desktop-large", "mobile-large"],
+      "states": [
+        {
+          "name": "default",
+          "description": "Theme selector in default state"
+        },
+        {
+          "name": "light-selected",
+          "description": "Light theme option selected",
+          "setup": [
+            {
+              "action": "click",
+              "selector": ".theme-option[data-theme='light']"
+            }
+          ]
+        },
+        {
+          "name": "dark-selected",
+          "description": "Dark theme option selected",
+          "setup": [
+            {
+              "action": "click",
+              "selector": ".theme-option[data-theme='dark']"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "result-card",
+      "description": "Individual result card component",
+      "page": "index",
+      "selector": ".result-card:first-child",
+      "themes": ["light", "dark"],
+      "viewports": ["desktop-large", "mobile-large"],
+      "prerequisiteState": "with-results",
+      "states": [
+        {
+          "name": "default",
+          "description": "Default result card appearance"
+        },
+        {
+          "name": "hovered",
+          "description": "Result card in hover state",
+          "setup": [
+            {
+              "action": "hover",
+              "selector": ".result-card:first-child"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "toast-notification",
+      "description": "Toast notification component",
+      "page": "index",
+      "selector": "#toast-container",
+      "themes": ["light", "dark"],
+      "viewports": ["desktop-large", "mobile-large"],
+      "states": [
+        {
+          "name": "success-toast",
+          "description": "Success toast notification",
+          "setup": [
+            {
+              "action": "executeScript",
+              "script": "window.showToast && window.showToast('Operation completed successfully!', 'success')"
+            },
+            {
+              "action": "wait",
+              "duration": 500
+            }
+          ]
+        },
+        {
+          "name": "error-toast",
+          "description": "Error toast notification",
+          "setup": [
+            {
+              "action": "executeScript",
+              "script": "window.showToast && window.showToast('An error occurred. Please try again.', 'error')"
+            },
+            {
+              "action": "wait",
+              "duration": 500
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "progress-bar",
+      "description": "Progress bar component during processing",
+      "page": "index",
+      "selector": ".real-time-progress-bar",
+      "themes": ["light", "dark"],
+      "viewports": ["desktop-large", "mobile-large"],
+      "states": [
+        {
+          "name": "progress-25",
+          "description": "Progress bar at 25%",
+          "setup": [
+            {
+              "action": "executeScript",
+              "script": "document.querySelector('.real-time-progress-fill').style.width = '25%'"
+            }
+          ]
+        },
+        {
+          "name": "progress-75",
+          "description": "Progress bar at 75%",
+          "setup": [
+            {
+              "action": "executeScript",
+              "script": "document.querySelector('.real-time-progress-fill').style.width = '75%'"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "voice-option",
+      "description": "Voice selection option component",
+      "page": "settings",
+      "selector": ".voice-option:first-child",
+      "themes": ["light", "dark"],
+      "viewports": ["desktop-large", "mobile-large"],
+      "states": [
+        {
+          "name": "default",
+          "description": "Default voice option appearance"
+        },
+        {
+          "name": "selected",
+          "description": "Selected voice option",
+          "setup": [
+            {
+              "action": "click",
+              "selector": ".voice-option:first-child"
+            }
+          ]
+        },
+        {
+          "name": "hovered",
+          "description": "Hovered voice option",
+          "setup": [
+            {
+              "action": "hover",
+              "selector": ".voice-option:first-child"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "interactionTests": [
+    {
+      "name": "theme-switching-transition",
+      "description": "Visual test of theme switching transition",
+      "page": "settings",
+      "themes": ["light"],
+      "viewports": ["desktop-large"],
+      "steps": [
+        {
+          "action": "screenshot",
+          "name": "before-switch"
+        },
+        {
+          "action": "click",
+          "selector": ".theme-option[data-theme='dark']"
+        },
+        {
+          "action": "wait",
+          "duration": 150
+        },
+        {
+          "action": "screenshot",
+          "name": "mid-transition"
+        },
+        {
+          "action": "wait",
+          "duration": 200
+        },
+        {
+          "action": "screenshot",
+          "name": "after-switch"
+        }
+      ]
+    },
+    {
+      "name": "form-input-focus",
+      "description": "Visual test of form input focus states",
+      "page": "index",
+      "themes": ["light", "dark"],
+      "viewports": ["desktop-large"],
+      "steps": [
+        {
+          "action": "screenshot",
+          "name": "unfocused"
+        },
+        {
+          "action": "focus",
+          "selector": "#youtube-links"
+        },
+        {
+          "action": "screenshot",
+          "name": "focused"
+        },
+        {
+          "action": "type",
+          "text": "https://www.youtube.com/watch?v=example"
+        },
+        {
+          "action": "screenshot",
+          "name": "with-content"
+        }
+      ]
+    },
+    {
+      "name": "button-hover-states",
+      "description": "Visual test of button hover states",
+      "page": "index",
+      "themes": ["light", "dark"],
+      "viewports": ["desktop-large"],
+      "steps": [
+        {
+          "action": "screenshot",
+          "name": "button-normal",
+          "clipSelector": "#summarize-btn"
+        },
+        {
+          "action": "hover",
+          "selector": "#summarize-btn"
+        },
+        {
+          "action": "screenshot",
+          "name": "button-hovered",
+          "clipSelector": "#summarize-btn"
+        }
+      ]
+    }
+  ],
+  "comparisonSettings": {
+    "threshold": 0.2,
+    "pixelThreshold": 0.1,
+    "pixelCount": 10,
+    "ignoreAntialiasing": true,
+    "ignoreColors": false,
+    "ignoreRectangles": []
+  },
+  "outputSettings": {
+    "baseDirectory": "./tests/visual-regression-results",
+    "screenshotDirectory": "screenshots",
+    "diffDirectory": "diffs",
+    "reportDirectory": "reports",
+    "imageFormat": "png",
+    "imageQuality": 90
+  },
+  "scheduling": {
+    "runOnPush": true,
+    "runOnPullRequest": true,
+    "runNightly": true,
+    "runOnRelease": true
+  },
+  "notifications": {
+    "onFailure": {
+      "email": ["team@youtube-summarizer.com"],
+      "slack": "#visual-testing"
+    },
+    "onSuccess": {
+      "slack": "#visual-testing"
+    }
+  },
+  "accessibility": {
+    "enabled": true,
+    "rules": [
+      "wcag2a",
+      "wcag2aa",
+      "wcag21aa"
+    ],
+    "includeTags": [
+      "best-practice",
+      "experimental"
+    ],
+    "excludeTags": [
+      "review"
+    ]
+  },
+  "performance": {
+    "enabled": true,
+    "metrics": [
+      "first-contentful-paint",
+      "largest-contentful-paint",
+      "cumulative-layout-shift",
+      "first-input-delay"
+    ],
+    "thresholds": {
+      "first-contentful-paint": 2000,
+      "largest-contentful-paint": 4000,
+      "cumulative-layout-shift": 0.1,
+      "first-input-delay": 100
+    }
+  },
+  "testData": {
+    "sampleYouTubeUrls": [
+      "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+      "https://www.youtube.com/playlist?list=PLI1AtZo9B3YEjZMrGNSyWf3cqV4vxO3e0"
+    ],
+    "sampleResults": [
+      {
+        "title": "Sample Video Title",
+        "summary": "This is a sample video summary used for visual regression testing. It contains enough text to demonstrate text wrapping and layout behavior across different screen sizes.",
+        "url": "https://www.youtube.com/watch?v=sample1",
+        "duration": "5:23",
+        "view_count": "1,234,567 views"
+      },
+      {
+        "title": "Another Sample Video with a Much Longer Title That Tests Text Wrapping Behavior",
+        "summary": "Another sample summary that helps test how the interface handles varying content lengths and different types of content structure.",
+        "url": "https://www.youtube.com/watch?v=sample2",
+        "duration": "12:45",
+        "view_count": "987,654 views"
+      }
+    ]
+  },
+  "ci": {
+    "integration": {
+      "github": {
+        "enabled": true,
+        "statusCheck": true,
+        "commentOnPR": true
+      },
+      "jenkins": {
+        "enabled": false,
+        "pipeline": "visual-regression-tests"
+      }
+    },
+    "retryPolicy": {
+      "maxRetries": 3,
+      "retryDelay": 1000
+    }
+  },
+  "maintenance": {
+    "cleanupOldResults": {
+      "enabled": true,
+      "retentionDays": 30
+    },
+    "updateBaselines": {
+      "onMajorRelease": true,
+      "onApproval": true
+    }
+  },
+  "reporting": {
+    "formats": [
+      "html",
+      "json",
+      "junit"
+    ],
+    "includePassedTests": false,
+    "includeScreenshots": true,
+    "includeDiffs": true,
+    "groupBy": [
+      "theme",
+      "viewport",
+      "browser"
+    ]
+  },
+  "parallelization": {
+    "enabled": true,
+    "maxWorkers": 4,
+    "perBrowser": 2
+  }
+}

@@ -12,7 +12,7 @@
     border-left: 4px solid var(--accent-primary);
     border-radius: var(--border-radius-md);
     box-shadow: var(--shadow-md);
-    margin-bottom: var(--spacing-md);
+    margin-bottom: var(--spacing-2xl);
     padding: var(--spacing-lg);
     transition: all 0.3s ease;
     position: relative;
@@ -23,6 +23,18 @@
     transform: translateY(-2px);
     box-shadow: var(--shadow-lg);
     border-left-color: var(--accent-hover);
+}
+
+/* Ensure proper spacing between consecutive cards */
+.result-card + .result-card {
+    margin-top: var(--spacing-lg);
+}
+
+/* Remove bottom margin from last card in container */
+#results > .result-card:last-child,
+#search-results > .result-card:last-child,
+.playlist-container > .result-card:last-child {
+    margin-bottom: 0;
 }
 
 .result-card.loading {
@@ -272,35 +284,7 @@
     align-items: center;
 }
 
-.card-header .speak-btn {
-    background: var(--accent-primary);
-    color: var(--bg-primary);
-    border: none;
-    border-radius: var(--border-radius-sm);
-    padding: var(--spacing-xs) var(--spacing-sm);
-    font-size: 0.85rem;
-    cursor: pointer;
-    transition: all 0.2s ease;
-    display: flex;
-    align-items: center;
-    gap: var(--spacing-xs);
-}
-
-.card-header .speak-btn:hover {
-    background: var(--accent-hover);
-    transform: translateY(-1px);
-}
-
-.card-header .speak-btn:disabled {
-    background: var(--text-muted);
-    cursor: not-allowed;
-    transform: none;
-}
-
-.card-header .speak-btn::before {
-    content: "🔊";
-    font-size: 0.9em;
-}
+/* Icon button styles moved to main.css for consistency */
 
 /* ========================================
    LOADING CARDS
@@ -602,7 +586,7 @@
         color: black !important;
     }
     
-    .card-header .speak-btn,
+    .card-header .icon-btn,
     .empty-state-card .empty-cta {
         display: none;
     }
@@ -624,7 +608,7 @@
 @media (prefers-reduced-motion: reduce) {
     .result-card,
     .thumbnail,
-    .speak-btn,
+    .icon-btn,
     .empty-cta,
     .info-card {
         transition: none;

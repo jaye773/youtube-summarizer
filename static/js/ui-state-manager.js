@@ -9,7 +9,56 @@ class UIStateManager {
         this.progressIndicators = new Map(); // Track progress UI elements
         this.notificationContainer = null;
         this.cacheRefreshCallbacks = new Set();
+        
         this.initializeUI();
+        this.setupThemeIntegration();
+    }
+    
+    /**
+     * Setup theme integration
+     */
+    setupThemeIntegration() {
+        document.addEventListener('theme-changed', (event) => {
+            const { currentEffectiveTheme } = event.detail;
+            this.updateDynamicElementsTheme(currentEffectiveTheme);
+        });
+    }
+    
+    /**
+     * Get current theme
+     */
+    getCurrentTheme() {
+        return document.documentElement.getAttribute('data-theme') || 'light';
+    }
+    
+    /**
+     * Update theme for all dynamic elements
+     */
+    updateDynamicElementsTheme(theme) {
+        // Update notification container
+        if (this.notificationContainer) {
+            this.notificationContainer.classList.remove('theme-light', 'theme-dark');
+            this.notificationContainer.classList.add(`theme-${theme}`);
+            
+            // Update all existing notifications
+            this.notificationContainer.querySelectorAll('.notification').forEach(notification => {
+                notification.classList.remove('theme-light', 'theme-dark');
+                notification.classList.add(`theme-${theme}`);
+            });
+        }
+        
+        // Update progress indicators
+        this.progressIndicators.forEach((indicator) => {
+            indicator.classList.remove('theme-light', 'theme-dark');
+            indicator.classList.add(`theme-${theme}`);
+        });
+        
+        // Update connection status indicator
+        const statusIndicator = document.getElementById('sse-connection-status');
+        if (statusIndicator) {
+            statusIndicator.classList.remove('theme-light', 'theme-dark');
+            statusIndicator.classList.add(`theme-${theme}`);
+        }
     }
 
     /**
@@ -31,6 +80,10 @@ class UIStateManager {
             container = document.createElement('div');
             container.id = 'sse-notifications';
             container.className = 'notification-container';
+            
+            // Add theme-aware class
+            const currentTheme = this.getCurrentTheme();
+            container.classList.add(`theme-${currentTheme}`);
             container.innerHTML = `
                 <style>
                     .notification-container {
@@ -231,6 +284,10 @@ class UIStateManager {
         const notification = document.createElement('div');
         notification.className = `notification ${type}`;
         
+        // Add theme-aware class
+        const currentTheme = this.getCurrentTheme();
+        notification.classList.add(`theme-${currentTheme}`);
+        
         const notificationId = Date.now().toString();
         notification.dataset.id = notificationId;
         
@@ -292,6 +349,11 @@ class UIStateManager {
         // Create new progress notification
         const notification = document.createElement('div');
         notification.className = 'notification progress-notification';
+        
+        // Add theme-aware class
+        const currentTheme = this.getCurrentTheme();
+        notification.classList.add(`theme-${currentTheme}`);
+        
         notification.dataset.videoId = videoId;
         
         notification.innerHTML = `
@@ -490,3 +552,6 @@ if (typeof module !== 'undefined' && module.exports) {
 } else {
     window.UIStateManager = UIStateManager;
 }
+
+// Apply current theme on load
+// Note: Theme updates are handled by instances created elsewhere (e.g., AsyncIntegration)

@@ -1,0 +1,580 @@
+/*
+ * Responsive Theme System CSS
+ * Handles responsive adaptations for dark/light mode across all device types
+ * Part of YouTube Summarizer theme system
+ */
+
+/* ==========================================================================
+   Base Responsive Theme Variables
+   ========================================================================== */
+
+:root {
+  /* Theme toggle sizes */
+  --theme-toggle-mobile: 32px;
+  --theme-toggle-tablet: 36px;
+  --theme-toggle-desktop: 40px;
+  --touch-target-min: 44px;
+  
+  /* Responsive shadow scales */
+  --shadow-scale-mobile: 0.7;
+  --shadow-scale-tablet: 0.85;
+  --shadow-scale-desktop: 1.0;
+  
+  /* Performance optimization flags */
+  --enable-animations: 1;
+  --enable-gradients: 1;
+  --enable-complex-shadows: 1;
+}
+
+/* ==========================================================================
+   Mobile Breakpoint (<768px) - Touch-First Design
+   ========================================================================== */
+
+@media screen and (max-width: 767px) {
+  :root {
+    /* Optimize for mobile performance */
+    --enable-animations: 0.5;
+    --enable-gradients: 0.7;
+    --enable-complex-shadows: 0;
+  }
+  
+  /* Theme Toggle - Mobile Optimized */
+  .theme-toggle {
+    width: var(--theme-toggle-mobile) !important;
+    height: var(--theme-toggle-mobile) !important;
+    min-width: var(--touch-target-min);
+    min-height: var(--touch-target-min);
+    padding: 6px;
+    border-radius: 8px;
+  }
+
+  /* Ensure touch target size */
+  .theme-toggle::before {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: var(--touch-target-min);
+    height: var(--touch-target-min);
+    transform: translate(-50%, -50%);
+    z-index: -1;
+  }
+  
+  /* Header responsive stacking */
+  .header-controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    justify-content: space-between;
+    align-items: center;
+  }
+  
+  /* Mobile Dark Mode Specific Adjustments */
+  [data-theme="dark"] {
+    /* Enhanced contrast for outdoor viewing */
+    --text-primary: #ffffff;
+    --text-secondary: #e0e0e0;
+    --border-color: #404040;
+    
+    /* Simplified shadows for performance */
+    --card-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+    --button-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
+    --header-shadow: 0 1px 6px rgba(0, 0, 0, 0.2);
+    
+    /* Reduce gradient complexity */
+    --gradient-primary: linear-gradient(135deg, #2d3748 0%, #1a202c 100%);
+    --gradient-accent: linear-gradient(90deg, #4a5568 0%, #2d3748 100%);
+  }
+
+  /* Enhanced mobile readability */
+  [data-theme="dark"] .card {
+    border-width: 1px;
+    border-color: #404040;
+  }
+
+  /* Simplified button states */
+  [data-theme="dark"] .btn {
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+  }
+  [data-theme="dark"] .btn:hover,
+  [data-theme="dark"] .btn:focus {
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+  }
+  
+  [data-theme="light"] {
+    /* High contrast for mobile */
+    --text-primary: #000000;
+    --text-secondary: #333333;
+    --border-color: #d0d0d0;
+    
+    /* Mobile-optimized light shadows */
+    --card-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+    --button-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  }
+  
+  /* Toast Notifications - Mobile Position */
+  .toast-container {
+    position: fixed;
+    top: 20px;
+    left: 16px;
+    right: 16px;
+    z-index: 9999;
+    pointer-events: none;
+  }
+  
+  .toast {
+    margin-bottom: 8px;
+    border-radius: 8px;
+    font-size: 14px;
+    padding: 12px 16px;
+  }
+
+  /* Enhanced mobile visibility */
+  [data-theme="dark"] .toast {
+    background: rgba(45, 55, 72, 0.95);
+    border: 1px solid #4a5568;
+    backdrop-filter: blur(8px);
+  }
+  
+  /* Card Layout - Mobile Stack */
+  .card-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+  
+  .card {
+    margin: 0;
+    border-radius: 12px;
+    padding: 16px;
+  }
+  
+  /* Progress bars - Mobile optimized */
+  .progress {
+    height: 6px;
+    border-radius: 3px;
+  }
+
+  [data-theme="dark"] .progress { background: #2d3748; }
+  [data-theme="dark"] .progress .progress-bar { border-radius: 3px; }
+  
+  /* Form controls - Touch friendly */
+  .form-control, .form-select {
+    padding: 12px 16px;
+    font-size: 16px; /* Prevent zoom on iOS */
+    border-radius: 8px;
+    min-height: var(--touch-target-min);
+  }
+  
+  /* Mobile landscape optimizations */
+  @media (orientation: landscape) and (max-height: 500px) {
+    .header {
+      padding: 8px 0;
+    }
+    
+    .theme-toggle {
+      width: 28px;
+      height: 28px;
+    }
+    
+    .card {
+      padding: 12px;
+      border-radius: 8px;
+    }
+  }
+}
+
+/* Additional stacking for very small screens */
+@media screen and (max-width: 480px) {
+  .header-controls {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
+  }
+}
+
+/* ==========================================================================
+   Tablet Breakpoint (768px - 1024px) - Balanced Touch & Precision
+   ========================================================================== */
+
+@media screen and (min-width: 768px) and (max-width: 1024px) {
+  :root {
+    --enable-animations: 0.8;
+    --enable-gradients: 0.9;
+    --enable-complex-shadows: 0.5;
+  }
+  
+  /* Theme Toggle - Tablet Size */
+  .theme-toggle {
+    width: var(--theme-toggle-tablet);
+    height: var(--theme-toggle-tablet);
+    padding: 8px;
+    border-radius: 10px;
+  }
+  
+  /* Tablet-optimized spacing */
+  [data-theme="dark"] {
+    /* Balanced shadows for tablet */
+    --card-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+    --button-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+    --header-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+    
+    /* Medium complexity gradients */
+    --gradient-primary: linear-gradient(135deg, #2d3748 0%, #1a202c 50%, #0f1419 100%);
+  }
+  
+  /* Card grid - 2 column on tablet */
+  .card-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+  }
+  
+  /* Touch-optimized form controls */
+  .form-control, .form-select {
+    padding: 10px 14px;
+    font-size: 15px;
+    min-height: 40px;
+  }
+  
+  /* Toast positioning for tablet */
+  .toast-container {
+    top: 24px;
+    right: 24px;
+    left: auto;
+    width: 350px;
+  }
+  
+  /* Tablet portrait vs landscape */
+  @media (orientation: portrait) {
+    .header-controls {
+      justify-content: space-between;
+    }
+  }
+  
+  @media (orientation: landscape) {
+    .card-grid {
+      grid-template-columns: repeat(3, 1fr);
+    }
+    
+    .header {
+      padding: 12px 0;
+    }
+  }
+}
+
+/* ==========================================================================
+   Desktop Breakpoint (>1024px) - Full Feature Set
+   ========================================================================== */
+
+@media screen and (min-width: 1025px) {
+  :root {
+    --enable-animations: 1;
+    --enable-gradients: 1;
+    --enable-complex-shadows: 1;
+  }
+  
+  /* Theme Toggle - Full Desktop Size */
+  .theme-toggle {
+    width: var(--theme-toggle-desktop);
+    height: var(--theme-toggle-desktop);
+    padding: 10px;
+    border-radius: 12px;
+    
+    /* Enhanced hover effects on desktop */
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .theme-toggle:hover {
+    transform: translateY(-1px);
+  }
+  [data-theme="dark"] .theme-toggle:hover {
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  }
+  [data-theme="light"] .theme-toggle:hover {
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  }
+
+  /* Full desktop shadows and effects */
+  [data-theme="dark"] {
+    --card-shadow: 0 8px 24px rgba(0, 0, 0, 0.3), 0 2px 8px rgba(0, 0, 0, 0.2);
+    --button-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+    --header-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+    
+    /* Complex gradients for desktop */
+    --gradient-primary: linear-gradient(135deg, #2d3748 0%, #1a202c 25%, #0f1419 50%, #000000 100%);
+    --gradient-accent: linear-gradient(90deg, #4a5568 0%, #2d3748 50%, #1a202c 100%);
+  }
+  /* Enhanced card effects */
+  [data-theme="dark"] .card {
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  [data-theme="dark"] .card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.4), 0 4px 12px rgba(0, 0, 0, 0.3);
+  }
+  
+  /* Desktop grid layout */
+  .card-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+    gap: 24px;
+  }
+  
+  /* Enhanced desktop form styling */
+  .form-control, .form-select { transition: all 0.2s ease; }
+  [data-theme="dark"] .form-control:focus,
+  [data-theme="dark"] .form-select:focus {
+    box-shadow: 0 0 0 3px rgba(66, 153, 225, 0.3);
+    border-color: #4299e1;
+  }
+  
+  /* Desktop toast positioning */
+  .toast-container {
+    top: 32px;
+    right: 32px;
+    width: 400px;
+  }
+}
+
+/* ==========================================================================
+   High DPI/Retina Display Optimizations
+   ========================================================================== */
+
+@media (-webkit-min-device-pixel-ratio: 2), (min-resolution: 192dpi) {
+  /* Crisp borders and shadows */
+  [data-theme="dark"] {
+    /* Enhanced shadow definition */
+    --card-shadow: 0 4px 16px rgba(0, 0, 0, 0.35), 0 1px 4px rgba(0, 0, 0, 0.25);
+  }
+  [data-theme="dark"] .card,
+  [data-theme="dark"] .btn,
+  [data-theme="dark"] .form-control {
+    border-width: 0.5px;
+  }
+  
+  /* Optimize icon rendering */
+  .theme-toggle svg {
+    shape-rendering: geometricPrecision;
+  }
+  
+  /* Sharp text rendering */
+  body {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+  }
+}
+
+/* ==========================================================================
+   Print Media Styles
+   ========================================================================== */
+
+@media print {
+  /* Force light theme for printing */
+  * {
+    background: white !important;
+    color: black !important;
+    box-shadow: none !important;
+    text-shadow: none !important;
+  }
+  
+  /* Hide interactive elements */
+  .theme-toggle,
+  .btn,
+  .toast-container,
+  .progress {
+    display: none !important;
+  }
+  
+  /* Optimize layout for print */
+  .card {
+    border: 1px solid #ccc !important;
+    break-inside: avoid;
+    margin-bottom: 20px;
+  }
+  
+  /* Print-friendly typography */
+  body {
+    font-size: 12pt !important;
+    line-height: 1.4 !important;
+  }
+  
+  h1, h2, h3 {
+    color: #333 !important;
+  }
+}
+
+/* ==========================================================================
+   Accessibility Responsive Features
+   ========================================================================== */
+
+/* Enhanced focus indicators on touch devices */
+@media (pointer: coarse) {
+  .theme-toggle:focus,
+  .btn:focus,
+  .form-control:focus {
+    outline: 3px solid;
+    outline-offset: 2px;
+  }
+  [data-theme="dark"] .theme-toggle:focus,
+  [data-theme="dark"] .btn:focus,
+  [data-theme="dark"] .form-control:focus { outline-color: #4299e1; }
+  [data-theme="light"] .theme-toggle:focus,
+  [data-theme="light"] .btn:focus,
+  [data-theme="light"] .form-control:focus { outline-color: #2b6cb0; }
+  
+  /* Larger touch targets */
+  .clickable-element {
+    min-width: var(--touch-target-min);
+    min-height: var(--touch-target-min);
+  }
+}
+
+/* Reduced motion preferences */
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+  
+  .theme-toggle {
+    transition: none;
+  }
+}
+
+/* High contrast mode support */
+@media (prefers-contrast: high) {
+  [data-theme="dark"] {
+    --text-primary: #ffffff;
+    --text-secondary: #f0f0f0;
+    --border-color: #606060;
+    --bg-primary: #000000;
+    --bg-secondary: #1a1a1a;
+  }
+  
+  [data-theme="light"] {
+    --text-primary: #000000;
+    --text-secondary: #2a2a2a;
+    --border-color: #808080;
+    --bg-primary: #ffffff;
+    --bg-secondary: #f8f8f8;
+  }
+  
+  /* Enhanced border visibility */
+  .card, .btn, .form-control {
+    border-width: 2px;
+  }
+}
+
+/* ==========================================================================
+   Performance Optimization Classes
+   ========================================================================== */
+
+/* GPU acceleration for smooth animations */
+.theme-toggle,
+.card,
+.toast {
+  will-change: transform;
+  transform: translateZ(0);
+}
+
+/* Optimize rendering on mobile */
+@media screen and (max-width: 767px) and (max-resolution: 150dpi) {
+  [data-theme="dark"] {
+    --card-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+    --gradient-primary: #2d3748;
+    --gradient-accent: #4a5568;
+  }
+  .card:hover,
+  .btn:hover {
+    transform: none;
+  }
+}
+
+/* ==========================================================================
+   Container Query Support (Progressive Enhancement)
+   ========================================================================== */
+
+@supports (container-type: inline-size) {
+  .responsive-container {
+    container-type: inline-size;
+  }
+  
+  /* Component-level responsive design */
+  @container (max-width: 400px) {
+    .card-content {
+      padding: 12px;
+    }
+    
+    .theme-toggle {
+      width: 28px;
+      height: 28px;
+    }
+  }
+  
+  @container (min-width: 600px) {
+    .card-content {
+      padding: 20px;
+    }
+  }
+}
+
+/* ==========================================================================
+   Theme Transition Optimization
+   ========================================================================== */
+
+/* Optimize theme switching performance */
+@supports (view-transition-name: theme-transition) {
+  ::view-transition-old(theme-transition),
+  ::view-transition-new(theme-transition) {
+    animation-duration: 0.3s;
+    animation-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+  }
+}
+
+/* Fallback smooth theme transitions */
+html {
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+[data-theme] * {
+  transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+/* ==========================================================================
+   Debug Utilities (Development Only)
+   ========================================================================== */
+
+/* Uncomment for responsive debugging */
+/*
+@media screen and (max-width: 767px) {
+  body::before {
+    content: "Mobile";
+    position: fixed;
+    top: 0;
+    left: 0;
+    background: red;
+    color: white;
+    padding: 4px 8px;
+    z-index: 10000;
+    font-size: 12px;
+  }
+}
+
+@media screen and (min-width: 768px) and (max-width: 1024px) {
+  body::before {
+    content: "Tablet";
+    background: orange;
+  }
+}
+
+@media screen and (min-width: 1025px) {
+  body::before {
+    content: "Desktop";
+    background: green;
+  }
+}
+*/

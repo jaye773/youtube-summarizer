@@ -34,6 +34,22 @@
   --status-warning: #f39c12;   /* Warning states */
   --status-info: #3498db;      /* Info states */
   
+  /* === SEMANTIC COLOR ALIASES === */
+  --color-success: #27ae60;    /* Success color */
+  --color-error: #e74c3c;      /* Error color */
+  --color-warning: #f39c12;    /* Warning color */
+  --color-info: #3498db;       /* Info color */
+  
+  /* === STATUS BACKGROUND COLORS === */
+  --status-success-bg: #d5f4e6;  /* Light green background */
+  --status-error-bg: #fadbd8;    /* Light red background */
+  --status-warning-bg: #fcf3cf;  /* Light yellow background */
+  --status-info-bg: #d6eaf8;     /* Light blue background */
+  
+  /* === ADDITIONAL COLORS === */
+  --accent-light: rgba(142, 68, 173, 0.2);  /* Light accent for backgrounds */
+  --bg-disabled: #e9ecef;        /* Disabled element background */
+  
   /* === SHADOW DEFINITIONS === */
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
   --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.07);
@@ -58,6 +74,12 @@
   --transition-theme: all 0.3s ease;
   
   /* === SPACING & SIZING === */
+  --spacing-xs: 4px;
+  --spacing-sm: 8px;
+  --spacing-md: 16px;
+  --spacing-lg: 24px;
+  --spacing-xl: 32px;
+  --spacing-2xl: 48px;
   --border-radius-sm: 4px;
   --border-radius-md: 8px;
   --border-radius-lg: 12px;
@@ -98,6 +120,22 @@
   --status-error: #ec7063;     /* Error states */
   --status-warning: #f4d03f;   /* Warning states */
   --status-info: #5dade2;      /* Info states */
+  
+  /* === SEMANTIC COLOR ALIASES === */
+  --color-success: #2ecc71;    /* Success color */
+  --color-error: #ec7063;      /* Error color */
+  --color-warning: #f4d03f;    /* Warning color */
+  --color-info: #5dade2;       /* Info color */
+  
+  /* === STATUS BACKGROUND COLORS === */
+  --status-success-bg: rgba(46, 204, 113, 0.15);  /* Dark green background */
+  --status-error-bg: rgba(236, 112, 99, 0.15);    /* Dark red background */
+  --status-warning-bg: rgba(244, 208, 63, 0.15);  /* Dark yellow background */
+  --status-info-bg: rgba(93, 173, 226, 0.15);     /* Dark blue background */
+  
+  /* === ADDITIONAL COLORS === */
+  --accent-light: rgba(169, 112, 201, 0.15);  /* Light accent for backgrounds */
+  --bg-disabled: #3a3d44;        /* Disabled element background */
   
   /* === SHADOW DEFINITIONS === */
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);

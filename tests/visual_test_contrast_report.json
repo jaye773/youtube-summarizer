@@ -1,0 +1,174 @@
+{
+  "light_theme": [
+    {
+      "combination": "text-primary on bg-primary",
+      "text_color": "#333333",
+      "bg_color": "#f4f7f6",
+      "contrast_ratio": 11.72,
+      "meets_aa": true,
+      "meets_aaa": true,
+      "is_large_text": false
+    },
+    {
+      "combination": "text-primary on bg-secondary",
+      "text_color": "#333333",
+      "bg_color": "#ffffff",
+      "contrast_ratio": 12.63,
+      "meets_aa": true,
+      "meets_aaa": true,
+      "is_large_text": false
+    },
+    {
+      "combination": "text-primary on bg-tertiary",
+      "text_color": "#333333",
+      "bg_color": "#f8f9fa",
+      "contrast_ratio": 11.99,
+      "meets_aa": true,
+      "meets_aaa": true,
+      "is_large_text": false
+    },
+    {
+      "combination": "text-secondary on bg-primary",
+      "text_color": "#2c3e50",
+      "bg_color": "#f4f7f6",
+      "contrast_ratio": 10.19,
+      "meets_aa": true,
+      "meets_aaa": true,
+      "is_large_text": false
+    },
+    {
+      "combination": "text-secondary on bg-secondary",
+      "text_color": "#2c3e50",
+      "bg_color": "#ffffff",
+      "contrast_ratio": 10.98,
+      "meets_aa": true,
+      "meets_aaa": true,
+      "is_large_text": false
+    },
+    {
+      "combination": "text-secondary on bg-tertiary",
+      "text_color": "#2c3e50",
+      "bg_color": "#f8f9fa",
+      "contrast_ratio": 10.42,
+      "meets_aa": true,
+      "meets_aaa": true,
+      "is_large_text": false
+    },
+    {
+      "combination": "text-muted on bg-primary",
+      "text_color": "#6c757d",
+      "bg_color": "#f4f7f6",
+      "contrast_ratio": 4.35,
+      "meets_aa": true,
+      "meets_aaa": false,
+      "is_large_text": true
+    },
+    {
+      "combination": "text-muted on bg-secondary",
+      "text_color": "#6c757d",
+      "bg_color": "#ffffff",
+      "contrast_ratio": 4.69,
+      "meets_aa": true,
+      "meets_aaa": true,
+      "is_large_text": true
+    },
+    {
+      "combination": "text-muted on bg-tertiary",
+      "text_color": "#6c757d",
+      "bg_color": "#f8f9fa",
+      "contrast_ratio": 4.45,
+      "meets_aa": true,
+      "meets_aaa": false,
+      "is_large_text": true
+    }
+  ],
+  "dark_theme": [
+    {
+      "combination": "text-primary on bg-primary",
+      "text_color": "#e4e6eb",
+      "bg_color": "#1a1d23",
+      "contrast_ratio": 13.52,
+      "meets_aa": true,
+      "meets_aaa": true,
+      "is_large_text": false
+    },
+    {
+      "combination": "text-primary on bg-secondary",
+      "text_color": "#e4e6eb",
+      "bg_color": "#242830",
+      "contrast_ratio": 11.83,
+      "meets_aa": true,
+      "meets_aaa": true,
+      "is_large_text": false
+    },
+    {
+      "combination": "text-primary on bg-tertiary",
+      "text_color": "#e4e6eb",
+      "bg_color": "#2c3340",
+      "contrast_ratio": 10.16,
+      "meets_aa": true,
+      "meets_aaa": true,
+      "is_large_text": false
+    },
+    {
+      "combination": "text-secondary on bg-primary",
+      "text_color": "#b0b3b8",
+      "bg_color": "#1a1d23",
+      "contrast_ratio": 8.03,
+      "meets_aa": true,
+      "meets_aaa": true,
+      "is_large_text": false
+    },
+    {
+      "combination": "text-secondary on bg-secondary",
+      "text_color": "#b0b3b8",
+      "bg_color": "#242830",
+      "contrast_ratio": 7.03,
+      "meets_aa": true,
+      "meets_aaa": true,
+      "is_large_text": false
+    },
+    {
+      "combination": "text-secondary on bg-tertiary",
+      "text_color": "#b0b3b8",
+      "bg_color": "#2c3340",
+      "contrast_ratio": 6.04,
+      "meets_aa": true,
+      "meets_aaa": false,
+      "is_large_text": false
+    },
+    {
+      "combination": "text-muted on bg-primary",
+      "text_color": "#8b8d90",
+      "bg_color": "#1a1d23",
+      "contrast_ratio": 5.07,
+      "meets_aa": true,
+      "meets_aaa": true,
+      "is_large_text": true
+    },
+    {
+      "combination": "text-muted on bg-secondary",
+      "text_color": "#8b8d90",
+      "bg_color": "#242830",
+      "contrast_ratio": 4.44,
+      "meets_aa": true,
+      "meets_aaa": false,
+      "is_large_text": true
+    },
+    {
+      "combination": "text-muted on bg-tertiary",
+      "text_color": "#8b8d90",
+      "bg_color": "#2c3340",
+      "contrast_ratio": 3.81,
+      "meets_aa": true,
+      "meets_aaa": false,
+      "is_large_text": true
+    }
+  ],
+  "summary": {
+    "total_combinations": 18,
+    "passing_aa": 18,
+    "passing_aaa": 13,
+    "failing": 0
+  }
+}

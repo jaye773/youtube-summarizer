@@ -4,40 +4,61 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Settings - YouTube Summarizer</title>
+    
+    <!-- Prevent flash of unstyled content -->
+    <script>
+        (function() {
+            const savedTheme = localStorage.getItem('youtube-summarizer-theme');
+            const systemPreference = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+            const theme = savedTheme || systemPreference;
+            document.documentElement.setAttribute('data-theme', theme);
+            document.documentElement.classList.remove('no-js');
+        })();
+    </script>
+    
+    <!-- Theme System CSS -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/theme-variables.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/forms-theme.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/cards-theme.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/theme-integration.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/responsive-theme.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/dark-mode.css') }}">
+    
     <style>
         body { 
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; 
             line-height: 1.6; 
-            background-color: #f4f7f6; 
-            color: #333; 
+            background-color: var(--bg-primary); 
+            color: var(--text-primary); 
             margin: 0; 
             padding: 20px; 
         }
         .container { 
             max-width: 800px; 
             margin: 0 auto; 
-            background-color: #fff; 
+            background-color: var(--bg-secondary); 
             padding: 30px; 
             border-radius: 10px; 
-            box-shadow: 0 4px 15px rgba(0,0,0,0.1); 
+            box-shadow: var(--shadow-lg); 
         }
         .header {
             display: flex;
             align-items: center;
             justify-content: space-between;
             margin-bottom: 30px;
-            border-bottom: 2px solid #ecf0f1;
+            border-bottom: 2px solid var(--border-subtle);
             padding-bottom: 15px;
         }
         .header h1 { 
-            color: #2c3e50; 
+            color: var(--text-secondary); 
             margin: 0;
             display: flex;
             align-items: center;
             gap: 10px;
         }
         .back-btn {
-            background-color: #95a5a6;
+            background-color: var(--border-strong);
             color: white;
             border: none;
             padding: 10px 20px;
@@ -51,7 +72,7 @@
             transition: background-color 0.3s;
         }
         .back-btn:hover {
-            background-color: #7f8c8d;
+            background-color: var(--text-muted);
         }
         .settings-form {
             display: flex;
@@ -65,41 +86,43 @@
         }
         .form-group label {
             font-weight: bold;
-            color: #2c3e50;
+            color: var(--text-secondary);
             font-size: 14px;
         }
         .form-group input, .form-group select {
             padding: 12px;
-            border: 1px solid #bdc3c7;
+            border: 1px solid var(--border-strong);
             border-radius: 6px;
             font-size: 16px;
             transition: border-color 0.3s;
+            height: 44px;
+            box-sizing: border-box;
         }
         .form-group input:focus, .form-group select:focus {
             outline: none;
-            border-color: #8e44ad;
-            box-shadow: 0 0 0 2px rgba(142, 68, 173, 0.2);
+            border-color: var(--accent-primary);
+            box-shadow: 0 0 0 2px var(--accent-light);
         }
         .form-group .description {
             font-size: 12px;
-            color: #7f8c8d;
+            color: var(--text-muted);
             margin-top: 4px;
         }
         .form-section {
-            border: 1px solid #ecf0f1;
+            border: 1px solid var(--border-subtle);
             border-radius: 8px;
             padding: 20px;
-            background-color: #fafafa;
+            background-color: var(--bg-tertiary);
         }
         .form-section h3 {
             margin: 0 0 15px 0;
-            color: #2c3e50;
+            color: var(--text-secondary);
             font-size: 18px;
-            border-bottom: 1px solid #ecf0f1;
+            border-bottom: 1px solid var(--border-subtle);
             padding-bottom: 8px;
         }
         .save-btn {
-            background-color: #27ae60;
+            background-color: var(--color-success);
             color: white;
             border: none;
             padding: 15px 30px;
@@ -112,10 +135,10 @@
             margin-top: 20px;
         }
         .save-btn:hover {
-            background-color: #229954;
+            background-color: var(--status-success);
         }
         .save-btn:disabled {
-            background-color: #bdc3c7;
+            background-color: var(--border-strong);
             cursor: not-allowed;
         }
         .message {
@@ -125,14 +148,14 @@
             display: none;
         }
         .message.success {
-            background-color: #d5f4e6;
-            color: #27ae60;
-            border: 1px solid #27ae60;
+            background-color: var(--status-success-bg);
+            color: var(--color-success);
+            border: 1px solid var(--color-success);
         }
         .message.error {
-            background-color: #fadbd8;
-            color: #e74c3c;
-            border: 1px solid #e74c3c;
+            background-color: var(--status-error-bg);
+            color: var(--color-error);
+            border: 1px solid var(--color-error);
         }
         .checkbox-group {
             display: flex;
@@ -145,25 +168,47 @@
         }
         .password-toggle {
             position: relative;
+            width: 100%;
+            display: flex;
+            align-items: center;
         }
         .password-toggle input {
-            padding-right: 40px;
+            width: 100%;
+            padding-right: 48px;
+            height: 44px;
         }
         .password-toggle .toggle-btn {
             position: absolute;
-            right: 10px;
-            top: 50%;
-            transform: translateY(-50%);
-            background: none;
+            right: 6px;
+            top: 0;
+            bottom: 0;
+            background: transparent;
             border: none;
             cursor: pointer;
-            font-size: 16px;
-            color: #7f8c8d;
+            color: var(--text-muted);
+            padding: 0 4px;
+            width: 40px;
+            transition: all 0.2s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 4px;
+        }
+        .password-toggle .toggle-btn:hover {
+            background: var(--bg-tertiary);
+            color: var(--text-primary);
+        }
+        .password-toggle .toggle-btn svg {
+            width: 18px;
+            height: 18px;
+            stroke: currentColor;
+            stroke-width: 2;
+            fill: none;
         }
         .loading {
             display: none;
             margin-left: 10px;
-            color: #7f8c8d;
+            color: var(--text-muted);
         }
         
         /* Voice Selection Styles */
@@ -178,25 +223,25 @@
             align-items: center;
             justify-content: space-between;
             padding: 12px 16px;
-            border: 2px solid #ecf0f1;
+            border: 2px solid var(--border-subtle);
             border-radius: 8px;
-            background-color: #fff;
+            background-color: var(--bg-secondary);
             transition: all 0.3s ease;
             cursor: pointer;
         }
         
         .voice-option:hover {
-            border-color: #bdc3c7;
+            border-color: var(--border-strong);
             background-color: #f8f9fa;
         }
         
         .voice-option:focus {
-            outline: 3px solid #8e44ad;
+            outline: 3px solid var(--accent-primary);
             outline-offset: 2px;
         }
         
         .voice-option.selected {
-            border-color: #8e44ad;
+            border-color: var(--accent-primary);
             background-color: #f4f1f7;
         }
         
@@ -209,13 +254,13 @@
         
         .voice-name {
             font-weight: 600;
-            color: #2c3e50;
+            color: var(--text-secondary);
             font-size: 15px;
         }
         
         .voice-description {
             font-size: 13px;
-            color: #7f8c8d;
+            color: var(--text-muted);
         }
         
         .voice-characteristics {
@@ -225,21 +270,21 @@
         }
         
         .voice-tag {
-            background-color: #ecf0f1;
-            color: #5d6d7e;
+            background-color: var(--border-subtle);
+            color: var(--text-muted);
             padding: 2px 8px;
             border-radius: 12px;
             font-size: 11px;
             font-weight: 500;
         }
         
-        .voice-tag.gender-male { background-color: #d5e8f7; color: #2980b9; }
-        .voice-tag.gender-female { background-color: #f7d5e8; color: #e91e63; }
-        .voice-tag.accent-us { background-color: #e8f5e8; color: #27ae60; }
-        .voice-tag.accent-uk { background-color: #fff3cd; color: #f39c12; }
-        .voice-tag.accent-au { background-color: #f0e6ff; color: #8e44ad; }
-        .voice-tag.style-professional { background-color: #d1ecf1; color: #17a2b8; }
-        .voice-tag.style-warm { background-color: #ffeaa7; color: #e17055; }
+        .voice-tag.gender-male { background-color: #d5e8f7; color: var(--color-info); }
+        .voice-tag.gender-female { background-color: #f7d5e8; color: var(--status-error); }
+        .voice-tag.accent-us { background-color: #e8f5e8; color: var(--color-success); }
+        .voice-tag.accent-uk { background-color: var(--status-warning-bg); color: var(--color-warning); }
+        .voice-tag.accent-au { background-color: #f0e6ff; color: var(--accent-primary); }
+        .voice-tag.style-professional { background-color: #d1ecf1; color: var(--color-info); }
+        .voice-tag.style-warm { background-color: #ffeaa7; color: var(--status-warning); }
         .voice-tag.style-casual { background-color: #fab1a0; color: #e84393; }
         
         .voice-controls {
@@ -249,7 +294,7 @@
         }
         
         .preview-btn {
-            background-color: #3498db;
+            background-color: var(--color-info);
             color: white;
             border: none;
             padding: 12px 16px;
@@ -266,16 +311,16 @@
         }
         
         .preview-btn:hover {
-            background-color: #2980b9;
+            background-color: var(--color-info);
         }
         
         .preview-btn:disabled {
-            background-color: #bdc3c7;
+            background-color: var(--border-strong);
             cursor: not-allowed;
         }
         
         .preview-btn.playing {
-            background-color: #e74c3c;
+            background-color: var(--color-error);
         }
         
         .preview-btn.playing:hover {
@@ -285,13 +330,13 @@
         .voice-radio {
             width: 20px;
             height: 20px;
-            accent-color: #8e44ad;
+            accent-color: var(--accent-primary);
         }
         
         .sample-text-input {
             margin-top: 15px;
             padding: 10px;
-            border: 1px solid #bdc3c7;
+            border: 1px solid var(--border-strong);
             border-radius: 6px;
             font-size: 14px;
             resize: vertical;
@@ -300,8 +345,8 @@
         
         .sample-text-input:focus {
             outline: none;
-            border-color: #8e44ad;
-            box-shadow: 0 0 0 2px rgba(142, 68, 173, 0.2);
+            border-color: var(--accent-primary);
+            box-shadow: 0 0 0 2px var(--accent-light);
         }
         
         .voice-section-header {
@@ -312,7 +357,7 @@
         }
         
         .test-all-btn {
-            background-color: #95a5a6;
+            background-color: var(--border-strong);
             color: white;
             border: none;
             padding: 12px 20px;
@@ -324,11 +369,11 @@
         }
         
         .test-all-btn:hover {
-            background-color: #7f8c8d;
+            background-color: var(--text-muted);
         }
         
         .test-all-btn:disabled {
-            background-color: #bdc3c7;
+            background-color: var(--border-strong);
             cursor: not-allowed;
         }
         
@@ -337,7 +382,7 @@
             width: 12px;
             height: 12px;
             border: 2px solid #f3f3f3;
-            border-top: 2px solid #3498db;
+            border-top: 2px solid var(--color-info);
             border-radius: 50%;
             animation: spin 1s linear infinite;
         }
@@ -345,7 +390,7 @@
         .progress-container {
             width: 100%;
             height: 4px;
-            background-color: #ecf0f1;
+            background-color: var(--border-subtle);
             border-radius: 2px;
             margin-top: 8px;
             overflow: hidden;
@@ -353,7 +398,7 @@
         
         .progress-bar {
             height: 100%;
-            background-color: #3498db;
+            background-color: var(--color-info);
             border-radius: 2px;
             transition: width 0.3s ease;
             width: 0%;
@@ -362,6 +407,136 @@
         @keyframes spin {
             0% { transform: rotate(0deg); }
             100% { transform: rotate(360deg); }
+        }
+        
+        /* Theme Selector Styles */
+        .theme-selector {
+            display: flex;
+            gap: 20px;
+            margin-top: 10px;
+            flex-wrap: wrap;
+        }
+        
+        .theme-option {
+            flex: 1;
+            min-width: 150px;
+            border: 2px solid var(--border-subtle);
+            border-radius: var(--border-radius-md);
+            padding: 15px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            background: var(--bg-secondary);
+        }
+        
+        .theme-option:hover {
+            border-color: var(--accent-primary);
+            transform: translateY(-2px);
+            box-shadow: var(--shadow-md);
+        }
+        
+        .theme-option.selected {
+            border-color: var(--accent-primary);
+            background: var(--accent-light);
+        }
+        
+        .theme-preview {
+            width: 100%;
+            height: 80px;
+            border-radius: 4px;
+            overflow: hidden;
+            margin-bottom: 10px;
+            border: 1px solid var(--border-subtle);
+        }
+        
+        .light-preview {
+            background: var(--bg-secondary);
+        }
+        
+        .light-preview .preview-header {
+            background: #8e44ad;
+            height: 20px;
+        }
+        
+        .light-preview .preview-content {
+            padding: 10px;
+            background: #f4f7f6;
+        }
+        
+        .light-preview .preview-line {
+            height: 8px;
+            background: #2c3e50;
+            margin-bottom: 5px;
+            border-radius: 2px;
+        }
+        
+        .light-preview .preview-line.short {
+            width: 60%;
+        }
+        
+        .dark-preview {
+            background: #242830;
+        }
+        
+        .dark-preview .preview-header {
+            background: #a970c9;
+            height: 20px;
+        }
+        
+        .dark-preview .preview-content {
+            padding: 10px;
+            background: #1a1d23;
+        }
+        
+        .dark-preview .preview-line {
+            height: 8px;
+            background: #b0b3b8;
+            margin-bottom: 5px;
+            border-radius: 2px;
+        }
+        
+        .dark-preview .preview-line.short {
+            width: 60%;
+        }
+        
+        .auto-preview {
+            background: linear-gradient(90deg, var(--bg-secondary) 50%, #242830 50%);
+        }
+        
+        .auto-preview .preview-header {
+            background: linear-gradient(90deg, #8e44ad 50%, #a970c9 50%);
+            height: 20px;
+        }
+        
+        .auto-preview .preview-content {
+            padding: 10px;
+            background: linear-gradient(90deg, #f4f7f6 50%, #1a1d23 50%);
+        }
+        
+        .auto-preview .preview-line {
+            height: 8px;
+            background: linear-gradient(90deg, #2c3e50 50%, #b0b3b8 50%);
+            margin-bottom: 5px;
+            border-radius: 2px;
+        }
+        
+        .auto-preview .preview-line.short {
+            width: 60%;
+        }
+        
+        .theme-label {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .theme-label input[type="radio"] {
+            margin: 0;
+        }
+        
+        .theme-label label {
+            margin: 0;
+            font-weight: 600;
+            cursor: pointer;
         }
         
         /* Screen reader only text */
@@ -436,6 +611,63 @@
         <div id="message" class="message"></div>
 
         <form id="settings-form" class="settings-form">
+            <!-- Theme Settings Section -->
+            <div class="form-section">
+                <h3>🎨 Theme Settings</h3>
+                
+                <div class="form-group">
+                    <label>Color Theme</label>
+                    <div class="theme-selector">
+                        <div class="theme-option" data-theme="light" onclick="setTheme('light')">
+                            <div class="theme-preview light-preview">
+                                <div class="preview-header"></div>
+                                <div class="preview-content">
+                                    <div class="preview-line"></div>
+                                    <div class="preview-line short"></div>
+                                </div>
+                            </div>
+                            <div class="theme-label">
+                                <input type="radio" name="theme" value="light" id="theme-light">
+                                <label for="theme-light">
+                                    ☀️ Light Mode
+                                </label>
+                            </div>
+                        </div>
+                        <div class="theme-option" data-theme="dark" onclick="setTheme('dark')">
+                            <div class="theme-preview dark-preview">
+                                <div class="preview-header"></div>
+                                <div class="preview-content">
+                                    <div class="preview-line"></div>
+                                    <div class="preview-line short"></div>
+                                </div>
+                            </div>
+                            <div class="theme-label">
+                                <input type="radio" name="theme" value="dark" id="theme-dark">
+                                <label for="theme-dark">
+                                    🌙 Dark Mode
+                                </label>
+                            </div>
+                        </div>
+                        <div class="theme-option" data-theme="auto" onclick="setTheme('auto')">
+                            <div class="theme-preview auto-preview">
+                                <div class="preview-header"></div>
+                                <div class="preview-content">
+                                    <div class="preview-line"></div>
+                                    <div class="preview-line short"></div>
+                                </div>
+                            </div>
+                            <div class="theme-label">
+                                <input type="radio" name="theme" value="auto" id="theme-auto">
+                                <label for="theme-auto">
+                                    🔄 Auto (System)
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="description">Choose your preferred color theme or let it follow your system settings</div>
+                </div>
+            </div>
+            
             <!-- API Configuration Section -->
             <div class="form-section">
                 <h3>🔑 API Configuration</h3>
@@ -444,7 +676,12 @@
                     <label for="google_api_key">Google API Key</label>
                     <div class="password-toggle">
                         <input type="password" id="google_api_key" name="google_api_key" value="{{ env_vars.GOOGLE_API_KEY or '' }}">
-                        <button type="button" class="toggle-btn" onclick="togglePassword('google_api_key')">👁️</button>
+                        <button type="button" class="toggle-btn" onclick="togglePassword('google_api_key')">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                                <circle cx="12" cy="12" r="3"></circle>
+                            </svg>
+                        </button>
                     </div>
                     <div class="description">Required for YouTube API access and Gemini AI models</div>
                 </div>
@@ -453,7 +690,12 @@
                     <label for="openai_api_key">OpenAI API Key</label>
                     <div class="password-toggle">
                         <input type="password" id="openai_api_key" name="openai_api_key" value="{{ env_vars.OPENAI_API_KEY or '' }}">
-                        <button type="button" class="toggle-btn" onclick="togglePassword('openai_api_key')">👁️</button>
+                        <button type="button" class="toggle-btn" onclick="togglePassword('openai_api_key')">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                                <circle cx="12" cy="12" r="3"></circle>
+                            </svg>
+                        </button>
                     </div>
                     <div class="description">Required for OpenAI models (GPT-4o, GPT-4 Turbo, GPT-3.5 Turbo)</div>
                 </div>
@@ -475,7 +717,11 @@
                     <label for="login_code">Login Passcode</label>
                     <div class="password-toggle">
                         <input type="password" id="login_code" name="login_code" value="{{ env_vars.LOGIN_CODE or '' }}">
-                        <button type="button" class="toggle-btn" onclick="togglePassword('login_code')">👁️</button>
+                        <button type="button" class="toggle-btn" onclick="togglePassword('login_code')">                            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                                <circle cx="12" cy="12" r="3"></circle>
+                            </svg>
+                        </button>
                     </div>
                     <div class="description">The passcode users must enter to access the application</div>
                 </div>
@@ -484,7 +730,11 @@
                     <label for="session_secret_key">Session Secret Key</label>
                     <div class="password-toggle">
                         <input type="password" id="session_secret_key" name="session_secret_key" value="{{ env_vars.SESSION_SECRET_KEY or '' }}">
-                        <button type="button" class="toggle-btn" onclick="togglePassword('session_secret_key')">👁️</button>
+                        <button type="button" class="toggle-btn" onclick="togglePassword('session_secret_key')">                            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                                <circle cx="12" cy="12" r="3"></circle>
+                            </svg>
+                        </button>
                     </div>
                     <div class="description">Secret key for session encryption (auto-generated if empty)</div>
                 </div>
@@ -536,7 +786,11 @@
                     <label for="webshare_proxy_password">Proxy Password</label>
                     <div class="password-toggle">
                         <input type="password" id="webshare_proxy_password" name="webshare_proxy_password" value="{{ env_vars.WEBSHARE_PROXY_PASSWORD or '' }}">
-                        <button type="button" class="toggle-btn" onclick="togglePassword('webshare_proxy_password')">👁️</button>
+                        <button type="button" class="toggle-btn" onclick="togglePassword('webshare_proxy_password')">                            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                                <circle cx="12" cy="12" r="3"></circle>
+                            </svg>
+                        </button>
                     </div>
                     <div class="description">Proxy authentication password</div>
                 </div>
@@ -801,14 +1055,26 @@
     <script>
         function togglePassword(fieldId) {
             const field = document.getElementById(fieldId);
-            const button = field.nextElementSibling;
-
+            const button = field.parentElement.querySelector('.toggle-btn');
+            
             if (field.type === 'password') {
                 field.type = 'text';
-                button.textContent = '🙈';
+                // Show "eye with slash" icon when password is visible
+                button.innerHTML = `
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path>
+                        <line x1="1" y1="1" x2="23" y2="23"></line>
+                    </svg>
+                `;
             } else {
                 field.type = 'password';
-                button.textContent = '👁️';
+                // Show regular eye icon when password is hidden
+                button.innerHTML = `
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                        <circle cx="12" cy="12" r="3"></circle>
+                    </svg>
+                `;
             }
         }
 
@@ -1205,6 +1471,39 @@
                 selectVoice(voiceId);
             }
         });
+    </script>
+    
+    <!-- Theme System JavaScript -->
+    <script type="module">
+        import themeManager from '{{ url_for('static', filename='js/theme-manager.js') }}';
+        window.themeManager = themeManager;
+        
+        // Initialize theme selection
+        document.addEventListener('DOMContentLoaded', function() {
+            const currentTheme = themeManager.getTheme();
+            const themeRadio = document.querySelector(`input[name="theme"][value="${currentTheme}"]`);
+            if (themeRadio) {
+                themeRadio.checked = true;
+                document.querySelector(`.theme-option[data-theme="${currentTheme}"]`)?.classList.add('selected');
+            }
+        });
+        
+        // Theme selection function
+        window.setTheme = function(theme) {
+            themeManager.setTheme(theme);
+            
+            // Update radio button
+            document.querySelector(`input[name="theme"][value="${theme}"]`).checked = true;
+            
+            // Update selected state
+            document.querySelectorAll('.theme-option').forEach(option => {
+                option.classList.remove('selected');
+            });
+            document.querySelector(`.theme-option[data-theme="${theme}"]`).classList.add('selected');
+            
+            // Show confirmation
+            showMessage('Theme updated successfully!', 'success');
+        };
     </script>
 </body>
 </html>
