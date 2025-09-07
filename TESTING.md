@@ -48,10 +48,11 @@ make help
 
 ## Test Coverage
 
-### Python Test Files (15 files)
+### Python Test Files (23 files)
 - **Module 1 - Worker Core**: `test_job_models.py`, `test_job_queue.py`, `test_worker_manager.py`
 - **Module 2 - State Management**: `test_job_state.py`, `test_error_handler.py`
-- **Module 3 - SSE Implementation**: `test_sse_manager.py`
+- **Module 3 - SSE Implementation**: `test_sse_manager.py`, `test_sse_auth.py`, `test_sse_auth_simple.py`, `test_sse_auth_playwright.py`
+- **Module 4 - Voice Features**: `test_voice_validation.py`, `test_integration_voice.py`, `test_voice_config.py`
 - **Module 5 - Integration**: `test_app_integration.py`, `test_async_endpoints.py`, `test_end_to_end.py`, `test_fallback_scenarios.py`
 
 ### JavaScript Test Files (7 files)

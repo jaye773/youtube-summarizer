@@ -188,9 +188,9 @@ The feature is production-ready and can be deployed immediately with:
 
 ## Test Files Created
 
-1. **`test_voice_validation.py`** - Comprehensive unit and integration tests
-2. **`test_integration_voice.py`** - End-to-end validation suite
-3. **`test_voice_config.py`** - Configuration validation (existing)
+1. **`tests/test_voice_validation.py`** - Comprehensive unit and integration tests
+2. **`tests/test_integration_voice.py`** - End-to-end validation suite
+3. **`tests/test_voice_config.py`** - Configuration validation (existing)
 
 ## Conclusion
 

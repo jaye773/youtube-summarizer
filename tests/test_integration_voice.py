@@ -274,7 +274,8 @@ def test_frontend_integration():
 
     try:
         # Test that templates directory exists and has settings.html
-        templates_dir = Path(__file__).parent / "templates"
+        project_root = Path(__file__).resolve().parent.parent
+        templates_dir = project_root / "templates"
         settings_template = templates_dir / "settings.html"
 
         if settings_template.exists():

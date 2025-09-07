@@ -20,7 +20,8 @@ os.environ['GOOGLE_API_KEY'] = 'test-key'
 os.environ['OPENAI_API_KEY'] = 'test-key'
 
 # Add project root to path
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, PROJECT_ROOT)
 
 from app import app, LOGIN_ENABLED
 from flask import session
@@ -78,17 +79,17 @@ class TestSSEAuthentication(unittest.TestCase):
                 sess['username'] = 'testuser'
                 sess['session_id'] = 'test-session-456'
 
-            # Connect to SSE
-            response = client.get('/events',
-                                headers={'Accept': 'text/event-stream'})
+            # Connect to SSE and read a single event
+            response = client.get(
+                '/events', headers={'Accept': 'text/event-stream'}
+            )
 
             self.assertEqual(response.status_code, 200)
 
-            # Read some data to ensure connection is established
-            # Note: In a real SSE connection, this would be a stream
-            # For testing, we just verify the initial response
-            data = response.get_data(as_text=True)
-            self.assertIn('event:', data, "Should contain SSE event format")
+            # Read first chunk to confirm stream starts
+            first_chunk = next(response.response)
+            self.assertIn(b'event:', first_chunk, "Should contain SSE event format")
+            response.close()
 
     def test_sse_status_requires_auth(self):
         """Test that SSE status endpoint also requires authentication"""
@@ -116,8 +117,9 @@ class TestSSEAuthentication(unittest.TestCase):
         # This test verifies the EventSource configuration
 
         # Read the SSE client JavaScript
-        client_js_path = os.path.join(os.path.dirname(__file__),
-                                      'static', 'js', 'sse_client.js')
+        client_js_path = os.path.join(
+            PROJECT_ROOT, 'static', 'js', 'sse_client.js'
+        )
 
         with open(client_js_path, 'r') as f:
             client_js = f.read()

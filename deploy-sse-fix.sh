@@ -123,7 +123,7 @@ main() {
             ;;
         test)
             echo "Running SSE tests..."
-            python test_sse_fixed.py http://localhost:8431 --username admin --password password
+            python tests/test_sse_fixed.py http://localhost:8431 --username admin --password password
             ;;
         *)
             echo "Usage: $0 [deploy|stop|verify|logs|test]"
