@@ -996,11 +996,162 @@ def debug_model():
         )
 
 
+def _notify_progress(session_id, data):
+    """Send a summary_progress SSE notification."""
+    broadcast_to_connections(
+        "summary_progress", data,
+        session_filter=session_id,
+        subscription_filter="summary_progress",
+    )
+
+
+def _notify_complete(session_id, data):
+    """Send a summary_complete SSE notification."""
+    broadcast_to_connections(
+        "summary_complete", data,
+        session_filter=session_id,
+        subscription_filter="summary_complete",
+    )
+
+
+def _summarize_and_cache(vid_id, vid_title, thumbnail_url, model_key):
+    """Fetch transcript, generate summary, and cache the result.
+
+    Returns:
+        Tuple of (summary_text_or_None, error_string_or_None).
+    """
+    transcript, err = get_transcript(vid_id)
+    summary, err = (None, err) if err else generate_summary(transcript, vid_title, model_key)
+
+    if summary and not err:
+        audio_filename = f"{hashlib.sha256(summary.encode('utf-8')).hexdigest()}.mp3"
+        summary_cache[vid_id] = build_cache_entry(
+            vid_title, summary, thumbnail_url, vid_id, model_key, audio_filename
+        )
+        save_summary_cache(summary_cache, SUMMARY_CACHE_FILE)
+
+    return summary, err
+
+
+def _process_playlist_url(url, playlist_id, model_key, session_id, processed_count):
+    """Process a playlist URL and return (result_dict, videos_processed_count)."""
+    if not youtube:
+        return {"type": "error", "url": url, "error": "YouTube API client not initialized"}, 0
+
+    pl_meta_request = youtube.playlists().list(part="snippet", id=playlist_id)
+    pl_meta_response = pl_meta_request.execute()
+    if not pl_meta_response.get("items"):
+        return {"type": "error", "url": url, "error": "Could not find this playlist."}, 0
+
+    playlist_title = pl_meta_response["items"][0]["snippet"]["title"]
+    playlist_items, error = get_videos_from_playlist(playlist_id)
+    if error:
+        return {"type": "playlist", "title": playlist_title, "error": error, "summaries": []}, 0
+
+    total_videos = len(playlist_items)
+    _notify_progress(session_id, {
+        "status": "processing",
+        "message": f"Processing playlist with {total_videos} videos",
+        "progress": processed_count,
+        "total": processed_count + total_videos,
+        "current_playlist": playlist_title,
+    })
+
+    playlist_summaries = []
+    for index, item in enumerate(playlist_items):
+        snippet = item.get("snippet", {})
+        vid_id = snippet.get("resourceId", {}).get("videoId")
+        vid_title = snippet.get("title", "Unknown Title")
+        thumbnail_url = snippet.get("thumbnails", {}).get("medium", {}).get("url")
+
+        _notify_progress(session_id, {
+            "status": "processing",
+            "message": f"Processing: {vid_title[:50]}{'...' if len(vid_title) > 50 else ''}",
+            "progress": processed_count + index + 1,
+            "total": processed_count + total_videos,
+            "current_video": {"id": vid_id, "title": vid_title, "playlist": playlist_title},
+        })
+
+        if vid_title in ["Private video", "Deleted video"]:
+            playlist_summaries.append({
+                "video_id": vid_id, "title": vid_title, "thumbnail_url": thumbnail_url,
+                "summary": None, "error": "Video is private or deleted.",
+            })
+            continue
+
+        if vid_id in summary_cache:
+            cached_item = summary_cache[vid_id]
+            playlist_summaries.append({
+                "video_id": vid_id, "title": cached_item["title"],
+                "thumbnail_url": cached_item["thumbnail_url"],
+                "summary": cached_item["summary"],
+                "video_url": cached_item.get("video_url", f"https://www.youtube.com/watch?v={vid_id}"),
+                "error": None,
+            })
+            _notify_complete(session_id, {
+                "video_id": vid_id, "title": vid_title, "source": "cache", "playlist": playlist_title,
+            })
+            continue
+
+        summary, err = _summarize_and_cache(vid_id, vid_title, thumbnail_url, model_key)
+        if summary and not err:
+            _notify_complete(session_id, {
+                "video_id": vid_id, "title": vid_title, "source": "generated",
+                "model_used": model_key, "playlist": playlist_title,
+            })
+
+        playlist_summaries.append({
+            "video_id": vid_id, "title": vid_title, "thumbnail_url": thumbnail_url,
+            "summary": summary, "video_url": f"https://www.youtube.com/watch?v={vid_id}",
+            "error": err,
+        })
+
+    return {"type": "playlist", "title": playlist_title, "summaries": playlist_summaries}, total_videos
+
+
+def _process_video_url(video_id, model_key, session_id, processed_count, total_urls):
+    """Process a single video URL and return a result dict."""
+    details = get_video_details([video_id]).get(video_id, {})
+    title = details.get("title", "Unknown Video")
+
+    _notify_progress(session_id, {
+        "status": "processing",
+        "message": f"Processing: {title[:50]}{'...' if len(title) > 50 else ''}",
+        "progress": processed_count,
+        "total": total_urls,
+        "current_video": {"id": video_id, "title": title},
+    })
+
+    if video_id in summary_cache:
+        cached_item = summary_cache[video_id]
+        _notify_complete(session_id, {
+            "video_id": video_id, "title": cached_item["title"], "source": "cache",
+        })
+        return {
+            "type": "video", "video_id": video_id, "title": cached_item["title"],
+            "thumbnail_url": cached_item["thumbnail_url"], "summary": cached_item["summary"],
+            "video_url": cached_item.get("video_url", f"https://www.youtube.com/watch?v={video_id}"),
+            "error": None,
+        }
+
+    thumbnail_url = details.get("thumbnail_url")
+    summary, err = _summarize_and_cache(video_id, title, thumbnail_url, model_key)
+    if summary and not err:
+        _notify_complete(session_id, {
+            "video_id": video_id, "title": title, "source": "generated", "model_used": model_key,
+        })
+
+    return {
+        "type": "video", "video_id": video_id, "title": title,
+        "thumbnail_url": thumbnail_url, "summary": summary,
+        "video_url": f"https://www.youtube.com/watch?v={video_id}", "error": err,
+    }
+
+
 @app.route("/summarize", methods=["POST"])
 @require_auth
 def summarize_links():
     try:
-        # Parse request data
         data = request.get_json()
         if not data:
             return jsonify({"error": "Invalid JSON in request body"}), 400
@@ -1008,47 +1159,26 @@ def summarize_links():
         if not urls:
             return jsonify({"error": "No URLs provided"}), 400
 
-        # Get model parameter (optional, defaults to DEFAULT_MODEL)
         model_key = data.get("model", DEFAULT_MODEL)
-
-        # Validate model key
         if model_key not in AVAILABLE_MODELS:
             available_models = list(AVAILABLE_MODELS.keys())
-            return (
-                jsonify({"error": f"Unsupported model: {model_key}. Available models: {available_models}"}),
-                400,
-            )
+            return jsonify({"error": f"Unsupported model: {model_key}. Available models: {available_models}"}), 400
 
-        # Get session ID for SSE notifications
         session_id = session.get("session_id") or session.sid if hasattr(session, "sid") else None
 
         # Send initial progress notification
-        total_items = sum(1 for url in urls for _ in [get_playlist_id(url)] if _ is None or get_video_id(url))
-        if any(get_playlist_id(url) for url in urls):
-            # If there are playlists, we'll update the count as we discover videos
-            broadcast_to_connections(
-                "summary_progress",
-                {
-                    "status": "starting",
-                    "message": "Analyzing URLs and counting videos...",
-                    "progress": 0,
-                    "total": None,
-                },
-                session_filter=session_id,
-                subscription_filter="summary_progress",
-            )
+        has_playlists = any(get_playlist_id(url) for url in urls)
+        if has_playlists:
+            _notify_progress(session_id, {
+                "status": "starting", "message": "Analyzing URLs and counting videos...",
+                "progress": 0, "total": None,
+            })
         else:
-            broadcast_to_connections(
-                "summary_progress",
-                {
-                    "status": "starting",
-                    "message": f"Starting to process {total_items} videos",
-                    "progress": 0,
-                    "total": total_items,
-                },
-                session_filter=session_id,
-                subscription_filter="summary_progress",
-            )
+            total_items = sum(1 for url in urls if get_video_id(url))
+            _notify_progress(session_id, {
+                "status": "starting", "message": f"Starting to process {total_items} videos",
+                "progress": 0, "total": total_items,
+            })
 
         results = []
         processed_count = 0
@@ -1057,309 +1187,40 @@ def summarize_links():
 
             if playlist_id:
                 try:
-                    if not youtube:
-                        results.append(
-                            {
-                                "type": "error",
-                                "url": url,
-                                "error": "YouTube API client not initialized",
-                            }
-                        )
-                        continue
-                    pl_meta_request = youtube.playlists().list(part="snippet", id=playlist_id)
-                    pl_meta_response = pl_meta_request.execute()
-                    if not pl_meta_response.get("items"):
-                        results.append(
-                            {
-                                "type": "error",
-                                "url": url,
-                                "error": "Could not find this playlist.",
-                            }
-                        )
-                        continue
-                    playlist_title = pl_meta_response["items"][0]["snippet"]["title"]
-                    playlist_items, error = get_videos_from_playlist(playlist_id)
-                    if error:
-                        results.append(
-                            {
-                                "type": "playlist",
-                                "title": playlist_title,
-                                "error": error,
-                                "summaries": [],
-                            }
-                        )
-                        continue
-
-                    playlist_summaries = []
-                    total_videos = len(playlist_items)
-
-                    # Update total count now that we know playlist size
-                    broadcast_to_connections(
-                        "summary_progress",
-                        {
-                            "status": "processing",
-                            "message": f"Processing playlist with {total_videos} videos",
-                            "progress": processed_count,
-                            "total": processed_count + total_videos,
-                            "current_playlist": playlist_title,
-                        },
-                        session_filter=session_id,
-                        subscription_filter="summary_progress",
-                    )
-
-                    for index, item in enumerate(playlist_items):
-                        snippet = item.get("snippet", {})
-                        vid_id = snippet.get("resourceId", {}).get("videoId")
-                        vid_title, thumbnail_url = snippet.get("title", "Unknown Title"), snippet.get(
-                            "thumbnails", {}
-                        ).get("medium", {}).get("url")
-
-                        # Send progress update for current video
-                        broadcast_to_connections(
-                            "summary_progress",
-                            {
-                                "status": "processing",
-                                "message": f"Processing: {vid_title[:50]}{'...' if len(vid_title) > 50 else ''}",
-                                "progress": processed_count + index + 1,
-                                "total": processed_count + total_videos,
-                                "current_video": {
-                                    "id": vid_id,
-                                    "title": vid_title,
-                                    "playlist": playlist_title,
-                                },
-                            },
-                            session_filter=session_id,
-                            subscription_filter="summary_progress",
-                        )
-
-                        if vid_title in ["Private video", "Deleted video"]:
-                            playlist_summaries.append(
-                                {
-                                    "video_id": vid_id,
-                                    "title": vid_title,
-                                    "thumbnail_url": thumbnail_url,
-                                    "summary": None,
-                                    "error": "Video is private or deleted.",
-                                }
-                            )
-                            continue
-
-                        if vid_id in summary_cache:
-                            cached_item = summary_cache[vid_id]
-                            playlist_summaries.append(
-                                {
-                                    "video_id": vid_id,
-                                    "title": cached_item["title"],
-                                    "thumbnail_url": cached_item["thumbnail_url"],
-                                    "summary": cached_item["summary"],
-                                    "video_url": cached_item.get(
-                                        "video_url",
-                                        f"https://www.youtube.com/watch?v={vid_id}",
-                                    ),
-                                    "error": None,
-                                }
-                            )
-
-                            # Send completion notification for cached video
-                            broadcast_to_connections(
-                                "summary_complete",
-                                {
-                                    "video_id": vid_id,
-                                    "title": vid_title,
-                                    "source": "cache",
-                                    "playlist": playlist_title,
-                                },
-                                session_filter=session_id,
-                                subscription_filter="summary_complete",
-                            )
-                            continue
-
-                        transcript, err = get_transcript(vid_id)
-                        summary, err = (None, err) if err else generate_summary(transcript, vid_title, model_key)
-
-                        if summary and not err:
-                            audio_filename = f"{hashlib.sha256(summary.encode('utf-8')).hexdigest()}.mp3"
-                            summary_cache[vid_id] = build_cache_entry(
-                                vid_title, summary, thumbnail_url, vid_id, model_key, audio_filename
-                            )
-                            save_summary_cache(summary_cache, SUMMARY_CACHE_FILE)
-
-                            # Send completion notification for new summary
-                            broadcast_to_connections(
-                                "summary_complete",
-                                {
-                                    "video_id": vid_id,
-                                    "title": vid_title,
-                                    "source": "generated",
-                                    "model_used": model_key,
-                                    "playlist": playlist_title,
-                                },
-                                session_filter=session_id,
-                                subscription_filter="summary_complete",
-                            )
-
-                        playlist_summaries.append(
-                            {
-                                "video_id": vid_id,
-                                "title": vid_title,
-                                "thumbnail_url": thumbnail_url,
-                                "summary": summary,
-                                "video_url": f"https://www.youtube.com/watch?v={vid_id}",
-                                "error": err,
-                            }
-                        )
-
-                    processed_count += total_videos
-                    results.append(
-                        {
-                            "type": "playlist",
-                            "title": playlist_title,
-                            "summaries": playlist_summaries,
-                        }
-                    )
+                    result, count = _process_playlist_url(url, playlist_id, model_key, session_id, processed_count)
+                    results.append(result)
+                    processed_count += count
                 except Exception as e:
-                    results.append(
-                        {
-                            "type": "playlist",
-                            "title": "Unknown Playlist",
-                            "error": f"An unexpected error occurred: {e}",
-                            "summaries": [],
-                        }
-                    )
+                    results.append({
+                        "type": "playlist", "title": "Unknown Playlist",
+                        "error": f"An unexpected error occurred: {e}", "summaries": [],
+                    })
 
             elif video_id:
                 processed_count += 1
-
-                # Send progress notification for single video
-                details = get_video_details([video_id]).get(video_id, {})
-                title = details.get("title", "Unknown Video")
-
-                broadcast_to_connections(
-                    "summary_progress",
-                    {
-                        "status": "processing",
-                        "message": f"Processing: {title[:50]}{'...' if len(title) > 50 else ''}",
-                        "progress": processed_count,
-                        "total": len(urls),
-                        "current_video": {"id": video_id, "title": title},
-                    },
-                    session_filter=session_id,
-                    subscription_filter="summary_progress",
-                )
-
-                if video_id in summary_cache:
-                    cached_item = summary_cache[video_id]
-                    results.append(
-                        {
-                            "type": "video",
-                            "video_id": video_id,
-                            "title": cached_item["title"],
-                            "thumbnail_url": cached_item["thumbnail_url"],
-                            "summary": cached_item["summary"],
-                            "video_url": cached_item.get(
-                                "video_url",
-                                f"https://www.youtube.com/watch?v={video_id}",
-                            ),
-                            "error": None,
-                        }
-                    )
-
-                    # Send completion notification for cached video
-                    broadcast_to_connections(
-                        "summary_complete",
-                        {
-                            "video_id": video_id,
-                            "title": cached_item["title"],
-                            "source": "cache",
-                        },
-                        session_filter=session_id,
-                        subscription_filter="summary_complete",
-                    )
-                    continue
-
                 try:
-                    thumbnail_url = details.get("thumbnail_url")
-                    transcript, err = get_transcript(video_id)
-                    summary, err = (None, err) if err else generate_summary(transcript, title, model_key)
-
-                    if summary and not err:
-                        audio_filename = f"{hashlib.sha256(summary.encode('utf-8')).hexdigest()}.mp3"
-                        summary_cache[video_id] = build_cache_entry(
-                            title, summary, thumbnail_url, video_id, model_key, audio_filename
-                        )
-                        save_summary_cache(summary_cache, SUMMARY_CACHE_FILE)
-
-                        # Send completion notification for new summary
-                        broadcast_to_connections(
-                            "summary_complete",
-                            {
-                                "video_id": video_id,
-                                "title": title,
-                                "source": "generated",
-                                "model_used": model_key,
-                            },
-                            session_filter=session_id,
-                            subscription_filter="summary_complete",
-                        )
-
-                    results.append(
-                        {
-                            "type": "video",
-                            "video_id": video_id,
-                            "title": title,
-                            "thumbnail_url": thumbnail_url,
-                            "summary": summary,
-                            "video_url": f"https://www.youtube.com/watch?v={video_id}",
-                            "error": err,
-                        }
-                    )
+                    result = _process_video_url(video_id, model_key, session_id, processed_count, len(urls))
+                    results.append(result)
                 except Exception as e:
-                    results.append(
-                        {
-                            "type": "video",
-                            "video_id": video_id,
-                            "title": "Unknown Video",
-                            "error": f"Failed to process video: {e}",
-                        }
-                    )
+                    results.append({
+                        "type": "video", "video_id": video_id,
+                        "title": "Unknown Video", "error": f"Failed to process video: {e}",
+                    })
             else:
-                results.append(
-                    {
-                        "type": "error",
-                        "url": url,
-                        "error": "Invalid or unsupported YouTube URL.",
-                    }
-                )
+                results.append({"type": "error", "url": url, "error": "Invalid or unsupported YouTube URL."})
 
-        # Send final completion notification
-        broadcast_to_connections(
-            "summary_progress",
-            {
-                "status": "completed",
-                "message": "All summaries completed!",
-                "progress": processed_count,
-                "total": processed_count,
-                "results_count": len(results),
-            },
-            session_filter=session_id,
-            subscription_filter="summary_progress",
-        )
+        _notify_progress(session_id, {
+            "status": "completed", "message": "All summaries completed!",
+            "progress": processed_count, "total": processed_count, "results_count": len(results),
+        })
 
         return jsonify(results)
     except Exception as e:
-        # Catch-all exception handler for the entire endpoint
         app.logger.error(f"Unhandled exception in /summarize: {str(e)}\n{traceback.format_exc()}")
-        return (
-            jsonify(
-                {
-                    "error": "An unexpected error occurred while processing your request",
-                    "message": str(e),
-                    "type": type(e).__name__,
-                    "stacktrace": traceback.format_exc(),
-                }
-            ),
-            500,
-        )
+        return jsonify({
+            "error": "An unexpected error occurred while processing your request",
+            "message": str(e), "type": type(e).__name__, "stacktrace": traceback.format_exc(),
+        }), 500
 
 
 # New async endpoints for worker system
