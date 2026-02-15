@@ -642,7 +642,7 @@ class TestTemplateRenderingIntegration:
         assert css_response.status_code in [200, 404]
 
         # Test JS files (check a few key ones)
-        js_files = ["/static/js/sse-manager.js", "/static/js/job_tracker.js", "/static/js/async-integration.js"]
+        js_files = ["/static/js/sse_client.js", "/static/js/job_tracker.js", "/static/js/ui_updater.js"]
 
         for js_file in js_files:
             js_response = client.get(js_file)
