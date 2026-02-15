@@ -2050,8 +2050,7 @@ def summarize_async():
                     job_ids.append(job.job_id)
 
             elif playlist_id:
-                # Playlist job - for now, just create with empty video list
-                # This should be enhanced to fetch actual video IDs from the playlist
+                # Playlist job - video IDs are fetched by the worker during processing
                 job = create_playlist_job(url=url, video_ids=[], model_key=model_key, session_id=session_id)
 
                 if worker_manager.submit_job(job):
