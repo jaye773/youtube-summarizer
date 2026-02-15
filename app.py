@@ -9,7 +9,6 @@ import time
 import traceback
 import uuid
 from datetime import datetime, timedelta, timezone
-from functools import wraps
 from queue import Empty, Queue
 from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
 
@@ -49,6 +48,18 @@ from voice_config import (
     get_voice_with_fallback,
     get_voices_by_tier,
     should_cleanup_cache,
+)
+
+import auth
+from auth import (
+    clean_expired_attempts,
+    configure as configure_auth,
+    is_ip_locked_out,
+    load_login_attempts,
+    record_failed_attempt,
+    require_auth,
+    reset_failed_attempts,
+    save_login_attempts,
 )
 
 # --- CONFIGURATION ---
@@ -216,103 +227,6 @@ def save_summary_cache(cache_data):
         json.dump(cache_data, f, indent=4)
 
 
-def load_login_attempts():
-    """Load login attempt tracking data"""
-    if os.path.exists(LOGIN_ATTEMPTS_FILE):
-        with open(LOGIN_ATTEMPTS_FILE, "r") as f:
-            try:
-                return json.load(f)
-            except json.JSONDecodeError:
-                return {}
-    return {}
-
-
-def save_login_attempts(attempts_data):
-    """Save login attempt tracking data"""
-    with open(LOGIN_ATTEMPTS_FILE, "w") as f:
-        json.dump(attempts_data, f, indent=4)
-
-
-def clean_expired_attempts(attempts_data):
-    """Remove expired lockout entries"""
-    current_time = datetime.now(timezone.utc)
-    cleaned_data = {}
-
-    for ip, data in attempts_data.items():
-        if "locked_until" in data:
-            locked_until = datetime.fromisoformat(data["locked_until"])
-            if current_time < locked_until:
-                # Still locked
-                cleaned_data[ip] = data
-            # If expired, don't include it (removes the lockout)
-        else:
-            # Not locked, keep the attempt count
-            cleaned_data[ip] = data
-
-    return cleaned_data
-
-
-def is_ip_locked_out(ip_address):
-    """Check if an IP address is currently locked out"""
-    if not LOGIN_ENABLED or os.environ.get("TESTING"):
-        return False, None
-
-    attempts_data = load_login_attempts()
-    attempts_data = clean_expired_attempts(attempts_data)
-
-    if ip_address in attempts_data and "locked_until" in attempts_data[ip_address]:
-        locked_until = datetime.fromisoformat(attempts_data[ip_address]["locked_until"])
-        current_time = datetime.now(timezone.utc)
-
-        if current_time < locked_until:
-            remaining_minutes = int((locked_until - current_time).total_seconds() / 60)
-            return True, remaining_minutes
-
-    return False, None
-
-
-def record_failed_attempt(ip_address):
-    """Record a failed login attempt and apply lockout if necessary"""
-    if not LOGIN_ENABLED or os.environ.get("TESTING"):
-        return False
-
-    attempts_data = load_login_attempts()
-    attempts_data = clean_expired_attempts(attempts_data)
-
-    if ip_address not in attempts_data:
-        attempts_data[ip_address] = {
-            "count": 0,
-            "first_attempt": datetime.now(timezone.utc).isoformat(),
-        }
-
-    attempts_data[ip_address]["count"] += 1
-    attempts_data[ip_address]["last_attempt"] = datetime.now(timezone.utc).isoformat()
-
-    # Check if we should lock out this IP
-    if attempts_data[ip_address]["count"] >= MAX_LOGIN_ATTEMPTS:
-        lockout_until = datetime.now(timezone.utc) + timedelta(minutes=LOCKOUT_DURATION)
-        attempts_data[ip_address]["locked_until"] = lockout_until.isoformat()
-        attempts_data[ip_address]["count"] = 0  # Reset counter
-
-        save_login_attempts(attempts_data)
-        return True  # Locked out
-
-    save_login_attempts(attempts_data)
-    return False  # Not locked out yet
-
-
-def reset_failed_attempts(ip_address):
-    """Clear failed attempt count for an IP after successful login"""
-    if not LOGIN_ENABLED or os.environ.get("TESTING"):
-        return
-
-    attempts_data = load_login_attempts()
-    if ip_address in attempts_data:
-        # Remove the IP's record entirely on successful login
-        del attempts_data[ip_address]
-        save_login_attempts(attempts_data)
-
-
 summary_cache = load_summary_cache()
 print(f"✅ Loaded {len(summary_cache)} summaries from cache.")
 
@@ -442,6 +356,14 @@ print(f"✅ Login system {'enabled' if LOGIN_ENABLED else 'disabled'}")
 if LOGIN_ENABLED:
     print(f"✅ Max login attempts: {MAX_LOGIN_ATTEMPTS}")
     print(f"✅ Lockout duration: {LOCKOUT_DURATION} minutes")
+
+# Initialise the auth module with the current config values
+configure_auth(
+    login_attempts_file=LOGIN_ATTEMPTS_FILE,
+    max_login_attempts=MAX_LOGIN_ATTEMPTS,
+    lockout_duration=LOCKOUT_DURATION,
+    login_enabled=LOGIN_ENABLED,
+)
 
 
 # --- AI MODEL CONFIGURATION ---
@@ -1026,59 +948,6 @@ def generate_summary(transcript, title, model_key=None):
         return generate_summary_openai(transcript, title, model_name)
     else:
         return None, f"Unknown provider: {provider}"
-
-
-# --- AUTHENTICATION DECORATOR ---
-def require_auth(f):
-    """Decorator to require authentication for routes when login is enabled"""
-
-    @wraps(f)
-    def decorated_function(*args, **kwargs):
-        # Skip authentication if login is disabled or in testing mode
-        if not LOGIN_ENABLED or os.environ.get("TESTING"):
-            return f(*args, **kwargs)
-
-        # Check if user is authenticated
-        if not session.get("authenticated", False):
-            # For API endpoints, return JSON error
-            # Check for JSON content-type OR specific API endpoints
-            api_endpoints = [
-                "/summarize",
-                "/speak",
-                "/get_cached_summaries",
-                "/search_summaries",
-                "/debug_transcript",
-                "/login_status",
-                "/api_status",
-            ]
-
-            # Special handling for settings: GET requests should redirect, POST should return JSON
-            is_settings_post = request.path.startswith("/settings") and request.method == "POST"
-
-            is_api_request = (
-                request.content_type == "application/json"
-                or any(request.path.startswith(endpoint) for endpoint in api_endpoints)
-                or request.headers.get("Accept", "").startswith("application/json")
-                or is_settings_post
-            )
-
-            if is_api_request:
-                return (
-                    jsonify(
-                        {
-                            "error": "Authentication required",
-                            "message": "Please login to access this resource",
-                        }
-                    ),
-                    401,
-                )
-
-            # For web pages, redirect to login
-            return redirect(url_for("login_page"))
-
-        return f(*args, **kwargs)
-
-    return decorated_function
 
 
 # --- INITIALIZE WORKER SYSTEM ---
@@ -2527,6 +2396,14 @@ def update_settings():
         SESSION_SECRET_KEY = os.environ.get("SESSION_SECRET_KEY", "")
         MAX_LOGIN_ATTEMPTS = int(os.environ.get("MAX_LOGIN_ATTEMPTS", "5"))
         LOCKOUT_DURATION = int(os.environ.get("LOCKOUT_DURATION", "15"))
+
+        # Keep auth module in sync with the updated config
+        configure_auth(
+            login_attempts_file=LOGIN_ATTEMPTS_FILE,
+            max_login_attempts=MAX_LOGIN_ATTEMPTS,
+            lockout_duration=LOCKOUT_DURATION,
+            login_enabled=LOGIN_ENABLED,
+        )
 
         WEBSHARE_PROXY_ENABLED = os.environ.get("WEBSHARE_PROXY_ENABLED", "false").lower() == "true"
         WEBSHARE_PROXY_HOST = os.environ.get("WEBSHARE_PROXY_HOST")
