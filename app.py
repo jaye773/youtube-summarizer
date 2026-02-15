@@ -70,6 +70,7 @@ from youtube_helpers import (
 )
 
 from tts_helpers import clean_text_for_tts, synthesize_audio
+from cache import build_cache_entry, load_summary_cache, save_summary_cache
 
 # --- CONFIGURATION ---
 app = Flask(__name__)
@@ -225,22 +226,7 @@ os.makedirs(AUDIO_CACHE_DIR, exist_ok=True)
 print(f"✅ Audio cache directory is set to: '{AUDIO_CACHE_DIR}/'")
 
 
-def load_summary_cache():
-    if os.path.exists(SUMMARY_CACHE_FILE):
-        with open(SUMMARY_CACHE_FILE, "r") as f:
-            try:
-                return json.load(f)
-            except json.JSONDecodeError:
-                return {}
-    return {}
-
-
-def save_summary_cache(cache_data):
-    with open(SUMMARY_CACHE_FILE, "w") as f:
-        json.dump(cache_data, f, indent=4)
-
-
-summary_cache = load_summary_cache()
+summary_cache = load_summary_cache(SUMMARY_CACHE_FILE)
 print(f"✅ Loaded {len(summary_cache)} summaries from cache.")
 
 # Initialize worker system (will be called after API initialization)
@@ -286,7 +272,7 @@ def init_worker_system():
                     "get_transcript": get_transcript,
                     "generate_summary": generate_summary,
                     "get_video_details": get_video_details,
-                    "save_summary_cache": save_summary_cache,
+                    "save_summary_cache": lambda cache: save_summary_cache(cache, SUMMARY_CACHE_FILE),
                     "extract_video_id": get_video_id,
                     "extract_playlist_id": get_playlist_id,
                     "get_videos_from_playlist": get_videos_from_playlist,
@@ -1382,19 +1368,10 @@ def summarize_links():
 
                         if summary and not err:
                             audio_filename = f"{hashlib.sha256(summary.encode('utf-8')).hexdigest()}.mp3"
-                            # --- MODIFICATION START ---
-                            video_url = f"https://www.youtube.com/watch?v={vid_id}"
-                            summary_cache[vid_id] = {
-                                "title": vid_title,
-                                "summary": summary,
-                                "thumbnail_url": thumbnail_url,
-                                "summarized_at": datetime.now(timezone.utc).isoformat(),
-                                "audio_filename": audio_filename,
-                                "video_url": video_url,  # Storing the canonical video URL
-                                "model_used": model_key,  # Store which model was used
-                            }
-                            # --- MODIFICATION END ---
-                            save_summary_cache(summary_cache)
+                            summary_cache[vid_id] = build_cache_entry(
+                                vid_title, summary, thumbnail_url, vid_id, model_key, audio_filename
+                            )
+                            save_summary_cache(summary_cache, SUMMARY_CACHE_FILE)
 
                             # Send completion notification for new summary
                             broadcast_to_connections(
@@ -1496,19 +1473,10 @@ def summarize_links():
 
                     if summary and not err:
                         audio_filename = f"{hashlib.sha256(summary.encode('utf-8')).hexdigest()}.mp3"
-                        # --- MODIFICATION START ---
-                        video_url = f"https://www.youtube.com/watch?v={video_id}"
-                        summary_cache[video_id] = {
-                            "title": title,
-                            "summary": summary,
-                            "thumbnail_url": thumbnail_url,
-                            "summarized_at": datetime.now(timezone.utc).isoformat(),
-                            "audio_filename": audio_filename,
-                            "video_url": video_url,  # Storing the canonical video URL
-                            "model_used": model_key,  # Store which model was used
-                        }
-                        # --- MODIFICATION END ---
-                        save_summary_cache(summary_cache)
+                        summary_cache[video_id] = build_cache_entry(
+                            title, summary, thumbnail_url, video_id, model_key, audio_filename
+                        )
+                        save_summary_cache(summary_cache, SUMMARY_CACHE_FILE)
 
                         # Send completion notification for new summary
                         broadcast_to_connections(
@@ -1929,7 +1897,7 @@ def delete_summary():
         del summary_cache[video_id]
 
         # Save the updated cache
-        save_summary_cache(summary_cache)
+        save_summary_cache(summary_cache, SUMMARY_CACHE_FILE)
 
         # Try to delete the associated audio file if it exists
         if audio_filename:
