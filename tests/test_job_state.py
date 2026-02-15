@@ -121,6 +121,10 @@ class TestJobStateManager(unittest.TestCase):
     @patch("job_state.logger")
     def test_file_permission_error_handling(self, mock_logger):
         """Test handling of file permission errors during save operations."""
+        # Skip if running as root since root bypasses file permission checks
+        if os.getuid() == 0:
+            self.skipTest("Cannot test permission errors as root")
+
         # Make directory read-only to simulate permission errors
         os.chmod(self.test_dir, 0o444)
 

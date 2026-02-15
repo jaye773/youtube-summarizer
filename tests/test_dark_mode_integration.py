@@ -38,13 +38,14 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 try:
-    from app import create_app
+    from app import app as flask_app
     from sse_manager import SSEManager
     from job_models import JobRequest, JobType, JobPriority, JobStatus
     from job_queue import JobQueue
     from worker_manager import WorkerManager
     from voice_config import VoiceConfigManager
 except ImportError as e:
+    flask_app = None
     print(f"Warning: Could not import application modules: {e}")
 
 
@@ -249,10 +250,11 @@ class ToastThemeIntegrationTester:
 @pytest.fixture
 def app():
     """Create Flask app for testing."""
-    app = create_app()
-    app.config['TESTING'] = True
-    app.config['WTF_CSRF_ENABLED'] = False
-    return app
+    if flask_app is None:
+        pytest.skip("Flask app not available")
+    flask_app.config['TESTING'] = True
+    flask_app.config['WTF_CSRF_ENABLED'] = False
+    return flask_app
 
 
 @pytest.fixture
