@@ -69,6 +69,8 @@ from youtube_helpers import (
     get_transcript,
 )
 
+from tts_helpers import clean_text_for_tts, synthesize_audio
+
 # --- CONFIGURATION ---
 app = Flask(__name__)
 
@@ -484,101 +486,6 @@ youtube_helpers.set_youtube_client(youtube)
 
 
 # --- HELPER FUNCTIONS ---
-def clean_text_for_tts(text):
-    """
-    Clean and preprocess text for text-to-speech to avoid ASCII pronunciation issues.
-    Removes or replaces special characters that cause TTS to spell out ASCII codes.
-    """
-    if not text:
-        return text
-
-    # Dictionary of common problematic characters and their replacements
-    replacements = {
-        # HTML entities (from html.escape)
-        "&quot;": "",  # HTML escaped double quotes
-        "&#x27;": "",  # HTML escaped single quotes
-        "&amp;": " and ",  # HTML escaped ampersand
-        "&lt;": " less than ",  # HTML escaped less than
-        "&gt;": " greater than ",  # HTML escaped greater than
-        # Quotes and apostrophes
-        '"': "",  # Remove double quotes
-        "'": "",  # Remove single quotes
-        "'": "",  # Remove smart apostrophe
-        "'": "",  # Remove smart apostrophe
-        """: '',  # Remove smart quote
-        """: "",  # Remove smart quote
-        # Dashes and hyphens
-        "—": " ",  # Em dash to space
-        "–": " ",  # En dash to space
-        # Brackets and parentheses (keep content, remove brackets)
-        "[": " ",
-        "]": " ",
-        "{": " ",
-        "}": " ",
-        # Other punctuation that can cause issues
-        "`": "",  # Backtick
-        "~": "",  # Tilde
-        "^": "",  # Caret
-        "*": "",  # Asterisk
-        "_": " ",  # Underscore to space
-        "|": " ",  # Pipe to space
-        "\\": " ",  # Backslash to space
-        "/": " ",  # Forward slash to space (except in URLs, handled separately)
-        # Mathematical symbols
-        "±": " plus or minus ",
-        "×": " times ",
-        "÷": " divided by ",
-        "=": " equals ",
-        "+": " plus ",
-        "<": " less than ",
-        ">": " greater than ",
-        # Currency symbols (keep common ones)
-        "$": " dollars ",
-        "€": " euros ",
-        "£": " pounds ",
-        "¥": " yen ",
-        # Other symbols
-        "@": " at ",
-        "#": " number ",
-        "%": " percent ",
-        "&": " and ",
-        # Special characters that often cause issues
-        "§": " section ",
-        "©": " copyright ",
-        "®": " registered ",
-        "™": " trademark ",
-    }
-
-    # Handle URLs and emails FIRST before character replacements
-    import re
-
-    cleaned_text = text
-
-    # Handle URLs specially - replace with "link"
-    url_pattern = r"https?://[^\s]+"
-    cleaned_text = re.sub(url_pattern, " link ", cleaned_text)
-
-    # Handle email addresses
-    email_pattern = r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b"
-    cleaned_text = re.sub(email_pattern, " email address ", cleaned_text)
-
-    # Apply character replacements AFTER URL/email handling
-    for char, replacement in replacements.items():
-        cleaned_text = cleaned_text.replace(char, replacement)
-
-    # Handle numbers with special formatting
-    # Convert things like "1,000,000" to "1000000" to avoid comma pronunciation issues
-    # Use a loop to handle any number of commas in numbers
-    while re.search(r"(\d+),(\d+)", cleaned_text):
-        cleaned_text = re.sub(r"(\d+),(\d+)", r"\1\2", cleaned_text)
-
-    # Clean up multiple spaces and normalize whitespace
-    cleaned_text = re.sub(r"\s+", " ", cleaned_text)
-    cleaned_text = cleaned_text.strip()
-
-    return cleaned_text
-
-
 def get_client_ip():
     """Extract the real client IP address from the request, handling proxies."""
     client_ip = request.environ.get("HTTP_X_FORWARDED_FOR", request.environ.get("REMOTE_ADDR", "127.0.0.1"))
@@ -1828,24 +1735,9 @@ def speak():
         )
 
     try:
-        # Get voice configuration with fallback support
-        voice_config = get_voice_with_fallback(voice_id)
-        if not voice_config:
-            return Response("No valid voice configuration found", status=500)
-
-        synthesis_input = texttospeech.SynthesisInput(text=text_to_speak)
-        voice = texttospeech.VoiceSelectionParams(
-            language_code=voice_config["language_code"], name=voice_config["name"]
-        )
-        audio_config = texttospeech.AudioConfig(audio_encoding=texttospeech.AudioEncoding.MP3)
-
-        response = tts_client.synthesize_speech(input=synthesis_input, voice=voice, audio_config=audio_config)
-
-        with open(filepath, "wb") as f:
-            f.write(response.audio_content)
+        audio_content = synthesize_audio(tts_client, voice_id, text_to_speak, filepath)
         print(f"Saved new audio file to cache: {filepath} using voice: {voice_id}")
-
-        return Response(response.audio_content, mimetype="audio/mpeg")
+        return Response(audio_content, mimetype="audio/mpeg")
 
     except Exception as e:
         print(f"Error in TTS endpoint: {e}")
@@ -1985,25 +1877,9 @@ def preview_voice():
         )
 
     try:
-        # Get voice configuration with fallback support
-        voice_config = get_voice_with_fallback(voice_id)
-        if not voice_config:
-            return Response("No valid voice configuration found", status=500)
-
-        synthesis_input = texttospeech.SynthesisInput(text=text_to_speak)
-        voice = texttospeech.VoiceSelectionParams(
-            language_code=voice_config["language_code"], name=voice_config["name"]
-        )
-        audio_config = texttospeech.AudioConfig(audio_encoding=texttospeech.AudioEncoding.MP3)
-
-        response = tts_client.synthesize_speech(input=synthesis_input, voice=voice, audio_config=audio_config)
-
-        # Cache the result
-        with open(filepath, "wb") as f:
-            f.write(response.audio_content)
+        audio_content = synthesize_audio(tts_client, voice_id, text_to_speak, filepath)
         print(f"Saved new voice preview to cache: {filepath}")
-
-        return Response(response.audio_content, mimetype="audio/mpeg")
+        return Response(audio_content, mimetype="audio/mpeg")
 
     except Exception as e:
         print(f"Error in voice preview endpoint with voice {voice_id}: {e}")
@@ -2012,28 +1888,9 @@ def preview_voice():
         try:
             fallback_voice_id = get_fallback_voice(voice_id)
             print(f"Trying fallback voice for preview: {fallback_voice_id}")
-
-            fallback_config = get_voice_with_fallback(fallback_voice_id)
-            if not fallback_config:
-                return Response("No fallback voice available", status=500)
-
-            fallback_voice = texttospeech.VoiceSelectionParams(
-                language_code=fallback_config["language_code"],
-                name=fallback_config["name"],
-            )
-            fallback_audio_config = texttospeech.AudioConfig(audio_encoding=texttospeech.AudioEncoding.MP3)
-
-            response = tts_client.synthesize_speech(
-                input=synthesis_input,
-                voice=fallback_voice,
-                audio_config=fallback_audio_config,
-            )
-
-            with open(filepath, "wb") as f:
-                f.write(response.audio_content)
+            audio_content = synthesize_audio(tts_client, fallback_voice_id, text_to_speak, filepath)
             print(f"Saved voice preview using fallback voice: {fallback_voice_id}")
-
-            return Response(response.audio_content, mimetype="audio/mpeg")
+            return Response(audio_content, mimetype="audio/mpeg")
 
         except Exception as fallback_error:
             print(f"Fallback voice preview also failed: {fallback_error}")
