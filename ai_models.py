@@ -6,7 +6,7 @@ import openai
 AVAILABLE_MODELS = {
     "gemini-2.5-flash": {
         "provider": "google",
-        "model": "gemini-2.5-flash-preview-05-20",
+        "model": "gemini-2.5-flash",
         "display_name": "Gemini 2.5 Flash (Fast)",
         "description": "Fast and efficient for most content",
     },
@@ -124,7 +124,7 @@ def generate_summary_gemini(transcript, title, model_name):
 
     try:
         # Create model instance for the specific model if different from default
-        if model_name != "gemini-2.5-flash-preview-05-20":
+        if model_name != "gemini-2.5-flash":
             current_model = genai.GenerativeModel(model_name=model_name)
         else:
             current_model = gemini_model

@@ -402,7 +402,7 @@ if google_api_key and not os.environ.get("TESTING"):
         tts_client = texttospeech.TextToSpeechClient(client_options=ClientOptions(api_key=google_api_key))
         genai.configure(api_key=google_api_key)
         youtube = create_youtube_client_with_timeout(google_api_key, timeout=30)
-        gemini_model = genai.GenerativeModel(model_name="gemini-2.5-flash-preview-05-20")
+        gemini_model = genai.GenerativeModel(model_name="gemini-2.5-flash")
         print("✅ Google APIs initialized successfully")
     except Exception as e:
         print(f"Warning: Could not configure Google APIs. Error: {e}")
@@ -423,7 +423,7 @@ elif not openai_api_key and not os.environ.get("TESTING"):
 if os.environ.get("TESTING"):
     try:
         if not gemini_model:
-            gemini_model = genai.GenerativeModel(model_name="gemini-2.5-flash-preview-05-20")
+            gemini_model = genai.GenerativeModel(model_name="gemini-2.5-flash")
         if not openai_client:
             openai_client = openai.OpenAI(api_key="test-key")
     except Exception:
@@ -1722,7 +1722,7 @@ def update_settings():
                     tts_client = texttospeech.TextToSpeechClient(client_options=ClientOptions(api_key=google_api_key))
                     genai.configure(api_key=google_api_key)
                     youtube = create_youtube_client_with_timeout(google_api_key, timeout=30)
-                    gemini_model = genai.GenerativeModel(model_name="gemini-2.5-flash-preview-05-20")
+                    gemini_model = genai.GenerativeModel(model_name="gemini-2.5-flash")
                     youtube_helpers.set_youtube_client(youtube)
                     ai_models.set_clients(gemini=gemini_model)
                     print("✅ Google APIs reinitialized successfully")
