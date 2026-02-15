@@ -33,9 +33,8 @@ YouTube Summarizer is a Flask-based web application that uses AI models to gener
 ## Key Features
 
 ### AI Model Support
-- **OpenAI**: GPT-4o, GPT-4o-mini, GPT-3.5-turbo
-- **Google Gemini**: Gemini 2.0 Flash, Gemini 1.5 Pro/Flash
-- **Anthropic Claude**: Claude 3.5 Sonnet, Claude 3 Haiku
+- **Google Gemini**: Gemini 2.5 Flash (default), Gemini 2.5 Pro
+- **OpenAI**: GPT-5, GPT-5 Mini, GPT-4o, GPT-4o-mini
 
 ### Processing Capabilities
 - Single video summarization
@@ -83,7 +82,7 @@ def create_youtube_client_with_timeout(api_key, timeout=30):
 
 ```
 youtube-summarizer/
-├── app.py                    # Main Flask application
+├── app.py                    # Main Flask application (~2,700 lines)
 ├── worker_manager.py         # Async worker coordination
 ├── job_queue.py             # Priority job scheduling
 ├── job_models.py            # Job data structures
@@ -91,24 +90,44 @@ youtube-summarizer/
 ├── error_handler.py         # Error handling logic
 ├── sse_manager.py           # SSE implementation
 ├── voice_config.py          # TTS configuration
+├── gunicorn_config.py       # Production gunicorn config
 ├── static/
 │   ├── js/
 │   │   ├── sse_client.js   # SSE client
 │   │   ├── job_tracker.js  # Job lifecycle management
-│   │   └── ui_updater.js   # Dynamic UI updates
-│   └── css/
-│       └── async_ui.css    # Async UI styling
+│   │   ├── ui_updater.js   # Dynamic UI updates
+│   │   ├── theme-manager.js # Dark mode theme management
+│   │   ├── theme-persistence.js # Theme preference storage
+│   │   └── theme-toggle.js # Theme toggle UI
+│   ├── css/
+│   │   ├── main.css         # Primary styles
+│   │   ├── theme-variables.css # CSS custom properties
+│   │   ├── dark-mode.css    # Dark mode overrides
+│   │   ├── async_ui.css     # Async UI styling
+│   │   ├── forms-theme.css  # Form theming
+│   │   ├── cards-theme.css  # Card theming
+│   │   ├── responsive-theme.css # Responsive breakpoints
+│   │   ├── theme-integration.css # Theme integration
+│   │   └── theme-toggle.css # Toggle switch styles
+│   └── svg/                 # UI icons (moon, sun, speaker, trash)
 ├── templates/
-│   └── index.html           # Main UI template
+│   ├── index.html           # Main UI template
+│   ├── login.html           # Login page
+│   ├── settings.html        # Settings page
+│   └── sse_test.html        # SSE testing page
 ├── tests/                   # Comprehensive test suite
-├── data/                    # Data storage directory
-└── audio_cache/            # TTS audio cache
+├── docker/                  # Docker configs (nginx, supervisord, gunicorn)
+├── Dockerfile               # Production container
+├── docker-compose.yml       # Docker compose config
+└── plans/                   # Implementation planning docs
 ```
+
+**Note:** `data/` and `audio_cache/` directories are created at runtime. Outside Docker, data files are stored in the project root.
 
 ## Testing
 
 ### Test Coverage
-- **400+ test cases** across 22 test files
+- **500+ test cases** across 20+ test files
 - **Unit tests**: Job models, queue, state management
 - **Integration tests**: End-to-end workflows, API endpoints
 - **Performance tests**: Load testing, memory usage
@@ -137,12 +156,16 @@ make test-integration # Integration tests
 ### Required
 - `GOOGLE_API_KEY`: YouTube API and Gemini models
 - `OPENAI_API_KEY`: OpenAI GPT models
-- `ANTHROPIC_API_KEY`: Claude models
 
 ### Optional
 - `LOGIN_ENABLED`: Enable authentication (default: false)
-- `LOGIN_USERNAME`: Admin username
-- `LOGIN_PASSWORD_HASH`: Hashed admin password
+- `LOGIN_CODE`: Passcode for login when authentication is enabled
+- `SESSION_SECRET_KEY`: Secret key for Flask sessions
+- `MAX_LOGIN_ATTEMPTS`: Max failed login attempts before lockout (default: 5)
+- `LOCKOUT_DURATION`: Lockout duration in seconds (default: 1800)
+- `WORKER_THREADS`: Number of worker threads (default: 3)
+- `WORKER_MAX_QUEUE_SIZE`: Max jobs in queue (default: 100)
+- `WORKER_RATE_LIMIT`: Requests per minute per IP (default: 60)
 - `TESTING`: Enable test mode
 - `WEBSHARE_PROXY_*`: Proxy configuration
 
@@ -213,7 +236,7 @@ python app.py
 - Connection pooling for SSE
 
 ### Resource Limits
-- Max 1000 jobs in queue
+- Max 100 jobs in queue (configurable via WORKER_MAX_QUEUE_SIZE)
 - Max 100 SSE connections
 - 24-hour job state retention
 - 30-second API timeout
@@ -222,10 +245,10 @@ python app.py
 ## Security Features
 
 ### Authentication
-- Optional login system
-- Password hashing with SHA-256
-- IP-based lockout (5 attempts, 30-minute lockout)
-- Session management
+- Optional login system enabled via `LOGIN_ENABLED` env var
+- Passcode-based authentication via `LOGIN_CODE` env var
+- IP-based lockout (5 attempts, 30-minute lockout by default)
+- Session management with configurable secret key
 
 ### Input Validation
 - URL sanitization
@@ -237,7 +260,7 @@ python app.py
 
 ### Common Issues
 1. **Worker not processing**: Check `worker_manager.is_running`
-2. **SSE not connecting**: Verify `/sse` endpoint accessibility
+2. **SSE not connecting**: Verify `/events` endpoint accessibility
 3. **Cache issues**: Clear `data/` directory
 4. **API failures**: Check environment variables
 5. **Memory usage**: Monitor worker thread count
