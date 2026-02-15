@@ -642,6 +642,14 @@ def clean_text_for_tts(text):
     return cleaned_text
 
 
+def get_client_ip():
+    """Extract the real client IP address from the request, handling proxies."""
+    client_ip = request.environ.get("HTTP_X_FORWARDED_FOR", request.environ.get("REMOTE_ADDR", "127.0.0.1"))
+    if "," in client_ip:
+        client_ip = client_ip.split(",")[0].strip()
+    return client_ip
+
+
 def clean_youtube_url(url):
     if not isinstance(url, str) or not url.strip():
         return ""
@@ -1115,9 +1123,7 @@ def login():
         return jsonify({"error": "Login system is disabled"}), 404
 
     # Get client IP address
-    client_ip = request.environ.get("HTTP_X_FORWARDED_FOR", request.environ.get("REMOTE_ADDR", "127.0.0.1"))
-    if "," in client_ip:
-        client_ip = client_ip.split(",")[0].strip()
+    client_ip = get_client_ip()
 
     # Check if IP is locked out
     is_locked, remaining_minutes = is_ip_locked_out(client_ip)
@@ -1225,9 +1231,7 @@ def sse_events():
 
     # Get client information for security and tracking
     session_id = session.get("session_id") or session.sid if hasattr(session, "sid") else None
-    client_ip = request.environ.get("HTTP_X_FORWARDED_FOR", request.environ.get("REMOTE_ADDR", "127.0.0.1"))
-    if "," in client_ip:
-        client_ip = client_ip.split(",")[0].strip()
+    client_ip = get_client_ip()
 
     # Get subscription preferences from query parameters
     subscriptions = request.args.get("subscribe", "").split(",")
