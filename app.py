@@ -2579,24 +2579,27 @@ def update_settings():
         return jsonify({"error": "Failed to update settings", "message": str(e)}), 500
 
 
+# Route prefixes that should receive JSON error responses
+API_ROUTE_PREFIXES = [
+    "/summarize",
+    "/speak",
+    "/get_cached_summaries",
+    "/search_summaries",
+    "/debug_transcript",
+    "/api_status",
+    "/login",
+    "/logout",
+    "/login_status",
+    "/delete_summary",
+    "/settings",
+    "/events",
+]
+
+
 # Error handlers to ensure JSON responses for API endpoints
 @app.errorhandler(400)
 def bad_request(e):
-    api_paths = [
-        "/summarize",
-        "/speak",
-        "/get_cached_summaries",
-        "/search_summaries",
-        "/debug_transcript",
-        "/api_status",
-        "/login",
-        "/logout",
-        "/login_status",
-        "/delete_summary",
-        "/settings",
-        "/events",
-    ]
-    if any(request.path.startswith(path) for path in api_paths):
+    if any(request.path.startswith(path) for path in API_ROUTE_PREFIXES):
         return (
             jsonify(
                 {
@@ -2612,21 +2615,7 @@ def bad_request(e):
 
 @app.errorhandler(404)
 def not_found(e):
-    api_paths = [
-        "/summarize",
-        "/speak",
-        "/get_cached_summaries",
-        "/search_summaries",
-        "/debug_transcript",
-        "/api_status",
-        "/login",
-        "/logout",
-        "/login_status",
-        "/delete_summary",
-        "/settings",
-        "/events",
-    ]
-    if any(request.path.startswith(path) for path in api_paths):
+    if any(request.path.startswith(path) for path in API_ROUTE_PREFIXES):
         return (
             jsonify({"error": "Endpoint not found", "message": str(e), "path": request.path}),
             404,
@@ -2636,21 +2625,7 @@ def not_found(e):
 
 @app.errorhandler(500)
 def server_error(e):
-    api_paths = [
-        "/summarize",
-        "/speak",
-        "/get_cached_summaries",
-        "/search_summaries",
-        "/debug_transcript",
-        "/api_status",
-        "/login",
-        "/logout",
-        "/login_status",
-        "/delete_summary",
-        "/settings",
-        "/events",
-    ]
-    if any(request.path.startswith(path) for path in api_paths):
+    if any(request.path.startswith(path) for path in API_ROUTE_PREFIXES):
         return (
             jsonify(
                 {
@@ -2668,21 +2643,7 @@ def server_error(e):
 def handle_exception(e):
     # Log the error with full traceback
     app.logger.error(f"Unhandled exception: {str(e)}\n{traceback.format_exc()}")
-    api_paths = [
-        "/summarize",
-        "/speak",
-        "/get_cached_summaries",
-        "/search_summaries",
-        "/debug_transcript",
-        "/api_status",
-        "/login",
-        "/logout",
-        "/login_status",
-        "/delete_summary",
-        "/settings",
-        "/events",
-    ]
-    if any(request.path.startswith(path) for path in api_paths):
+    if any(request.path.startswith(path) for path in API_ROUTE_PREFIXES):
         return (
             jsonify(
                 {
