@@ -361,7 +361,7 @@ class TestTranscriptAndSummary(unittest.TestCase):
         self.assertIsNone(transcript)
         self.assertEqual(error, "Transcript was found but it is empty.")
 
-    @patch("app.gemini_model")
+    @patch("ai_models.gemini_model")
     def test_generate_summary_gemini_success(self, mock_gemini_model):
         """Test successful summary generation with Gemini"""
         mock_response = MagicMock()
@@ -374,7 +374,7 @@ class TestTranscriptAndSummary(unittest.TestCase):
         self.assertIsNone(error)
         self.assertEqual(summary, "This is a generated summary of the video using Gemini.")
 
-    @patch("app.openai_client")
+    @patch("ai_models.openai_client")
     def test_generate_summary_openai_success(self, mock_openai_client):
         """Test successful summary generation with OpenAI"""
         mock_response = MagicMock()
@@ -402,7 +402,7 @@ class TestTranscriptAndSummary(unittest.TestCase):
         self.assertIsNone(summary)
         self.assertIn("Unsupported model: invalid-model", error)
 
-    @patch("app.gemini_model")
+    @patch("ai_models.gemini_model")
     def test_generate_summary_gemini_api_error(self, mock_gemini_model):
         """Test summary generation when Gemini API fails"""
         mock_gemini_model.generate_content.side_effect = Exception("Gemini API Error")
@@ -412,7 +412,7 @@ class TestTranscriptAndSummary(unittest.TestCase):
         self.assertIsNone(summary)
         self.assertIn("Error calling Gemini API", error)
 
-    @patch("app.openai_client")
+    @patch("ai_models.openai_client")
     def test_generate_summary_openai_api_error(self, mock_openai_client):
         """Test summary generation when OpenAI API fails"""
         mock_openai_client.chat.completions.create.side_effect = Exception("OpenAI API Error")
@@ -424,7 +424,7 @@ class TestTranscriptAndSummary(unittest.TestCase):
 
     def test_generate_summary_default_model(self):
         """Test that default model is used when none specified"""
-        with patch("app.gemini_model") as mock_gemini_model:
+        with patch("ai_models.gemini_model") as mock_gemini_model:
             mock_response = MagicMock()
             mock_response.text = "Default model summary"
             mock_gemini_model.generate_content.return_value = mock_response
