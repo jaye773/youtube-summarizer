@@ -190,7 +190,7 @@ class TestTranscriptWithProxy(unittest.TestCase):
             elif var in os.environ:
                 del os.environ[var]
 
-    @patch("app.YouTubeTranscriptApi.get_transcript")
+    @patch("youtube_helpers.YouTubeTranscriptApi.get_transcript")
     def test_get_transcript_without_proxy(self, mock_get_transcript):
         """Test get_transcript works without proxy configuration"""
         # Ensure proxy is disabled
@@ -211,7 +211,7 @@ class TestTranscriptWithProxy(unittest.TestCase):
         self.assertIsNone(error)
         mock_get_transcript.assert_called_once_with("test_video_id", languages=["en", "en-US"], proxies=None)
 
-    @patch("app.YouTubeTranscriptApi.get_transcript")
+    @patch("youtube_helpers.YouTubeTranscriptApi.get_transcript")
     def test_get_transcript_with_proxy(self, mock_get_transcript):
         """Test get_transcript works with proxy configuration"""
         # Configure proxy
@@ -246,8 +246,8 @@ class TestTranscriptWithProxy(unittest.TestCase):
             "test_video_id", languages=["en", "en-US"], proxies=expected_proxies
         )
 
-    @patch("app.YouTubeTranscriptApi.list_transcripts")
-    @patch("app.YouTubeTranscriptApi.get_transcript")
+    @patch("youtube_helpers.YouTubeTranscriptApi.list_transcripts")
+    @patch("youtube_helpers.YouTubeTranscriptApi.get_transcript")
     def test_get_transcript_fallback_with_proxy(self, mock_get_transcript, mock_list_transcripts):
         """Test get_transcript fallback mechanism works with proxy"""
         # Configure proxy
@@ -320,7 +320,7 @@ class TestTranscriptAndSummary(unittest.TestCase):
         if "TESTING" in os.environ:
             del os.environ["TESTING"]
 
-    @patch("app.YouTubeTranscriptApi")
+    @patch("youtube_helpers.YouTubeTranscriptApi")
     def test_get_transcript_success(self, mock_transcript_api):
         """Test successful transcript retrieval"""
         mock_transcript_api.get_transcript.return_value = [
@@ -334,7 +334,7 @@ class TestTranscriptAndSummary(unittest.TestCase):
         self.assertIsNone(error)
         self.assertEqual(transcript, "This is a test transcript with content")
 
-    @patch("app.YouTubeTranscriptApi")
+    @patch("youtube_helpers.YouTubeTranscriptApi")
     def test_get_transcript_no_transcript_found(self, mock_transcript_api):
         """Test when no transcript is found"""
         mock_transcript_api.get_transcript.side_effect = Exception("NoTranscriptFound")
@@ -351,7 +351,7 @@ class TestTranscriptAndSummary(unittest.TestCase):
         self.assertIsNone(transcript)
         self.assertEqual(error, "No video ID provided")
 
-    @patch("app.YouTubeTranscriptApi")
+    @patch("youtube_helpers.YouTubeTranscriptApi")
     def test_get_transcript_empty_transcript(self, mock_transcript_api):
         """Test when transcript is empty"""
         mock_transcript_api.get_transcript.return_value = [{"text": ""}, {"text": "   "}]
@@ -443,7 +443,7 @@ class TestVideoDetails(unittest.TestCase):
         """Set up test data"""
         self.test_video_ids = ["video1", "video2"]
 
-    @patch("app.youtube")
+    @patch("youtube_helpers.youtube")
     def test_get_video_details_success(self, mock_youtube):
         """Test successful video details retrieval"""
         mock_request = MagicMock()
@@ -488,7 +488,7 @@ class TestPlaylistFunctions(unittest.TestCase):
         """Set up test data"""
         self.test_playlist_id = "PLrAXtmErZgOeiKm4sgNOknGvNjby9efdf"
 
-    @patch("app.youtube")
+    @patch("youtube_helpers.youtube")
     def test_get_videos_from_playlist_success(self, mock_youtube):
         """Test successful playlist video retrieval"""
         mock_request = MagicMock()
@@ -508,7 +508,7 @@ class TestPlaylistFunctions(unittest.TestCase):
         self.assertIsNone(error)
         self.assertEqual(len(videos), 2)
 
-    @patch("app.youtube")
+    @patch("youtube_helpers.youtube")
     def test_get_videos_from_playlist_pagination(self, mock_youtube):
         """Test playlist retrieval with pagination"""
         mock_request = MagicMock()
@@ -528,7 +528,7 @@ class TestPlaylistFunctions(unittest.TestCase):
         self.assertIsNone(error)
         self.assertEqual(len(videos), 2)
 
-    @patch("app.youtube", None)
+    @patch("youtube_helpers.youtube", None)
     def test_get_videos_from_playlist_error(self):
         """Test playlist retrieval when API fails"""
         # Since youtube is None in test mode, the function returns early

@@ -534,7 +534,7 @@ class WorkerManager:
         def default_clean_url(url):
             return url
 
-        clean_youtube_url = default_clean_url
+        clean_youtube_url = app_context.get("clean_youtube_url") or default_clean_url
         get_video_id = app_context.get("extract_video_id")
         get_playlist_id = app_context.get("extract_playlist_id")
         get_transcript = app_context.get("get_transcript")

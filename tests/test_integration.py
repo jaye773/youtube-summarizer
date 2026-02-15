@@ -24,7 +24,7 @@ class TestIntegration(unittest.TestCase):
             del os.environ["TESTING"]
 
     @patch("app.youtube")
-    @patch("app.YouTubeTranscriptApi")
+    @patch("youtube_helpers.YouTubeTranscriptApi")
     @patch("app.generate_summary")
     @patch("app.get_video_details")
     @patch("app.summary_cache", {})
@@ -62,19 +62,22 @@ class TestIntegration(unittest.TestCase):
         self.assertEqual(data[0]["title"], "Never Gonna Give You Up")
         self.assertEqual(data[0]["summary"], "This is a summary of Rick Astley's famous song.")
 
+    @patch("youtube_helpers.youtube")
     @patch("app.youtube")
     @patch("app.get_transcript")
     @patch("app.generate_summary")
-    def test_playlist_summarization_flow(self, mock_generate_summary, mock_get_transcript, mock_youtube):
+    def test_playlist_summarization_flow(
+        self, mock_generate_summary, mock_get_transcript, mock_app_youtube, mock_yt_helpers_youtube
+    ):
         """Test complete playlist summarization flow"""
         playlist_url = "https://www.youtube.com/playlist?list=PLrAXtmErZgOeiKm4sgNOknGvNjby9efdf"
 
-        # Mock playlist metadata
+        # Mock playlist metadata (used by route handler via app.youtube)
         playlist_request = MagicMock()
         playlist_request.execute.return_value = {"items": [{"snippet": {"title": "Test Playlist"}}]}
-        mock_youtube.playlists().list.return_value = playlist_request
+        mock_app_youtube.playlists().list.return_value = playlist_request
 
-        # Mock playlist items
+        # Mock playlist items (used by get_videos_from_playlist via youtube_helpers.youtube)
         pl_items_request = MagicMock()
         pl_items_request.execute.return_value = {
             "items": [
@@ -91,7 +94,7 @@ class TestIntegration(unittest.TestCase):
         }
 
         # Setup mock returns
-        mock_youtube.playlistItems().list.return_value = pl_items_request
+        mock_yt_helpers_youtube.playlistItems().list.return_value = pl_items_request
 
         # Mock cache for video1
         mock_get_transcript.side_effect = lambda x: ("Video 1 transcript", None)
