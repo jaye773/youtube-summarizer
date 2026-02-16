@@ -37,14 +37,14 @@ jobs:
     
     - name: Run linting
       run: |
-        flake8 app.py --max-line-length=120 --exclude=venv,__pycache__
-    
+        flake8 app.py ai_models.py auth.py cache.py tts_helpers.py youtube_helpers.py --max-line-length=120 --exclude=venv,__pycache__
+
     - name: Run tests with coverage
       env:
         GOOGLE_API_KEY: test_api_key
         TESTING: true
       run: |
-        pytest --cov=app --cov-report=xml --cov-report=term-missing -v
+        pytest --cov=app --cov=ai_models --cov=auth --cov=cache --cov=tts_helpers --cov=youtube_helpers --cov-report=xml --cov-report=term-missing -v
     
     - name: Upload coverage reports to Codecov
       uses: codecov/codecov-action@v3
