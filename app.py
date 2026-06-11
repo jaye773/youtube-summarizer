@@ -1264,6 +1264,8 @@ def summarize_async():
 
         # Submit jobs to worker queue
         job_ids = []
+        failures = []
+        client_ip = get_client_ip()
         session_id = session.get("session_id", str(uuid.uuid4()))
         session["session_id"] = session_id
 
@@ -1274,25 +1276,32 @@ def summarize_async():
             if video_id:
                 # Single video job
                 job = create_video_job(url=url, model_key=model_key, session_id=session_id)
-
-                if worker_manager.submit_job(job):
-                    job_ids.append(job.job_id)
-
             elif playlist_id:
                 # Playlist job - video IDs are fetched by the worker during processing
                 job = create_playlist_job(url=url, video_ids=[], model_key=model_key, session_id=session_id)
+            else:
+                failures.append({"url": url, "error": "Not a valid YouTube video or playlist URL"})
+                continue
 
-                if worker_manager.submit_job(job):
-                    job_ids.append(job.job_id)
+            # submit_job returns (success, message); a failure tuple is truthy,
+            # so it must be unpacked rather than tested directly. Pass client_ip
+            # so the per-IP rate limiter actually applies.
+            success, message = worker_manager.submit_job(job, client_ip)
+            if success:
+                job_ids.append(job.job_id)
+            else:
+                failures.append({"url": url, "error": message})
 
         if not job_ids:
-            return jsonify({"error": "Failed to submit any jobs"}), 500
+            error_detail = failures[0]["error"] if failures else "No valid URLs to submit"
+            return jsonify({"error": f"Failed to submit any jobs: {error_detail}", "failures": failures}), 500
 
         return jsonify(
             {
                 "success": True,
                 "message": f"Submitted {len(job_ids)} jobs for processing",
                 "job_ids": job_ids,
+                "failures": failures,
                 "session_id": session_id,
             }
         )
