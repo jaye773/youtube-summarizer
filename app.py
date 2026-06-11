@@ -281,6 +281,7 @@ def init_worker_system():
                     "get_transcript": get_transcript,
                     "generate_summary": generate_summary,
                     "get_video_details": get_video_details,
+                    "load_summary_cache": lambda: load_summary_cache(SUMMARY_CACHE_FILE),
                     "save_summary_cache": lambda cache: save_summary_cache(cache, SUMMARY_CACHE_FILE),
                     "extract_video_id": get_video_id,
                     "extract_playlist_id": get_playlist_id,
