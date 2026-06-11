@@ -78,35 +78,47 @@ class TestCacheFunctions(unittest.TestCase):
 
         self.assertEqual(cache, {})
 
-    @patch("builtins.open", new_callable=mock_open)
-    def test_save_summary_cache(self, mock_file):
-        """Test saving cache data"""
-        save_summary_cache(self.test_cache_data, CACHE_FILE)
+    def test_save_summary_cache(self):
+        """Test saving cache data writes valid JSON that round-trips."""
+        import tempfile
 
-        mock_file.assert_called_once_with(CACHE_FILE, "w")
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            cache_path = os.path.join(tmp_dir, "summary_cache.json")
+            save_summary_cache(self.test_cache_data, cache_path)
 
-        # Get the written content
-        handle = mock_file()
-        written_data = "".join(call.args[0] for call in handle.write.call_args_list)
+            with open(cache_path, "r") as f:
+                parsed_data = json.load(f)
 
-        # Verify the data was written correctly
-        parsed_data = json.loads(written_data)
-        self.assertEqual(parsed_data, self.test_cache_data)
+            self.assertEqual(parsed_data, self.test_cache_data)
+            # Atomic write must not leave temp files behind.
+            self.assertEqual(os.listdir(tmp_dir), ["summary_cache.json"])
 
-    @patch("builtins.open", new_callable=mock_open)
-    def test_save_summary_cache_empty(self, mock_file):
-        """Test saving empty cache"""
-        save_summary_cache({}, CACHE_FILE)
+    def test_save_summary_cache_empty(self):
+        """Test saving empty cache."""
+        import tempfile
 
-        mock_file.assert_called_once_with(CACHE_FILE, "w")
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            cache_path = os.path.join(tmp_dir, "summary_cache.json")
+            save_summary_cache({}, cache_path)
 
-        # Get the written content
-        handle = mock_file()
-        written_data = "".join(call.args[0] for call in handle.write.call_args_list)
+            with open(cache_path, "r") as f:
+                parsed_data = json.load(f)
 
-        # Verify empty dict was written
-        parsed_data = json.loads(written_data)
-        self.assertEqual(parsed_data, {})
+            self.assertEqual(parsed_data, {})
+
+    def test_save_summary_cache_overwrite_is_atomic(self):
+        """A second save fully replaces prior contents without corruption."""
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            cache_path = os.path.join(tmp_dir, "summary_cache.json")
+            save_summary_cache(self.test_cache_data, cache_path)
+            save_summary_cache({"video3": {"title": "Only One"}}, cache_path)
+
+            with open(cache_path, "r") as f:
+                parsed_data = json.load(f)
+
+            self.assertEqual(parsed_data, {"video3": {"title": "Only One"}})
 
     def test_build_cache_entry_structure(self):
         """Test that build_cache_entry returns a dict with all expected keys"""
