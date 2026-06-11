@@ -118,6 +118,14 @@
     </div>
 
     <script>
+        // Escape text before interpolating into innerHTML to prevent XSS from
+        // user input, YouTube-supplied titles, and server error strings.
+        function escapeHtml(value) {
+            const div = document.createElement('div');
+            div.textContent = value == null ? '' : String(value);
+            return div.innerHTML;
+        }
+
         const summarizeBtn = document.getElementById('summarize-btn');
         const linksTextarea = document.getElementById('youtube-links');
         const loader = document.getElementById('loader');
@@ -614,7 +622,7 @@
             searchResults.innerHTML = '';
             
             if (results.length === 0) {
-                searchResults.innerHTML = `<p style="text-align: center; color: #7f8c8d; margin: 20px 0;">No summaries found for "${query}"</p>`;
+                searchResults.innerHTML = `<p style="text-align: center; color: #7f8c8d; margin: 20px 0;">No summaries found for "${escapeHtml(query)}"</p>`;
                 return;
             }
 
@@ -949,9 +957,9 @@
                 if (item.type === 'playlist') {
                     const playlistContainer = document.createElement('div');
                     playlistContainer.className = 'playlist-container';
-                    playlistContainer.innerHTML = `<h2>Playlist: ${item.title}</h2>`;
+                    playlistContainer.innerHTML = `<h2>Playlist: ${escapeHtml(item.title)}</h2>`;
                     if (item.error) {
-                        playlistContainer.innerHTML += `<div class="result-card error-card"><p>Error processing playlist: ${item.error}</p></div>`;
+                        playlistContainer.innerHTML += `<div class="result-card error-card"><p>Error processing playlist: ${escapeHtml(item.error)}</p></div>`;
                     }
                     if (item.summaries) {
                         item.summaries.forEach(video => addOrUpdateCard(video, playlistContainer, prepend));
@@ -1028,7 +1036,7 @@
             
             if (error) {
                 card.classList.add('error-card');
-                summaryContent.innerHTML += `<p>${error}</p>`;
+                summaryContent.innerHTML += `<p>${escapeHtml(error)}</p>`;
             } else if (summary) {
                 const speakBtn = document.createElement('button');
                 speakBtn.className = 'icon-btn speak-btn';
