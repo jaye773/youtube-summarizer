@@ -79,14 +79,16 @@ class PriorityJobQueue:
                 return False
 
             # Add to heap queue with priority ordering
-            # Use negative counter for FIFO ordering within same priority
+            # Use an increasing counter as a tiebreaker for FIFO ordering within
+            # the same priority (earlier submissions have a smaller counter and
+            # are popped first).
             self._counter += 1
             priority_value = job.priority.value
             timestamp = time.time()
 
-            # Heap entry: (priority, -counter, timestamp, job_id)
+            # Heap entry: (priority, counter, timestamp, job_id)
             # Lower priority values have higher priority (1 = HIGH, 2 = MEDIUM, 3 = LOW)
-            heap_entry = (priority_value, -self._counter, timestamp, job.job_id)
+            heap_entry = (priority_value, self._counter, timestamp, job.job_id)
             heapq.heappush(self._queue, heap_entry)
 
             # Store job in lookup dict
