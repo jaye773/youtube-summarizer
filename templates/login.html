@@ -164,12 +164,22 @@
         }
 
         function showError(message) {
-            errorContainer.innerHTML = `<div class="error-message">${message}</div>`;
+            // Use textContent (not innerHTML) so query-param messages can't
+            // inject markup — these come from the URL and are attacker-controllable.
+            errorContainer.innerHTML = '';
+            const div = document.createElement('div');
+            div.className = 'error-message';
+            div.textContent = message;
+            errorContainer.appendChild(div);
             infoContainer.innerHTML = '';
         }
 
         function showInfo(message) {
-            infoContainer.innerHTML = `<div class="info-message">${message}</div>`;
+            infoContainer.innerHTML = '';
+            const div = document.createElement('div');
+            div.className = 'info-message';
+            div.textContent = message;
+            infoContainer.appendChild(div);
             errorContainer.innerHTML = '';
         }
 
