@@ -35,6 +35,16 @@ class TestYouTubeSummarizer(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
 
     @patch("app.LOGIN_ENABLED", True)
+    def test_health_endpoints_are_public(self):
+        """/health and /sse/health must respond 200 without auth (container health checks)."""
+        if "TESTING" in os.environ:
+            del os.environ["TESTING"]
+        for path in ("/health", "/sse/health"):
+            response = self.client.get(path)
+            self.assertEqual(response.status_code, 200, path)
+            self.assertEqual(response.get_json()["status"], "ok")
+
+    @patch("app.LOGIN_ENABLED", True)
     def test_home_page_requires_auth_when_enabled(self):
         """Test that home page redirects to login when authentication is enabled and user not logged in"""
         # Remove testing environment variable to enable authentication
