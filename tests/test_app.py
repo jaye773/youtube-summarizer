@@ -59,6 +59,25 @@ class TestYouTubeSummarizer(unittest.TestCase):
         response = self.client.get("/")
         self.assertEqual(response.status_code, 200)
 
+    def test_login_accepts_passcode_with_special_chars(self):
+        """A correct passcode containing HTML special chars must authenticate.
+
+        The old code html.escape'd the passcode before comparing, so codes
+        containing & < > " ' could never match.
+        """
+        if "TESTING" in os.environ:
+            del os.environ["TESTING"]
+        with patch("app.LOGIN_ENABLED", True), patch("app.LOGIN_CODE", "p@ss&w<rd>"), patch(
+            "app.is_ip_locked_out", return_value=(False, 0)
+        ), patch("app.reset_failed_attempts"):
+            response = self.client.post(
+                "/login",
+                data=json.dumps({"passcode": "p@ss&w<rd>"}),
+                content_type="application/json",
+            )
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(json.loads(response.data)["success"])
+
     def test_get_cached_summaries_empty(self):
         """Test getting cached summaries when cache is empty"""
         with patch("app.summary_cache", {}):
