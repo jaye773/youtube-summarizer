@@ -26,6 +26,11 @@ get_videos_from_playlist = None
 load_summary_cache = None
 save_summary_cache = None
 
+# Shared across all worker threads: serializes the read-modify-write of the
+# on-disk summary cache so concurrent workers merge entries instead of each
+# overwriting the file with its own partial view.
+_cache_persist_lock = threading.Lock()
+
 # Configure logging
 logger = logging.getLogger(__name__)
 
@@ -110,7 +115,7 @@ class WorkerThread:
 
         # Load cache at start
         try:
-            self._summary_cache = load_summary_cache()
+            self._summary_cache = load_summary_cache() if load_summary_cache else {}
             logger.debug(f"Worker {self.worker_id} loaded cache with {len(self._summary_cache)} entries")
         except Exception as e:
             logger.error(f"Worker {self.worker_id} failed to load cache: {e}")
@@ -211,6 +216,27 @@ class WorkerThread:
                 processing_time=processing_time,
             )
 
+    def _persist_cache_entry(self, cache_key: str, entry: Dict[str, Any]):
+        """Merge a single entry into the on-disk summary cache.
+
+        Reloads the current cache from disk, adds the new entry, and saves,
+        all under a process-wide lock so concurrent workers don't clobber each
+        other's writes. Falls back to saving the worker's in-memory cache if no
+        loader was injected.
+        """
+        if save_summary_cache is None:
+            return
+        try:
+            with _cache_persist_lock:
+                on_disk = load_summary_cache() if load_summary_cache else dict(self._summary_cache)
+                on_disk[cache_key] = entry
+                save_summary_cache(on_disk)
+                # Keep this worker's view consistent with what's now on disk.
+                with self._cache_lock:
+                    self._summary_cache = on_disk
+        except Exception as e:
+            logger.warning(f"Failed to save cache: {e}")
+
     def _process_video_job(self, job: ProcessingJob) -> Dict[str, Any]:
         """
         Process a single video summarization job.
@@ -280,13 +306,12 @@ class WorkerThread:
             "processed_at": datetime.now(timezone.utc).isoformat(),
         }
 
-        # Cache the result
+        # Cache the result. Merge into the on-disk cache under a shared lock so
+        # concurrent workers (and the synchronous path) don't overwrite each
+        # other's entries with their own partial view of the cache.
         with self._cache_lock:
             self._summary_cache[cache_key] = result.copy()
-            try:
-                save_summary_cache(self._summary_cache)
-            except Exception as e:
-                logger.warning(f"Failed to save cache: {e}")
+        self._persist_cache_entry(cache_key, result.copy())
 
         self._notify_progress(job, 1.0, "Completed successfully")
         return result
@@ -528,7 +553,7 @@ class WorkerManager:
         """
         global clean_youtube_url, get_video_id, get_playlist_id, get_transcript
         global generate_summary, get_video_details, get_videos_from_playlist
-        global save_summary_cache
+        global load_summary_cache, save_summary_cache
 
         # Extract functions from app context
         def default_clean_url(url):
@@ -541,6 +566,7 @@ class WorkerManager:
         generate_summary = app_context.get("generate_summary")
         get_video_details = app_context.get("get_video_details")
         get_videos_from_playlist = app_context.get("get_videos_from_playlist")
+        load_summary_cache = app_context.get("load_summary_cache")
         save_summary_cache = app_context.get("save_summary_cache")
 
         # Store app context for worker threads
