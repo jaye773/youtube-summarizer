@@ -448,8 +448,6 @@ def get_client_ip():
     return client_ip
 
 
-
-
 # --- INITIALIZE WORKER SYSTEM ---
 # Initialize worker system now that all functions are defined
 init_worker_system()
