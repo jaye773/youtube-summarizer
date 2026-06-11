@@ -45,6 +45,7 @@ from voice_config import (
     get_voice_with_fallback,
     get_voices_by_tier,
     should_cleanup_cache,
+    validate_voice_name,
 )
 
 import auth
@@ -1367,8 +1368,13 @@ def speak():
     except Exception as e:
         return jsonify({"error": f"Failed to parse request: {str(e)}"}), 400
 
-    # Get voice selection from request data (default to configured voice)
+    # Get voice selection from request data (default to configured voice).
+    # voice_id becomes the leading component of the cache filename, so reject
+    # anything not in the known-voice allowlist to prevent path traversal
+    # (e.g. "../../etc/x") into the audio cache write/read.
     voice_id = data.get("voice_id", TTS_VOICE)
+    if not validate_voice_name(voice_id):
+        return jsonify({"error": "Invalid voice selection"}), 400
 
     # Check if cache cleanup is needed (do this before generating cache key)
     if should_cleanup_cache(AUDIO_CACHE_DIR):
