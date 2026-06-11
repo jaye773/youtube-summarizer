@@ -215,6 +215,16 @@ class TestYouTubeSummarizer(unittest.TestCase):
         response = self.client.post("/speak", data=json.dumps({}), content_type="application/json")
         self.assertEqual(response.status_code, 400)
 
+    def test_speak_rejects_path_traversal_voice_id(self):
+        """voice_id outside the known-voice allowlist must be rejected (path traversal)."""
+        response = self.client.post(
+            "/speak",
+            data=json.dumps({"text": "Test text", "voice_id": "../../../../tmp/pwn"}),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("Invalid voice", response.get_json()["error"])
+
     @patch("os.path.exists")
     @patch("builtins.open", new_callable=mock_open, read_data=b"fake audio content")
     def test_speak_cached_audio(self, mock_file, mock_exists):
