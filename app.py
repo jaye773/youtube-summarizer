@@ -1,5 +1,6 @@
 import atexit
 import hashlib  # For generating filenames
+import hmac  # For constant-time passcode comparison
 import html  # For HTML escaping user inputs
 import json
 import os
@@ -531,11 +532,10 @@ def login():
         if not passcode:
             return jsonify({"error": "Passcode is required"}), 400
 
-        # Sanitize passcode input to prevent XSS
-        passcode = html.escape(passcode)
-
-        # Simple authentication check
-        if passcode == LOGIN_CODE:
+        # Constant-time comparison to avoid leaking the passcode via timing.
+        # (The passcode is never reflected back, so there's no XSS reason to
+        # html.escape it here — and escaping broke codes containing & < > " '.)
+        if hmac.compare_digest(passcode.encode("utf-8"), (LOGIN_CODE or "").encode("utf-8")):
             # Reset failed attempts on successful login
             reset_failed_attempts(client_ip)
             session["authenticated"] = True
