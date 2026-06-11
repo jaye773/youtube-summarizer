@@ -47,6 +47,9 @@ def mock_worker_system():
     with patch("app.WORKER_SYSTEM_AVAILABLE", True):
         # Create mock instances
         mock_worker_manager = Mock()
+        # submit_job returns (success, message); default to success so endpoint
+        # tests that don't care about the result still get a valid tuple.
+        mock_worker_manager.submit_job.return_value = (True, "job submitted")
         mock_job_state_manager = Mock()
         mock_sse_manager = Mock()
 
@@ -98,7 +101,7 @@ class TestAsyncJobSubmission:
             status=JobStatus.PENDING,
         )
 
-        mock_worker_system["worker_manager"].submit_job.return_value = job_id
+        mock_worker_system["worker_manager"].submit_job.return_value = (True, job_id)
         mock_worker_system["job_state_manager"].get_job_status.return_value = mock_job.to_dict()
 
         response = client.post("/summarize_async", json=sample_job_data, content_type="application/json")
@@ -121,7 +124,7 @@ class TestAsyncJobSubmission:
             status=JobStatus.PENDING,
         )
 
-        mock_worker_system["worker_manager"].submit_job.return_value = job_id
+        mock_worker_system["worker_manager"].submit_job.return_value = (True, job_id)
         mock_worker_system["job_state_manager"].get_job_status.return_value = mock_job.to_dict()
 
         response = client.post(
@@ -212,7 +215,7 @@ class TestAsyncJobSubmission:
             "model": "gpt-4o",
         }
 
-        mock_worker_system["worker_manager"].submit_job.return_value = True
+        mock_worker_system["worker_manager"].submit_job.return_value = (True, "job submitted")
 
         response = client.post("/summarize_async", json=custom_data, content_type="application/json")
 
@@ -591,7 +594,7 @@ class TestRateLimiting:
 #
 #         def submit_job(job_data):
 #             job_id = str(uuid.uuid4())
-#             mock_worker_system["worker_manager"].submit_job.return_value = job_id
+#             mock_worker_system["worker_manager"].submit_job.return_value = (True, job_id)
 #             return client.post(
 #                 "/summarize_async", json=job_data, content_type="application/json"
 #             )
