@@ -1612,7 +1612,7 @@ def settings_page():
         "WEBSHARE_PROXY_USERNAME": os.environ.get("WEBSHARE_PROXY_USERNAME", ""),
         "WEBSHARE_PROXY_PASSWORD": os.environ.get("WEBSHARE_PROXY_PASSWORD", ""),
         "DATA_DIR": os.environ.get("DATA_DIR", ""),
-        "FLASK_DEBUG": os.environ.get("FLASK_DEBUG", "true"),
+        "FLASK_DEBUG": os.environ.get("FLASK_DEBUG", "false"),
         "TTS_VOICE": os.environ.get("TTS_VOICE", "en-US-Chirp3-HD-Zephyr"),
     }
 
@@ -1856,8 +1856,10 @@ atexit.register(cleanup_worker_system)
 
 if __name__ == "__main__":
     try:
-        # Enable debug mode only in development (configurable via environment variable)
-        debug_mode = os.environ.get("FLASK_DEBUG", "true").lower() == "true"
+        # Debug mode is OFF by default; opt in with FLASK_DEBUG=true for local dev only.
+        # The Werkzeug debugger allows remote code execution, so it must never
+        # default on for a deployed instance.
+        debug_mode = os.environ.get("FLASK_DEBUG", "false").lower() == "true"
         print(f"🚀 Starting YouTube Summarizer on port 5001 (debug={debug_mode})")
         app.run(debug=debug_mode, port=5001)
     except KeyboardInterrupt:
