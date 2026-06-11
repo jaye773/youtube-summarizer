@@ -234,10 +234,14 @@ def get_transcript(video_id):
         return (transcript_text, None) if transcript_text.strip() else (None, "Transcript was found but it is empty.")
     except NoTranscriptFound:
         try:
-            transcript_list = (
+            fetched = (
                 YouTubeTranscriptApi.list_transcripts(video_id, proxies=proxies).find_transcript(["en"]).fetch()
             )
-            transcript_text = " ".join([d["text"] for d in transcript_list])
+            # youtube-transcript-api 1.x returns a FetchedTranscript of snippet
+            # objects; 0.x returned a list of dicts. Normalize both to text.
+            if hasattr(fetched, "to_raw_data"):
+                fetched = fetched.to_raw_data()
+            transcript_text = " ".join([seg["text"] if isinstance(seg, dict) else seg.text for seg in fetched])
             return (
                 (transcript_text, None)
                 if transcript_text.strip()

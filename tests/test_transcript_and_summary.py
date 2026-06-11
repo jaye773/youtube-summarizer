@@ -292,6 +292,31 @@ class TestTranscriptWithProxy(unittest.TestCase):
         )
         mock_list_transcripts.assert_called_once_with("test_video_id", proxies=expected_proxies)
 
+    @patch("youtube_helpers.YouTubeTranscriptApi.list_transcripts")
+    @patch("youtube_helpers.YouTubeTranscriptApi.get_transcript")
+    def test_get_transcript_fallback_v1_fetchedtranscript(self, mock_get_transcript, mock_list_transcripts):
+        """Fallback handles youtube-transcript-api 1.x FetchedTranscript (snippet objects)."""
+        from youtube_transcript_api import NoTranscriptFound
+
+        mock_get_transcript.side_effect = NoTranscriptFound("vid", [], {})
+
+        # Simulate the 1.x return: a FetchedTranscript exposing to_raw_data().
+        fetched = Mock()
+        fetched.to_raw_data.return_value = [
+            {"text": "Hello", "start": 0.0},
+            {"text": "world", "start": 1.0},
+        ]
+        mock_transcript = Mock()
+        mock_transcript.fetch.return_value = fetched
+        mock_list_result = Mock()
+        mock_list_result.find_transcript.return_value = mock_transcript
+        mock_list_transcripts.return_value = mock_list_result
+
+        transcript, error = app.get_transcript("vid")
+
+        self.assertEqual(transcript, "Hello world")
+        self.assertIsNone(error)
+
     def test_get_transcript_no_video_id(self):
         """Test get_transcript handles empty video ID"""
         transcript, error = app.get_transcript("")
