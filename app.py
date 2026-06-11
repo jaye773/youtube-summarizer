@@ -473,6 +473,28 @@ def ensure_session_id():
         session["session_id"] = str(uuid.uuid4())
 
 
+@app.route("/health")
+@app.route("/sse/health")
+def health_check():
+    """Lightweight, unauthenticated health endpoint for container/orchestration
+    health checks (referenced by the Docker/compose configs). Reports liveness
+    plus a quick view of the worker subsystem."""
+    worker_running = bool(
+        WORKER_SYSTEM_AVAILABLE and worker_manager is not None and getattr(worker_manager, "is_running", False)
+    )
+    return (
+        jsonify(
+            {
+                "status": "ok",
+                "worker_system_available": WORKER_SYSTEM_AVAILABLE,
+                "worker_running": worker_running,
+                "sse_connections": len(sse_connections),
+            }
+        ),
+        200,
+    )
+
+
 @app.route("/")
 @require_auth
 def home():
