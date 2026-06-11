@@ -457,6 +457,20 @@ init_worker_system()
 # --- API ENDPOINTS ---
 
 
+@app.before_request
+def ensure_session_id():
+    """Assign a stable per-session id used to target SSE events.
+
+    Set on every request (the short-circuit means only the first one writes)
+    so the cookie is in place before the browser opens the /events stream.
+    Without this, SSE connections register with session_id=None and progress
+    events get broadcast to every connected client instead of just the user
+    who started the job.
+    """
+    if not session.get("session_id"):
+        session["session_id"] = str(uuid.uuid4())
+
+
 @app.route("/")
 @require_auth
 def home():
@@ -598,7 +612,7 @@ def sse_events():
     connection_id = str(uuid.uuid4())
 
     # Get client information for security and tracking
-    session_id = session.get("session_id") or session.sid if hasattr(session, "sid") else None
+    session_id = session.get("session_id") or (session.sid if hasattr(session, "sid") else None)
     client_ip = get_client_ip()
 
     # Get subscription preferences from query parameters
@@ -1163,7 +1177,7 @@ def summarize_links():
             available_models = list(AVAILABLE_MODELS.keys())
             return jsonify({"error": f"Unsupported model: {model_key}. Available models: {available_models}"}), 400
 
-        session_id = session.get("session_id") or session.sid if hasattr(session, "sid") else None
+        session_id = session.get("session_id") or (session.sid if hasattr(session, "sid") else None)
 
         # Send initial progress notification
         has_playlists = any(get_playlist_id(url) for url in urls)
