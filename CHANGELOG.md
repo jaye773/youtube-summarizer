@@ -22,6 +22,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Settings saved in the UI persist across restarts (`DATA_DIR/.env` is loaded at startup); generated session secret persists in `DATA_DIR/.secret_key`
 - SSE moved to `sse.py`; idle streams are no longer dropped every 5 minutes
 - Upgraded `youtube-transcript-api` 1.1.0 → 1.2.4 (instance API, `NETWORK_TIMEOUT` applied per request, clearer errors for blocked/unavailable/age-restricted videos); webshare proxy also supports rotating residential mode when `WEBSHARE_PROXY_HOST`/`PORT` are unset, and the proxy line is logged once instead of on every fetch
+- Summaries are stored in SQLite (`DATA_DIR/summaries.db`, WAL mode) instead of `summary_cache.json`; each write commits one row instead of rewriting the whole file, and listing/search query the database. An existing `summary_cache.json` is imported automatically on first start and renamed to `summary_cache.json.migrated`
 
 ### Removed
 - Unused async worker system (`worker_manager`, `job_queue`, `job_models`, `job_state`, `error_handler`, `sse_manager`, `/summarize_async`, `/jobs`) and its client scripts and tests

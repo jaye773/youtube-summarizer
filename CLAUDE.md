@@ -11,7 +11,7 @@ YouTube Summarizer is a Flask web application that summarizes YouTube videos and
 | `app.py` | Flask app: configuration, API client setup, routes, settings page, error handlers |
 | `ai_models.py` | `AVAILABLE_MODELS` registry, prompt, Gemini (`google-genai` Client) and OpenAI summary generation |
 | `auth.py` | Passcode login, per-IP lockout, `require_auth` decorator |
-| `cache.py` | Summary cache load/save (atomic, lock-protected) and cache entry builder |
+| `cache.py` | `SummaryCache` (SQLite summary store with a dict-like interface), one-time JSON migration, cache entry builder |
 | `sse.py` | SSE connection registry, session-scoped broadcast, message formatting, stream generator |
 | `youtube_helpers.py` | URL parsing, YouTube Data API calls, transcript fetching (webshare proxy aware) |
 | `tts_helpers.py` | Text cleanup and TTS synthesis |
@@ -25,11 +25,13 @@ YouTube Summarizer is a Flask web application that summarizes YouTube videos and
 
 ### State and process model
 All state is in process memory or in files under `DATA_DIR`:
-- `summary_cache.json` (summaries), `audio_cache/` (MP3s keyed on voice + text), `login_attempts.json`
+- `summaries.db` (SQLite, WAL mode; summaries), `audio_cache/` (MP3s keyed on voice + text), `login_attempts.json`
 - `.env` written by the settings page (loaded at startup, overrides the environment)
 - `.secret_key` (generated session secret when `SESSION_SECRET_KEY` is unset)
 
-Because SSE connections and the summary cache live in memory, **the app must run as a single process**. Concurrency comes from threads; each open SSE stream holds one thread, so streams are capped by `SSE_MAX_CONNECTIONS` (default 20, below `GUNICORN_THREADS`, default 32).
+On first start, an existing `summary_cache.json` is imported into `summaries.db` in one transaction and renamed to `summary_cache.json.migrated`. `app.summary_cache` is a `SummaryCache`: it behaves like a dict, but every write commits immediately (no `save_summary_cache` needed) and entries read from it are copies, so assign changes back. Under `TESTING` it is an in-memory database.
+
+Because SSE connections and login lockouts live in memory, **the app must run as a single process**. Concurrency comes from threads; each open SSE stream holds one thread, so streams are capped by `SSE_MAX_CONNECTIONS` (default 20, below `GUNICORN_THREADS`, default 32).
 
 `DATA_DIR` defaults to `data` in Docker and `.` otherwise.
 
@@ -86,7 +88,7 @@ Production: `gunicorn -c gunicorn_config.py app:app` (what the Dockerfile runs).
 - `tests/test_rate_limit_csrf.py` – rate limits (429, per-IP, shared budgets) and CSRF (JSON-only, cookie flags)
 - `tests/test_dark_mode_integration.py`, `tests/test_theme_performance.py`, `tests/test_visual_dark_mode.py` – Playwright/theme tests (`make test-browser`)
 
-Tests import `app` with `TESTING=true`, which skips real API client creation. Patch module globals such as `app.summary_cache`, `app.tts_client`, `ai_models.gemini_client`, `ai_models.openai_client`.
+Tests import `app` with `TESTING=true`, which skips real API client creation. Patch module globals such as `app.summary_cache` (a plain dict works; the routes handle both), `app.tts_client`, `ai_models.gemini_client`, `ai_models.openai_client`.
 
 CI (`.github/workflows/tests.yml`): flake8 on the app modules, pytest with coverage, and a Docker build + `/health` smoke test.
 
@@ -99,6 +101,6 @@ CI (`.github/workflows/tests.yml`): flake8 on the app modules, pytest with cover
 - CSRF: `SameSite=Lax` cookie, and a `before_request` hook rejects POST/PUT/PATCH/DELETE without `Content-Type: application/json` (415). Parse bodies with `get_json_body()`, never `get_json(force=True)`.
 
 ## Known Limitations
-- In-memory state means one process; scaling out needs shared storage (e.g. Redis/SQLite) for cache, sessions and SSE fan-out.
+- In-memory state (SSE connections, login lockouts) means one process. Summaries are already in SQLite, which several processes on one host can share; scaling out further still needs shared login state and SSE fan-out (e.g. Redis).
 - `youtube-transcript-api` is pinned exactly (1.2.4) because YouTube changes regularly break transcript fetching; upgrade deliberately and run a real fetch. `get_transcript` uses the instance API (`YouTubeTranscriptApi(proxy_config=..., http_client=...).list()`), creating one instance per call (the class is not thread-safe).
 - Long playlists are processed within a single request; the browser waits for the full response.

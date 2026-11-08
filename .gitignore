@@ -26,6 +26,10 @@ instance/
 # Project-specific cache and data
 audio_cache/
 summary_cache.json
+summary_cache.json.migrated*
+*.db
+*.db-wal
+*.db-shm
 data/
 
 # IDE

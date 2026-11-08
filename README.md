@@ -313,7 +313,7 @@ youtube-summarizer/
 ├── app.py                # Flask app: routes, settings, client setup
 ├── ai_models.py          # Model registry and Gemini/OpenAI summary generation
 ├── auth.py               # Passcode login, lockout, require_auth
-├── cache.py              # Summary cache load/save (atomic)
+├── cache.py              # SQLite summary store (summaries.db) and JSON migration
 ├── sse.py                # Server-Sent Events progress stream
 ├── tts_helpers.py        # Text-to-speech synthesis helpers
 ├── voice_config.py       # TTS voices and audio cache management

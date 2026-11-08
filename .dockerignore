@@ -24,6 +24,10 @@ __pycache__
 data/
 audio_cache/
 summary_cache.json
+summary_cache.json.migrated*
+*.db
+*.db-wal
+*.db-shm
 logs/
 backups/
 
