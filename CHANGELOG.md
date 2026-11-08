@@ -32,6 +32,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Deleting a summary now deletes its cached audio
 
 ### Added
+- Dependabot (`.github/dependabot.yml`): weekly pip, GitHub Actions and Docker base image updates, minor/patch grouped
 - **Webshare Proxy Support**: Added support for using webshare proxies for YouTube transcript fetching
   - New environment variables: `WEBSHARE_PROXY_ENABLED`, `WEBSHARE_PROXY_HOST`, `WEBSHARE_PROXY_PORT`, `WEBSHARE_PROXY_USERNAME`, `WEBSHARE_PROXY_PASSWORD`
   - Helps bypass IP restrictions, rate limiting, and geographic blocks when fetching transcripts
