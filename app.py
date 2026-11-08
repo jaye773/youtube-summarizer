@@ -1,19 +1,11 @@
-import hashlib  # For generating filenames
 import hmac  # For constant-time passcode comparison
 import html  # For HTML escaping user inputs
-import json
 import os
-import re
-import threading
-import time
+import socket
 import traceback
 import uuid
-from datetime import datetime, timedelta, timezone
-from queue import Empty, Queue
+from datetime import datetime
 
-import socket
-
-import google.generativeai as genai
 import httplib2
 import openai
 from dotenv import load_dotenv
@@ -62,6 +54,7 @@ from youtube_helpers import (
 from tts_helpers import clean_text_for_tts, synthesize_audio
 from cache import build_cache_entry, load_summary_cache, save_summary_cache
 import ai_models
+import sse
 from ai_models import (
     AVAILABLE_MODELS,
     DEFAULT_MODEL,
@@ -102,106 +95,6 @@ MAX_TTS_CHARS = int(os.environ.get("MAX_TTS_CHARS", "50000"))
 # transcript fetch) expose no timeout parameter; this keeps them from hanging
 # forever. Clients that set their own timeouts (OpenAI, httplib2) are unaffected.
 socket.setdefaulttimeout(int(os.environ.get("NETWORK_TIMEOUT", "60")))
-
-# --- SSE CONFIGURATION ---
-# Store active SSE connections and their associated queues
-sse_connections = {}
-sse_connection_lock = threading.Lock()
-
-
-class SSEConnection:
-    """Manages individual SSE connection state"""
-
-    def __init__(self, connection_id, session_id=None, user_ip=None):
-        self.connection_id = connection_id
-        self.session_id = session_id
-        self.user_ip = user_ip
-        self.message_queue = Queue()
-        self.created_at = datetime.now(timezone.utc)
-        self.last_activity = self.created_at
-        self.is_active = True
-        self.subscriptions = set()  # Track what types of events this connection wants
-
-    def send_message(self, event_type, data, event_id=None, retry=None):
-        """Add message to connection's queue"""
-        if not self.is_active:
-            return False
-
-        try:
-            message = {
-                "event": event_type,
-                "data": data,
-                "id": event_id or str(uuid.uuid4()),
-                "timestamp": datetime.now(timezone.utc).isoformat(),
-                "retry": retry,
-            }
-            self.message_queue.put(message, timeout=1)
-            self.last_activity = datetime.now(timezone.utc)
-            return True
-        except Exception:
-            self.is_active = False
-            return False
-
-    def get_messages(self, timeout=30):
-        """Generator that yields messages from queue"""
-        while self.is_active:
-            try:
-                message = self.message_queue.get(timeout=timeout)
-                if message is None:  # Poison pill to stop connection
-                    break
-                yield message
-                self.last_activity = datetime.now(timezone.utc)
-            except Empty:
-                # Send keep-alive ping
-                yield {
-                    "event": "ping",
-                    "data": "keep-alive",
-                    "id": str(uuid.uuid4()),
-                    "timestamp": datetime.now(timezone.utc).isoformat(),
-                }
-
-    def close(self):
-        """Close the connection gracefully"""
-        self.is_active = False
-        self.message_queue.put(None)  # Poison pill
-
-
-def cleanup_stale_connections():
-    """Remove connections that haven't been active for more than 5 minutes"""
-    cutoff_time = datetime.now(timezone.utc) - timedelta(minutes=5)
-
-    with sse_connection_lock:
-        stale_connections = [
-            conn_id
-            for conn_id, conn in sse_connections.items()
-            if conn.last_activity < cutoff_time or not conn.is_active
-        ]
-
-        for conn_id in stale_connections:
-            connection = sse_connections.pop(conn_id, None)
-            if connection:
-                connection.close()
-                print(f"Cleaned up stale SSE connection: {conn_id}")
-
-
-def broadcast_to_connections(event_type, data, session_filter=None, subscription_filter=None):
-    """Broadcast message to all matching connections"""
-    cleanup_stale_connections()
-
-    with sse_connection_lock:
-        for conn_id, connection in list(sse_connections.items()):
-            # Filter by session if specified
-            if session_filter and connection.session_id != session_filter:
-                continue
-
-            # Filter by subscription if specified
-            if subscription_filter and subscription_filter not in connection.subscriptions:
-                continue
-
-            if not connection.send_message(event_type, data):
-                # Connection is dead, remove it
-                sse_connections.pop(conn_id, None)
-
 
 # --- WEBSHARE PROXY CONFIGURATION ---
 WEBSHARE_PROXY_ENABLED = os.environ.get("WEBSHARE_PROXY_ENABLED", "false").lower() == "true"
@@ -365,48 +258,59 @@ google_api_key = os.environ.get("GOOGLE_API_KEY")
 openai_api_key = os.environ.get("OPENAI_API_KEY")
 tts_client = None
 youtube = None
-gemini_model = None
+gemini_client = None
 openai_client = None
 
-# Initialize Google APIs
-if google_api_key and not os.environ.get("TESTING"):
+
+def init_google_clients(api_key):
+    """(Re)create the Google TTS, YouTube and Gemini clients and inject them into helper modules."""
+    global tts_client, youtube, gemini_client
     try:
-        tts_client = texttospeech.TextToSpeechClient(client_options=ClientOptions(api_key=google_api_key))
-        genai.configure(api_key=google_api_key)
-        youtube = create_youtube_client_with_timeout(google_api_key, timeout=30)
-        gemini_model = genai.GenerativeModel(model_name="gemini-2.5-flash")
-        print("✅ Google APIs initialized successfully")
+        tts_client = texttospeech.TextToSpeechClient(client_options=ClientOptions(api_key=api_key))
+        youtube = create_youtube_client_with_timeout(api_key, timeout=30)
+        gemini_client = ai_models.create_gemini_client(api_key)
     except Exception as e:
         print(f"Warning: Could not configure Google APIs. Error: {e}")
+        return False
+    youtube_helpers.set_youtube_client(youtube)
+    ai_models.set_clients(gemini=gemini_client)
+    print("✅ Google APIs initialized successfully")
+    return True
+
+
+def init_openai_client(api_key):
+    """(Re)create the OpenAI client and inject it into ai_models."""
+    global openai_client
+    try:
+        openai_client = openai.OpenAI(api_key=api_key)
+    except Exception as e:
+        print(f"Warning: Could not configure OpenAI API. Error: {e}")
+        return False
+    ai_models.set_clients(openai_cli=openai_client)
+    print("✅ OpenAI API initialized successfully")
+    return True
+
+
+if google_api_key and not os.environ.get("TESTING"):
+    init_google_clients(google_api_key)
 elif not google_api_key and not os.environ.get("TESTING"):
     print("Warning: GOOGLE_API_KEY environment variable is not set. Google services will be unavailable.")
 
-# Initialize OpenAI API
 if openai_api_key and not os.environ.get("TESTING"):
-    try:
-        openai_client = openai.OpenAI(api_key=openai_api_key)
-        print("✅ OpenAI API initialized successfully")
-    except Exception as e:
-        print(f"Warning: Could not configure OpenAI API. Error: {e}")
+    init_openai_client(openai_api_key)
 elif not openai_api_key and not os.environ.get("TESTING"):
     print("Warning: OPENAI_API_KEY environment variable is not set. OpenAI models will be unavailable.")
 
 # For testing, create clients even without API keys
 if os.environ.get("TESTING"):
     try:
-        if not gemini_model:
-            gemini_model = genai.GenerativeModel(model_name="gemini-2.5-flash")
+        if not gemini_client:
+            gemini_client = ai_models.create_gemini_client("test-key")
         if not openai_client:
             openai_client = openai.OpenAI(api_key="test-key")
     except Exception:
         pass
-
-# Backward compatibility - keep 'model' variable for existing code
-model = gemini_model
-
-# Inject clients into extracted modules
-youtube_helpers.set_youtube_client(youtube)
-ai_models.set_clients(gemini=gemini_model, openai_cli=openai_client)
+    ai_models.set_clients(gemini=gemini_client, openai_cli=openai_client)
 
 
 # --- HELPER FUNCTIONS ---
@@ -417,6 +321,16 @@ def get_client_ip():
     so clients cannot spoof their address by sending the header themselves.
     """
     return request.remote_addr or "127.0.0.1"
+
+
+def prepare_tts_text(text):
+    """Normalise text exactly as /speak does before synthesis and cache-keying."""
+    return clean_text_for_tts(html.escape(text))
+
+
+def speech_cache_path(voice_id, prepared_text, prefix=""):
+    """Path of the cached MP3 for a voice + prepared text."""
+    return os.path.join(AUDIO_CACHE_DIR, f"{prefix}{get_optimized_cache_key(voice_id, prepared_text)}.mp3")
 
 
 SECRET_SETTINGS = {
@@ -463,7 +377,7 @@ def ensure_session_id():
 @app.route("/health")
 def health_check():
     """Lightweight, unauthenticated liveness endpoint for container health checks."""
-    return jsonify({"status": "ok", "sse_connections": len(sse_connections)}), 200
+    return jsonify({"status": "ok", "sse_connections": sse.connection_count()}), 200
 
 
 @app.route("/")
@@ -594,108 +508,12 @@ def login_status():
 @app.route("/events")
 @require_auth
 def sse_events():
-    """Server-Sent Events endpoint for real-time notifications"""
-    # Generate unique connection ID
-    connection_id = str(uuid.uuid4())
-
-    # Get client information for security and tracking
-    session_id = session.get("session_id") or (session.sid if hasattr(session, "sid") else None)
-    client_ip = get_client_ip()
-
-    # Get subscription preferences from query parameters
-    subscriptions = request.args.get("subscribe", "").split(",")
-    subscriptions = {sub.strip() for sub in subscriptions if sub.strip()}
-    if not subscriptions:
-        subscriptions = {
-            "summary_complete",
-            "summary_progress",
-            "system",
-        }  # Default subscriptions
-
-    # Create and register the connection
-    connection = SSEConnection(connection_id, session_id, client_ip)
-    connection.subscriptions = subscriptions
-
-    with sse_connection_lock:
-        sse_connections[connection_id] = connection
-
-    print(f"New SSE connection established: {connection_id} from {client_ip} (Session: {session_id})")
-
-    def generate():
-        """Generator function for SSE stream"""
-        try:
-            # Send initial connection event
-            yield format_sse_message(
-                "connected",
-                {
-                    "connection_id": connection_id,
-                    "message": "Connected to notification stream",
-                    "subscriptions": list(subscriptions),
-                },
-                event_id=connection_id,
-            )
-
-            # Stream messages from the connection's queue
-            for message in connection.get_messages():
-                if not connection.is_active:
-                    break
-                yield format_sse_message(
-                    message["event"],
-                    message["data"],
-                    message["id"],
-                    message.get("retry"),
-                )
-
-        except GeneratorExit:
-            # Client disconnected
-            print(f"SSE connection closed by client: {connection_id}")
-        except Exception as e:
-            print(f"Error in SSE stream {connection_id}: {e}")
-        finally:
-            # Clean up connection
-            with sse_connection_lock:
-                sse_connections.pop(connection_id, None)
-            connection.close()
-            print(f"SSE connection cleaned up: {connection_id}")
-
-    # Return SSE response with proper headers
-    return Response(
-        generate(),
-        mimetype="text/event-stream",
-        headers={
-            "Cache-Control": "no-cache, no-store, must-revalidate",
-            "Pragma": "no-cache",
-            "Expires": "0",
-            "X-Accel-Buffering": "no",  # Nginx directive to disable buffering
-            "Connection": "keep-alive",
-        },
-    )
-
-
-def format_sse_message(event_type, data, event_id=None, retry=None):
-    """Format data as Server-Sent Events message"""
-    lines = []
-
-    if event_id:
-        lines.append(f"id: {event_id}")
-
-    if retry:
-        lines.append(f"retry: {retry}")
-
-    lines.append(f"event: {event_type}")
-
-    # Handle data formatting
-    if isinstance(data, (dict, list)):
-        data_str = json.dumps(data)
-    else:
-        data_str = str(data)
-
-    # Split multi-line data properly
-    for line in data_str.split("\n"):
-        lines.append(f"data: {line}")
-
-    lines.append("")  # Empty line to end the message
-    return "\n".join(lines) + "\n"
+    """Server-Sent Events stream of summary progress for the current session."""
+    subscriptions = {sub.strip() for sub in request.args.get("subscribe", "").split(",") if sub.strip()}
+    connection = sse.register(session.get("session_id"), get_client_ip(), subscriptions or None)
+    if connection is None:
+        return jsonify({"error": "Too many open event streams"}), 503
+    return Response(sse.stream(connection), mimetype="text/event-stream", headers=sse.STREAM_HEADERS)
 
 
 @app.route("/get_cached_summaries", methods=["GET"])
@@ -834,7 +652,7 @@ def api_status():
         "openai_api_key_set": bool(openai_api_key),
         "youtube_client_initialized": youtube is not None,
         "tts_client_initialized": tts_client is not None,
-        "gemini_model_initialized": gemini_model is not None,
+        "gemini_model_initialized": gemini_client is not None,
         "openai_client_initialized": openai_client is not None,
         "available_models": list(AVAILABLE_MODELS.keys()),
         "testing_mode": bool(os.environ.get("TESTING")),
@@ -883,7 +701,7 @@ def debug_transcript():
 
 def _notify_progress(session_id, data):
     """Send a summary_progress SSE notification."""
-    broadcast_to_connections(
+    sse.broadcast(
         "summary_progress", data,
         session_filter=session_id,
         subscription_filter="summary_progress",
@@ -892,7 +710,7 @@ def _notify_progress(session_id, data):
 
 def _notify_complete(session_id, data):
     """Send a summary_complete SSE notification."""
-    broadcast_to_connections(
+    sse.broadcast(
         "summary_complete", data,
         session_filter=session_id,
         subscription_filter="summary_complete",
@@ -909,10 +727,7 @@ def _summarize_and_cache(vid_id, vid_title, thumbnail_url, model_key):
     summary, err = (None, err) if err else generate_summary(transcript, vid_title, model_key)
 
     if summary and not err:
-        audio_filename = f"{hashlib.sha256(summary.encode('utf-8')).hexdigest()}.mp3"
-        summary_cache[vid_id] = build_cache_entry(
-            vid_title, summary, thumbnail_url, vid_id, model_key, audio_filename
-        )
+        summary_cache[vid_id] = build_cache_entry(vid_title, summary, thumbnail_url, vid_id, model_key)
         save_summary_cache(summary_cache, SUMMARY_CACHE_FILE)
 
     return summary, err
@@ -1049,7 +864,7 @@ def summarize_links():
             available_models = list(AVAILABLE_MODELS.keys())
             return jsonify({"error": f"Unsupported model: {model_key}. Available models: {available_models}"}), 400
 
-        session_id = session.get("session_id") or (session.sid if hasattr(session, "sid") else None)
+        session_id = session.get("session_id")
 
         # Send initial progress notification
         has_playlists = any(get_playlist_id(url) for url in urls)
@@ -1118,11 +933,7 @@ def speak():
         if len(text_to_speak) > MAX_TTS_CHARS:
             return jsonify({"error": f"Text too long (max {MAX_TTS_CHARS} characters)"}), 413
 
-        # Sanitize text input to prevent XSS (though this goes to TTS, not display)
-        text_to_speak = html.escape(text_to_speak)
-
-        # Clean text for TTS to avoid ASCII pronunciation issues
-        text_to_speak = clean_text_for_tts(text_to_speak)
+        text_to_speak = prepare_tts_text(text_to_speak)
     except Exception as e:
         return jsonify({"error": f"Failed to parse request: {str(e)}"}), 400
 
@@ -1140,10 +951,8 @@ def speak():
         size_mb = cleanup_result["size_freed"] / 1024 / 1024
         print(f"Cache cleanup: removed {cleanup_result['cleaned']} files, freed {size_mb:.1f}MB")
 
-    # Use optimized cache key generation
-    cache_key = get_optimized_cache_key(voice_id, text_to_speak)
-    filename = f"{cache_key}.mp3"
-    filepath = os.path.join(AUDIO_CACHE_DIR, filename)
+    filepath = speech_cache_path(voice_id, text_to_speak)
+    filename = os.path.basename(filepath)
 
     if os.path.exists(filepath):
         print(f"AUDIO CACHE HIT for file: {filename}")
@@ -1269,10 +1078,11 @@ def preview_voice():
         if not text_to_speak:
             return jsonify({"error": "No text provided"}), 400
 
-        # Sanitize text input
-        text_to_speak = html.escape(text_to_speak)
-        # Clean text for TTS to avoid ASCII pronunciation issues
-        text_to_speak = clean_text_for_tts(text_to_speak)
+        # voice_id is part of the cache filename: allowlist it (path traversal)
+        if not validate_voice_name(voice_id):
+            return jsonify({"error": "Invalid voice selection"}), 400
+
+        text_to_speak = prepare_tts_text(text_to_speak)
 
         # Limit text length for previews to prevent abuse
         if len(text_to_speak) > 500:
@@ -1282,9 +1092,8 @@ def preview_voice():
         return jsonify({"error": f"Failed to parse request: {str(e)}"}), 400
 
     # Use optimized cache key for previews
-    preview_key = f"preview_{get_optimized_cache_key(voice_id, text_to_speak)}"
-    filename = f"{preview_key}.mp3"
-    filepath = os.path.join(AUDIO_CACHE_DIR, filename)
+    filepath = speech_cache_path(voice_id, text_to_speak, prefix="preview_")
+    filename = os.path.basename(filepath)
 
     # Check cache first
     if os.path.exists(filepath):
@@ -1347,9 +1156,17 @@ def delete_summary():
         if video_id not in summary_cache:
             return jsonify({"error": "Summary not found"}), 404
 
-        # Get the audio filename before deleting from cache
         cached_item = summary_cache[video_id]
-        audio_filename = cached_item.get("audio_filename")
+
+        # Audio generated by /speak is keyed on voice + prepared text, so check
+        # every known voice. Also honour the legacy audio_filename field.
+        audio_paths = set()
+        if cached_item.get("summary"):
+            prepared = prepare_tts_text(cached_item["summary"])
+            for voice in set(AVAILABLE_VOICES) | {TTS_VOICE}:
+                audio_paths.add(speech_cache_path(voice, prepared))
+        if cached_item.get("audio_filename"):
+            audio_paths.add(os.path.join(AUDIO_CACHE_DIR, os.path.basename(cached_item["audio_filename"])))
 
         # Remove from cache
         del summary_cache[video_id]
@@ -1357,9 +1174,8 @@ def delete_summary():
         # Save the updated cache
         save_summary_cache(summary_cache, SUMMARY_CACHE_FILE)
 
-        # Try to delete the associated audio file if it exists
-        if audio_filename:
-            audio_filepath = os.path.join(AUDIO_CACHE_DIR, audio_filename)
+        # Delete any associated audio files
+        for audio_filepath in audio_paths:
             if os.path.exists(audio_filepath):
                 try:
                     os.remove(audio_filepath)
@@ -1483,7 +1299,7 @@ def update_settings():
         global LOGIN_ENABLED, LOGIN_CODE, SESSION_SECRET_KEY, MAX_LOGIN_ATTEMPTS, LOCKOUT_DURATION
         global WEBSHARE_PROXY_ENABLED, WEBSHARE_PROXY_HOST, WEBSHARE_PROXY_PORT
         global WEBSHARE_PROXY_USERNAME, WEBSHARE_PROXY_PASSWORD, TTS_VOICE
-        global google_api_key, openai_api_key, gemini_model, openai_client, tts_client, youtube
+        global google_api_key, openai_api_key
 
         LOGIN_ENABLED = os.environ.get("LOGIN_ENABLED", "false").lower() == "true"
         LOGIN_CODE = os.environ.get("LOGIN_CODE", "")
@@ -1516,27 +1332,10 @@ def update_settings():
             google_api_key = os.environ.get("GOOGLE_API_KEY")
             openai_api_key = os.environ.get("OPENAI_API_KEY")
 
-            # Reinitialize Google APIs if key was updated
             if "GOOGLE_API_KEY" in updated_vars and google_api_key:
-                try:
-                    tts_client = texttospeech.TextToSpeechClient(client_options=ClientOptions(api_key=google_api_key))
-                    genai.configure(api_key=google_api_key)
-                    youtube = create_youtube_client_with_timeout(google_api_key, timeout=30)
-                    gemini_model = genai.GenerativeModel(model_name="gemini-2.5-flash")
-                    youtube_helpers.set_youtube_client(youtube)
-                    ai_models.set_clients(gemini=gemini_model)
-                    print("✅ Google APIs reinitialized successfully")
-                except Exception as e:
-                    print(f"Warning: Could not reinitialize Google APIs. Error: {e}")
-
-            # Reinitialize OpenAI API if key was updated
+                init_google_clients(google_api_key)
             if "OPENAI_API_KEY" in updated_vars and openai_api_key:
-                try:
-                    openai_client = openai.OpenAI(api_key=openai_api_key)
-                    ai_models.set_clients(openai_cli=openai_client)
-                    print("✅ OpenAI API reinitialized successfully")
-                except Exception as e:
-                    print(f"Warning: Could not reinitialize OpenAI API. Error: {e}")
+                init_openai_client(openai_api_key)
 
         # Save environment variables to .env file for persistence
         save_success = save_env_to_file(updated_vars)

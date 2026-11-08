@@ -1,7 +1,7 @@
 """AI model configuration and summary generation."""
 
-import google.generativeai as genai
 import openai
+from google import genai
 
 AVAILABLE_MODELS = {
     "gemini-2.5-flash": {
@@ -45,15 +45,20 @@ AVAILABLE_MODELS = {
 DEFAULT_MODEL = "gemini-2.5-flash"
 
 # Module-level clients, injected by app.py
-gemini_model = None
+gemini_client = None
 openai_client = None
+
+
+def create_gemini_client(api_key):
+    """Create a Google GenAI client (google-genai SDK)."""
+    return genai.Client(api_key=api_key)
 
 
 def set_clients(gemini=None, openai_cli=None):
     """Inject AI clients from app.py to avoid circular imports."""
-    global gemini_model, openai_client
+    global gemini_client, openai_client
     if gemini is not None:
-        gemini_model = gemini
+        gemini_client = gemini
     if openai_cli is not None:
         openai_client = openai_cli
 
@@ -116,21 +121,17 @@ def get_summary_prompt(transcript, title):
 
 def generate_summary_gemini(transcript, title, model_name):
     """Generate summary using Google Gemini"""
-    if not gemini_model:
+    if not gemini_client:
         return (
             None,
             "Gemini model not available. Please set the GOOGLE_API_KEY environment variable.",
         )
 
     try:
-        # Create model instance for the specific model if different from default
-        if model_name != "gemini-2.5-flash":
-            current_model = genai.GenerativeModel(model_name=model_name)
-        else:
-            current_model = gemini_model
-
         prompt = get_summary_prompt(transcript, title)
-        response = current_model.generate_content(prompt)
+        response = gemini_client.models.generate_content(model=model_name, contents=prompt)
+        if not response.text:
+            return None, "Empty response from Gemini API"
         return response.text, None
     except Exception as e:
         print(f"Error calling Gemini API ({model_name}): {e}")

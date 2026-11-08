@@ -787,8 +787,35 @@ class TestYouTubeSummarizer(unittest.TestCase):
             # Verify cache was updated
             mock_save_cache.assert_called_once()
 
-            # Verify audio file removal was attempted
-            mock_remove.assert_called_once()
+            # Verify the legacy audio file and the /speak cache file were removed
+            import app as app_module
+
+            removed = {call.args[0] for call in mock_remove.call_args_list}
+            self.assertIn(os.path.join(app_module.AUDIO_CACHE_DIR, "test_audio.mp3"), removed)
+            prepared = app_module.prepare_tts_text("Test summary")
+            self.assertIn(app_module.speech_cache_path(app_module.TTS_VOICE, prepared), removed)
+
+    @patch("app.save_summary_cache")
+    def test_delete_summary_removes_audio_generated_by_speak(self, _mock_save):
+        """Audio cached by /speak for a summary is deleted with the summary"""
+        import tempfile
+
+        import app as app_module
+
+        with tempfile.TemporaryDirectory() as tmp, patch("app.AUDIO_CACHE_DIR", tmp):
+            summary = "A summary with & symbols."
+            audio_path = app_module.speech_cache_path(app_module.TTS_VOICE, app_module.prepare_tts_text(summary))
+            with open(audio_path, "wb") as f:
+                f.write(b"mp3")
+            with patch("app.summary_cache", {"vid1": {"title": "t", "summary": summary, "thumbnail_url": None}}):
+                response = self.client.delete("/delete_summary", json={"video_id": "vid1"})
+            self.assertEqual(response.status_code, 200)
+            self.assertFalse(os.path.exists(audio_path))
+
+    def test_preview_voice_rejects_path_traversal(self):
+        """/preview-voice must allowlist voice_id like /speak does"""
+        response = self.client.post("/preview-voice", json={"voice_id": "../../../tmp/evil", "text": "hi"})
+        self.assertEqual(response.status_code, 400)
 
     @patch("app.summary_cache", {})
     def test_delete_summary_not_found(self):
@@ -835,6 +862,8 @@ class TestYouTubeSummarizer(unittest.TestCase):
             }
         }
 
+        mock_exists.return_value = False  # no audio was ever generated
+
         with patch("app.summary_cache", test_cache):
             response = self.client.delete(
                 "/delete_summary", json={"video_id": test_video_id}, content_type="application/json"
@@ -845,8 +874,7 @@ class TestYouTubeSummarizer(unittest.TestCase):
             data = json.loads(response.data)
             self.assertTrue(data["success"])
 
-            # Audio file operations should not be called
-            mock_exists.assert_not_called()
+            # Nothing on disk, so nothing removed
             mock_remove.assert_not_called()
 
             # Cache should still be saved

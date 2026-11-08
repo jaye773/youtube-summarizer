@@ -265,7 +265,10 @@ def browser_page():
         pytest.skip("Playwright not available")
 
     with sync_playwright() as p:
-        browser = p.chromium.launch(headless=True)
+        try:
+            browser = p.chromium.launch(headless=True)
+        except Exception as e:  # browsers not installed (`playwright install chromium`)
+            pytest.skip(f"Playwright browser unavailable: {e}")
         context = browser.new_context()
         page = context.new_page()
 
