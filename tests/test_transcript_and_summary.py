@@ -126,6 +126,22 @@ class TestWebshareProxyConfiguration(unittest.TestCase):
             self.assertEqual(proxy_config.to_requests_dict(), {"http": expected_proxy_url, "https": expected_proxy_url})
             mock_print.assert_called_with("✅ Using webshare proxy: testuser@proxy.webshare.io:8080")
 
+    def test_proxy_credentials_are_url_encoded(self):
+        """Special characters in proxy credentials must not corrupt the proxy URL"""
+        self._reload_with(
+            {
+                "WEBSHARE_PROXY_ENABLED": "true",
+                "WEBSHARE_PROXY_HOST": "proxy.webshare.io",
+                "WEBSHARE_PROXY_PORT": "8080",
+                "WEBSHARE_PROXY_USERNAME": "user@corp",
+                "WEBSHARE_PROXY_PASSWORD": "p:ss/w@rd",
+            }
+        )
+        with patch("builtins.print"):
+            proxy_config = app.get_proxy_config()
+        expected = "http://user%40corp:p%3Ass%2Fw%40rd@proxy.webshare.io:8080"
+        self.assertEqual(proxy_config.to_requests_dict()["https"], expected)
+
     def test_proxy_rotating_residential_when_host_unset(self):
         """Credentials without host/port use Webshare's rotating residential endpoint"""
         self._reload_with(

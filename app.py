@@ -5,6 +5,7 @@ import socket
 import traceback
 import uuid
 from datetime import datetime
+from urllib.parse import quote
 
 import httplib2
 import openai
@@ -215,7 +216,7 @@ def get_proxy_config():
 
     if has_server:
         proxy_url = (
-            f"http://{WEBSHARE_PROXY_USERNAME}:{WEBSHARE_PROXY_PASSWORD}"
+            f"http://{quote(WEBSHARE_PROXY_USERNAME, safe='')}:{quote(WEBSHARE_PROXY_PASSWORD, safe='')}"
             f"@{WEBSHARE_PROXY_HOST}:{WEBSHARE_PROXY_PORT}"
         )
         _log_proxy_setup_once(
