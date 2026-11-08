@@ -92,6 +92,8 @@ class TestPriorityJobQueue:
         assert len(set(retrieved_job_ids)) == 5
         expected_ids = {f"job-{i}" for i in range(5)}
         assert set(retrieved_job_ids) == expected_ids
+        # Same priority must come out in submission order (FIFO), not LIFO.
+        assert retrieved_job_ids == [f"job-{i}" for i in range(5)]
 
     def test_put_duplicate_job_id(self):
         """Test that duplicate job IDs are rejected"""

@@ -1,5 +1,6 @@
 import atexit
 import hashlib  # For generating filenames
+import hmac  # For constant-time passcode comparison
 import html  # For HTML escaping user inputs
 import json
 import os
@@ -45,6 +46,7 @@ from voice_config import (
     get_voice_with_fallback,
     get_voices_by_tier,
     should_cleanup_cache,
+    validate_voice_name,
 )
 
 import auth
@@ -281,6 +283,7 @@ def init_worker_system():
                     "get_transcript": get_transcript,
                     "generate_summary": generate_summary,
                     "get_video_details": get_video_details,
+                    "load_summary_cache": lambda: load_summary_cache(SUMMARY_CACHE_FILE),
                     "save_summary_cache": lambda cache: save_summary_cache(cache, SUMMARY_CACHE_FILE),
                     "extract_video_id": get_video_id,
                     "extract_playlist_id": get_playlist_id,
@@ -448,14 +451,48 @@ def get_client_ip():
     return client_ip
 
 
-
-
 # --- INITIALIZE WORKER SYSTEM ---
 # Initialize worker system now that all functions are defined
 init_worker_system()
 
 
 # --- API ENDPOINTS ---
+
+
+@app.before_request
+def ensure_session_id():
+    """Assign a stable per-session id used to target SSE events.
+
+    Set on every request (the short-circuit means only the first one writes)
+    so the cookie is in place before the browser opens the /events stream.
+    Without this, SSE connections register with session_id=None and progress
+    events get broadcast to every connected client instead of just the user
+    who started the job.
+    """
+    if not session.get("session_id"):
+        session["session_id"] = str(uuid.uuid4())
+
+
+@app.route("/health")
+@app.route("/sse/health")
+def health_check():
+    """Lightweight, unauthenticated health endpoint for container/orchestration
+    health checks (referenced by the Docker/compose configs). Reports liveness
+    plus a quick view of the worker subsystem."""
+    worker_running = bool(
+        WORKER_SYSTEM_AVAILABLE and worker_manager is not None and getattr(worker_manager, "is_running", False)
+    )
+    return (
+        jsonify(
+            {
+                "status": "ok",
+                "worker_system_available": WORKER_SYSTEM_AVAILABLE,
+                "worker_running": worker_running,
+                "sse_connections": len(sse_connections),
+            }
+        ),
+        200,
+    )
 
 
 @app.route("/")
@@ -517,11 +554,10 @@ def login():
         if not passcode:
             return jsonify({"error": "Passcode is required"}), 400
 
-        # Sanitize passcode input to prevent XSS
-        passcode = html.escape(passcode)
-
-        # Simple authentication check
-        if passcode == LOGIN_CODE:
+        # Constant-time comparison to avoid leaking the passcode via timing.
+        # (The passcode is never reflected back, so there's no XSS reason to
+        # html.escape it here — and escaping broke codes containing & < > " '.)
+        if hmac.compare_digest(passcode.encode("utf-8"), (LOGIN_CODE or "").encode("utf-8")):
             # Reset failed attempts on successful login
             reset_failed_attempts(client_ip)
             session["authenticated"] = True
@@ -599,7 +635,7 @@ def sse_events():
     connection_id = str(uuid.uuid4())
 
     # Get client information for security and tracking
-    session_id = session.get("session_id") or session.sid if hasattr(session, "sid") else None
+    session_id = session.get("session_id") or (session.sid if hasattr(session, "sid") else None)
     client_ip = get_client_ip()
 
     # Get subscription preferences from query parameters
@@ -1164,7 +1200,7 @@ def summarize_links():
             available_models = list(AVAILABLE_MODELS.keys())
             return jsonify({"error": f"Unsupported model: {model_key}. Available models: {available_models}"}), 400
 
-        session_id = session.get("session_id") or session.sid if hasattr(session, "sid") else None
+        session_id = session.get("session_id") or (session.sid if hasattr(session, "sid") else None)
 
         # Send initial progress notification
         has_playlists = any(get_playlist_id(url) for url in urls)
@@ -1251,6 +1287,8 @@ def summarize_async():
 
         # Submit jobs to worker queue
         job_ids = []
+        failures = []
+        client_ip = get_client_ip()
         session_id = session.get("session_id", str(uuid.uuid4()))
         session["session_id"] = session_id
 
@@ -1261,25 +1299,32 @@ def summarize_async():
             if video_id:
                 # Single video job
                 job = create_video_job(url=url, model_key=model_key, session_id=session_id)
-
-                if worker_manager.submit_job(job):
-                    job_ids.append(job.job_id)
-
             elif playlist_id:
                 # Playlist job - video IDs are fetched by the worker during processing
                 job = create_playlist_job(url=url, video_ids=[], model_key=model_key, session_id=session_id)
+            else:
+                failures.append({"url": url, "error": "Not a valid YouTube video or playlist URL"})
+                continue
 
-                if worker_manager.submit_job(job):
-                    job_ids.append(job.job_id)
+            # submit_job returns (success, message); a failure tuple is truthy,
+            # so it must be unpacked rather than tested directly. Pass client_ip
+            # so the per-IP rate limiter actually applies.
+            success, message = worker_manager.submit_job(job, client_ip)
+            if success:
+                job_ids.append(job.job_id)
+            else:
+                failures.append({"url": url, "error": message})
 
         if not job_ids:
-            return jsonify({"error": "Failed to submit any jobs"}), 500
+            error_detail = failures[0]["error"] if failures else "No valid URLs to submit"
+            return jsonify({"error": f"Failed to submit any jobs: {error_detail}", "failures": failures}), 500
 
         return jsonify(
             {
                 "success": True,
                 "message": f"Submitted {len(job_ids)} jobs for processing",
                 "job_ids": job_ids,
+                "failures": failures,
                 "session_id": session_id,
             }
         )
@@ -1345,8 +1390,13 @@ def speak():
     except Exception as e:
         return jsonify({"error": f"Failed to parse request: {str(e)}"}), 400
 
-    # Get voice selection from request data (default to configured voice)
+    # Get voice selection from request data (default to configured voice).
+    # voice_id becomes the leading component of the cache filename, so reject
+    # anything not in the known-voice allowlist to prevent path traversal
+    # (e.g. "../../etc/x") into the audio cache write/read.
     voice_id = data.get("voice_id", TTS_VOICE)
+    if not validate_voice_name(voice_id):
+        return jsonify({"error": "Invalid voice selection"}), 400
 
     # Check if cache cleanup is needed (do this before generating cache key)
     if should_cleanup_cache(AUDIO_CACHE_DIR):
@@ -1612,7 +1662,7 @@ def settings_page():
         "WEBSHARE_PROXY_USERNAME": os.environ.get("WEBSHARE_PROXY_USERNAME", ""),
         "WEBSHARE_PROXY_PASSWORD": os.environ.get("WEBSHARE_PROXY_PASSWORD", ""),
         "DATA_DIR": os.environ.get("DATA_DIR", ""),
-        "FLASK_DEBUG": os.environ.get("FLASK_DEBUG", "true"),
+        "FLASK_DEBUG": os.environ.get("FLASK_DEBUG", "false"),
         "TTS_VOICE": os.environ.get("TTS_VOICE", "en-US-Chirp3-HD-Zephyr"),
     }
 
@@ -1856,8 +1906,10 @@ atexit.register(cleanup_worker_system)
 
 if __name__ == "__main__":
     try:
-        # Enable debug mode only in development (configurable via environment variable)
-        debug_mode = os.environ.get("FLASK_DEBUG", "true").lower() == "true"
+        # Debug mode is OFF by default; opt in with FLASK_DEBUG=true for local dev only.
+        # The Werkzeug debugger allows remote code execution, so it must never
+        # default on for a deployed instance.
+        debug_mode = os.environ.get("FLASK_DEBUG", "false").lower() == "true"
         print(f"🚀 Starting YouTube Summarizer on port 5001 (debug={debug_mode})")
         app.run(debug=debug_mode, port=5001)
     except KeyboardInterrupt:

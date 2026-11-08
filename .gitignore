@@ -2,6 +2,8 @@
 __pycache__/
 *.py[cod]
 *$py.class
+*.egg-info/
+*.egg
 
 # Virtual Environment
 venv/
@@ -65,4 +67,6 @@ htmlcov/
 *.coverage
 coverage.xml
 .tox/
-test-reports/ 
+test-reports/
+tests/test_cache.json
+tests/test_cache.json.lock 

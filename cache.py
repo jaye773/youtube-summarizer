@@ -1,6 +1,12 @@
 import json
 import os
+import tempfile
+import threading
 from datetime import datetime, timezone
+
+# Serializes cache writes within a process so concurrent request threads and
+# worker threads cannot truncate or interleave each other's writes.
+_cache_write_lock = threading.Lock()
 
 
 def load_summary_cache(cache_file):
@@ -28,9 +34,28 @@ def save_summary_cache(cache, cache_file):
     Args:
         cache: dict mapping video_id to cache entry dicts.
         cache_file: Path to the JSON cache file.
+
+    The write is atomic (serialized via a lock, written to a temp file in the
+    same directory, then ``os.replace``d into place) so a crash or a concurrent
+    writer can never leave a truncated/corrupt cache on disk.
     """
-    with open(cache_file, "w") as f:
-        json.dump(cache, f, indent=4)
+    with _cache_write_lock:
+        directory = os.path.dirname(cache_file) or "."
+        os.makedirs(directory, exist_ok=True)
+        # Snapshot under the lock to avoid "dictionary changed size during
+        # iteration" if another thread mutates the cache while we serialize it.
+        payload = json.dumps(dict(cache), indent=4)
+        fd, tmp_path = tempfile.mkstemp(dir=directory, suffix=".tmp")
+        try:
+            with os.fdopen(fd, "w") as f:
+                f.write(payload)
+                f.flush()
+                os.fsync(f.fileno())
+            os.replace(tmp_path, cache_file)
+        except BaseException:
+            if os.path.exists(tmp_path):
+                os.remove(tmp_path)
+            raise
 
 
 def build_cache_entry(title, summary, thumbnail_url, video_id, model_key, audio_filename=None):

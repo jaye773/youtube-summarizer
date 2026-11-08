@@ -35,6 +35,16 @@ class TestYouTubeSummarizer(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
 
     @patch("app.LOGIN_ENABLED", True)
+    def test_health_endpoints_are_public(self):
+        """/health and /sse/health must respond 200 without auth (container health checks)."""
+        if "TESTING" in os.environ:
+            del os.environ["TESTING"]
+        for path in ("/health", "/sse/health"):
+            response = self.client.get(path)
+            self.assertEqual(response.status_code, 200, path)
+            self.assertEqual(response.get_json()["status"], "ok")
+
+    @patch("app.LOGIN_ENABLED", True)
     def test_home_page_requires_auth_when_enabled(self):
         """Test that home page redirects to login when authentication is enabled and user not logged in"""
         # Remove testing environment variable to enable authentication
@@ -58,6 +68,25 @@ class TestYouTubeSummarizer(unittest.TestCase):
 
         response = self.client.get("/")
         self.assertEqual(response.status_code, 200)
+
+    def test_login_accepts_passcode_with_special_chars(self):
+        """A correct passcode containing HTML special chars must authenticate.
+
+        The old code html.escape'd the passcode before comparing, so codes
+        containing & < > " ' could never match.
+        """
+        if "TESTING" in os.environ:
+            del os.environ["TESTING"]
+        with patch("app.LOGIN_ENABLED", True), patch("app.LOGIN_CODE", "p@ss&w<rd>"), patch(
+            "app.is_ip_locked_out", return_value=(False, 0)
+        ), patch("app.reset_failed_attempts"):
+            response = self.client.post(
+                "/login",
+                data=json.dumps({"passcode": "p@ss&w<rd>"}),
+                content_type="application/json",
+            )
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(json.loads(response.data)["success"])
 
     def test_get_cached_summaries_empty(self):
         """Test getting cached summaries when cache is empty"""
@@ -214,6 +243,16 @@ class TestYouTubeSummarizer(unittest.TestCase):
         """Test speak endpoint with no text provided"""
         response = self.client.post("/speak", data=json.dumps({}), content_type="application/json")
         self.assertEqual(response.status_code, 400)
+
+    def test_speak_rejects_path_traversal_voice_id(self):
+        """voice_id outside the known-voice allowlist must be rejected (path traversal)."""
+        response = self.client.post(
+            "/speak",
+            data=json.dumps({"text": "Test text", "voice_id": "../../../../tmp/pwn"}),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("Invalid voice", response.get_json()["error"])
 
     @patch("os.path.exists")
     @patch("builtins.open", new_callable=mock_open, read_data=b"fake audio content")
