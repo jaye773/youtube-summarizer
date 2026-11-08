@@ -80,7 +80,8 @@ Production: `gunicorn -c gunicorn_config.py app:app` (what the Dockerfile runs).
 - `tests/test_app.py` – routes, auth, settings, security regressions
 - `tests/test_transcript_and_summary.py` – transcript and model calls (mocked)
 - `tests/test_cache.py`, `tests/test_pagination.py`, `tests/test_integration.py`, `tests/test_sse.py`
-- `tests/test_dark_mode_integration.py`, `tests/test_theme_performance.py`, `tests/test_visual_dark_mode.py` – Playwright/theme tests (`make test-browser`)
+- `tests/test_visual_dark_mode.py` – theme CSS variables and WCAG contrast (no browser)
+- `tests/test_browser_smoke.py` – Playwright against a live server on a free port: pages load without JS errors, model selector built from `/api_status`, theme persistence (`make test-browser`; skipped without Playwright; a separate CI job installs Chromium and runs it)
 
 Tests import `app` with `TESTING=true`, which skips real API client creation. Patch module globals such as `app.summary_cache`, `app.tts_client`, `ai_models.gemini_client`, `ai_models.openai_client`.
 

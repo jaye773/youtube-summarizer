@@ -411,7 +411,7 @@ make coverage
 
 Browser (Playwright) tests are skipped unless Playwright and its browsers are installed:
 ```bash
-pip install playwright && playwright install chromium
+pip install playwright==1.64.1 && python -m playwright install chromium
 make test-browser
 ```
 

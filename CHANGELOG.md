@@ -24,6 +24,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - SSE moved to `sse.py`; idle streams are no longer dropped every 5 minutes
 
 ### Removed
+- `tests/test_dark_mode_integration.py` and `tests/test_theme_performance.py`: they targeted `localhost:5000` with no server started (on macOS that port is the AirPlay receiver), mostly asserted on DOM they injected themselves, and used timing thresholds; replaced by `tests/test_browser_smoke.py`, which runs in a dedicated CI job
 - Unused async worker system (`worker_manager`, `job_queue`, `job_models`, `job_state`, `error_handler`, `sse_manager`, `/summarize_async`, `/jobs`) and its client scripts and tests
 - `Dockerfile.sse`, `docker-compose-sse.yml`, `docker-compose-podman.yml`, `docker/`, `nginx-sse-fixed.conf`
 
