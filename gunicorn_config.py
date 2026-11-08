@@ -1,8 +1,8 @@
 """
 Gunicorn configuration for YouTube Summarizer.
 
-The app keeps its state in process memory (summary cache, SSE connections,
-login lockouts), so it MUST run as a single process. Concurrency comes from
+The app keeps some state in process memory (SSE connections, login
+lockouts), so it MUST run as a single process. Concurrency comes from
 threads: the gthread worker gives each request - including each long-lived
 SSE stream - its own thread, and its heartbeat runs independently of request
 threads so slow summaries are not killed by the worker timeout.

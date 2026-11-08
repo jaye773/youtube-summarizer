@@ -52,7 +52,13 @@ from youtube_helpers import (
 )
 
 from tts_helpers import clean_text_for_tts, synthesize_audio
-from cache import build_cache_entry, load_summary_cache, save_summary_cache
+from cache import (
+    build_cache_entry,
+    list_summary_entries,
+    open_summary_cache,
+    save_summary_cache,
+    search_summary_entries,
+)
 import ai_models
 import sse
 from ai_models import (
@@ -136,7 +142,8 @@ youtube_helpers.set_proxy_config_func(get_proxy_config)
 
 
 # --- CACHE CONFIGURATION ---
-SUMMARY_CACHE_FILE = os.path.join(DATA_DIR, "summary_cache.json")
+SUMMARY_CACHE_FILE = os.path.join(DATA_DIR, "summary_cache.json")  # legacy; migrated into SUMMARY_DB_FILE
+SUMMARY_DB_FILE = os.path.join(DATA_DIR, "summaries.db")
 LOGIN_ATTEMPTS_FILE = os.path.join(DATA_DIR, "login_attempts.json")
 AUDIO_CACHE_DIR = os.path.join(DATA_DIR, "audio_cache")
 
@@ -144,7 +151,7 @@ os.makedirs(AUDIO_CACHE_DIR, exist_ok=True)
 print(f"✅ Audio cache directory is set to: '{AUDIO_CACHE_DIR}/'")
 
 
-summary_cache = load_summary_cache(SUMMARY_CACHE_FILE)
+summary_cache = open_summary_cache(SUMMARY_DB_FILE, SUMMARY_CACHE_FILE, testing=bool(os.environ.get("TESTING")))
 print(f"✅ Loaded {len(summary_cache)} summaries from cache.")
 
 
@@ -540,42 +547,31 @@ def get_cached_summaries():
     elif per_page > 100:  # Cap at 100 to prevent performance issues
         per_page = 100
 
-    cached_list = [
-        {
-            "type": "video",
-            "video_id": video_id,
-            "title": d["title"],
-            "thumbnail_url": d["thumbnail_url"],
-            "summary": d["summary"],
-            "summarized_at": d.get("summarized_at"),
-            "video_url": d.get("video_url"),
-            "error": None,
-        }
-        for video_id, d in summary_cache.items()
-    ]
-    cached_list.sort(key=lambda x: x.get("summarized_at", "1970-01-01T00:00:00.000000"), reverse=True)
+    def to_items(entries):
+        return [
+            {
+                "type": "video",
+                "video_id": video_id,
+                "title": d["title"],
+                "thumbnail_url": d["thumbnail_url"],
+                "summary": d["summary"],
+                "summarized_at": d.get("summarized_at"),
+                "video_url": d.get("video_url"),
+                "error": None,
+            }
+            for video_id, d in entries
+        ]
 
-    total = len(cached_list)
-
-    # Handle backward compatibility with limit parameter
-    if limit is not None:
+    # Legacy (non-paginated) formats: a plain list, newest first, optionally capped by limit
+    if limit is not None or not is_pagination_request:
         if limit == 0:
-            cached_list = []
-        elif limit > 0:
-            cached_list = cached_list[:limit]
-        # Return old format for backward compatibility
-        return jsonify(cached_list)
+            return jsonify([])
+        _, entries = list_summary_entries(summary_cache, 0, limit if limit and limit > 0 else None)
+        return jsonify(to_items(entries))
 
-    # If no pagination parameters were provided, return old format for backward compatibility
-    if not is_pagination_request:
-        return jsonify(cached_list)
-
-    # Calculate pagination
+    total, entries = list_summary_entries(summary_cache, (page - 1) * per_page, per_page)
     total_pages = (total + per_page - 1) // per_page if total > 0 else 0
-    start_index = (page - 1) * per_page
-    end_index = start_index + per_page
-
-    paginated_list = cached_list[start_index:end_index]
+    paginated_list = to_items(entries)
 
     return jsonify(
         {
@@ -604,27 +600,18 @@ def search_summaries():
     if not summary_cache:
         return jsonify([])
 
-    # Perform case-insensitive search in both title and summary
-    results = []
-    for video_id, data in summary_cache.items():
-        title = data.get("title", "").lower()
-        summary = data.get("summary", "").lower()
-        query_lower = query.lower()
-
-        if query_lower in title or query_lower in summary:
-            results.append(
-                {
-                    "video_id": video_id,
-                    "title": data["title"],
-                    "thumbnail_url": data["thumbnail_url"],
-                    "summary": data["summary"],
-                    "summarized_at": data.get("summarized_at"),
-                    "video_url": data.get("video_url"),
-                }
-            )
-
-    # Sort by date (most recent first)
-    results.sort(key=lambda x: x.get("summarized_at", "1970-01-01T00:00:00.000000"), reverse=True)
+    # Case-insensitive search in title and summary, most recent first
+    results = [
+        {
+            "video_id": video_id,
+            "title": data["title"],
+            "thumbnail_url": data["thumbnail_url"],
+            "summary": data["summary"],
+            "summarized_at": data.get("summarized_at"),
+            "video_url": data.get("video_url"),
+        }
+        for video_id, data in search_summary_entries(summary_cache, query)
+    ]
 
     return jsonify(results)
 
