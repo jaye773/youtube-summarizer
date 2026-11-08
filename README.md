@@ -117,7 +117,7 @@ The test suite bypasses authentication. This requires both `TESTING=true` in the
 | `TRUST_PROXY_HOPS` | `0` | Number of reverse proxies in front of the app. Only then is `X-Forwarded-For` trusted for client IPs (login lockout). Leave at `0` when exposed directly |
 | `ENABLE_DEBUG_ENDPOINTS` | `false` | Enables `/debug_transcript` |
 | `MAX_TTS_CHARS` | `50000` | Maximum text length accepted by `/speak` |
-| `NETWORK_TIMEOUT` | `60` | Default socket timeout (seconds) for network calls without their own timeout, e.g. transcript fetches |
+| `NETWORK_TIMEOUT` | `60` | Timeout (seconds) for each transcript HTTP request; also the default socket timeout for network calls without their own |
 | `SSE_MAX_CONNECTIONS` | `20` | Maximum concurrent progress streams (each holds a server thread) |
 | `GUNICORN_THREADS` | `32` | Request threads in the single gunicorn process |
 
@@ -141,6 +141,8 @@ WEBSHARE_PROXY_PORT=8080                      # Proxy server port
 WEBSHARE_PROXY_USERNAME=your_username         # Webshare proxy username
 WEBSHARE_PROXY_PASSWORD=your_password         # Webshare proxy password
 ```
+
+With `WEBSHARE_PROXY_HOST` and `WEBSHARE_PROXY_PORT` set, every transcript request goes through that proxy server (works with any HTTP proxy). Leave both unset to use Webshare's **rotating residential** proxies instead (only username and password needed; requires a Webshare "Residential" plan): each request gets a new IP and blocked requests are retried on another IP, which is what the youtube-transcript-api maintainers recommend for getting around YouTube IP blocks.
 
 ### Setup Examples
 

@@ -15,6 +15,7 @@ from google.cloud import texttospeech
 from googleapiclient.discovery import build
 from werkzeug.exceptions import HTTPException
 from werkzeug.middleware.proxy_fix import ProxyFix
+from youtube_transcript_api.proxies import GenericProxyConfig, WebshareProxyConfig
 
 from voice_config import (
     AVAILABLE_VOICES,
@@ -91,9 +92,11 @@ DEBUG_ENDPOINTS_ENABLED = os.environ.get("ENABLE_DEBUG_ENDPOINTS", "false").lowe
 # Upper bound on text sent to text-to-speech in one request (cost/abuse guard)
 MAX_TTS_CHARS = int(os.environ.get("MAX_TTS_CHARS", "50000"))
 
-# Process-wide default socket timeout. Some network calls (notably the YouTube
-# transcript fetch) expose no timeout parameter; this keeps them from hanging
-# forever. Clients that set their own timeouts (OpenAI, httplib2) are unaffected.
+# Process-wide default socket timeout, kept as a safety net for any library call
+# that opens sockets without its own timeout. The transcript fetch now sets an
+# explicit per-request timeout from the same NETWORK_TIMEOUT value
+# (youtube_helpers._TimeoutSession); clients that set their own timeouts
+# (OpenAI, httplib2) are unaffected.
 socket.setdefaulttimeout(int(os.environ.get("NETWORK_TIMEOUT", "60")))
 
 # --- WEBSHARE PROXY CONFIGURATION ---
@@ -104,31 +107,61 @@ WEBSHARE_PROXY_USERNAME = os.environ.get("WEBSHARE_PROXY_USERNAME")
 WEBSHARE_PROXY_PASSWORD = os.environ.get("WEBSHARE_PROXY_PASSWORD")
 
 
+# Last proxy setup that was logged, so get_proxy_config() (called once per transcript fetch)
+# only prints when the configuration actually changes instead of on every request.
+_last_logged_proxy_setup = None
+
+
+def _log_proxy_setup_once(key, message):
+    global _last_logged_proxy_setup
+    if key != _last_logged_proxy_setup:
+        _last_logged_proxy_setup = key
+        print(message)
+
+
 def get_proxy_config():
-    """Get proxy configuration if webshare proxy is enabled and properly configured"""
+    """Build the youtube-transcript-api proxy config from the WEBSHARE_PROXY_* settings.
+
+    Returns None when the proxy is disabled or misconfigured. Otherwise:
+      - HOST and PORT set: a GenericProxyConfig pointing at that proxy server (the original
+        behavior, e.g. a Webshare "Proxy Server" / static plan or any other HTTP proxy).
+      - HOST and PORT both unset: a WebshareProxyConfig, which uses Webshare's rotating
+        residential endpoint (p.webshare.io) and retries on a new IP when YouTube blocks one.
+    """
+    global _last_logged_proxy_setup
     if not WEBSHARE_PROXY_ENABLED:
+        _last_logged_proxy_setup = None
         return None
 
-    if not all(
-        [
-            WEBSHARE_PROXY_HOST,
-            WEBSHARE_PROXY_PORT,
-            WEBSHARE_PROXY_USERNAME,
-            WEBSHARE_PROXY_PASSWORD,
-        ]
-    ):
-        print(
+    has_credentials = bool(WEBSHARE_PROXY_USERNAME and WEBSHARE_PROXY_PASSWORD)
+    has_server = bool(WEBSHARE_PROXY_HOST and WEBSHARE_PROXY_PORT)
+    partial_server = bool(WEBSHARE_PROXY_HOST) != bool(WEBSHARE_PROXY_PORT)
+
+    if not has_credentials or partial_server:
+        _log_proxy_setup_once(
+            ("missing",),
             "⚠️ Webshare proxy is enabled but missing required configuration. "
-            "Required: WEBSHARE_PROXY_HOST, WEBSHARE_PROXY_PORT, WEBSHARE_PROXY_USERNAME, WEBSHARE_PROXY_PASSWORD"
+            "Required: WEBSHARE_PROXY_USERNAME, WEBSHARE_PROXY_PASSWORD, plus both WEBSHARE_PROXY_HOST and "
+            "WEBSHARE_PROXY_PORT for a fixed proxy server (leave both unset for Webshare rotating residential proxies)",
         )
         return None
 
-    proxy_url = (
-        f"http://{WEBSHARE_PROXY_USERNAME}:{WEBSHARE_PROXY_PASSWORD}" f"@{WEBSHARE_PROXY_HOST}:{WEBSHARE_PROXY_PORT}"
+    if has_server:
+        proxy_url = (
+            f"http://{WEBSHARE_PROXY_USERNAME}:{WEBSHARE_PROXY_PASSWORD}"
+            f"@{WEBSHARE_PROXY_HOST}:{WEBSHARE_PROXY_PORT}"
+        )
+        _log_proxy_setup_once(
+            ("server", WEBSHARE_PROXY_USERNAME, WEBSHARE_PROXY_HOST, WEBSHARE_PROXY_PORT),
+            f"✅ Using webshare proxy: {WEBSHARE_PROXY_USERNAME}@{WEBSHARE_PROXY_HOST}:{WEBSHARE_PROXY_PORT}",
+        )
+        return GenericProxyConfig(http_url=proxy_url, https_url=proxy_url)
+
+    _log_proxy_setup_once(
+        ("rotating", WEBSHARE_PROXY_USERNAME),
+        f"✅ Using webshare rotating residential proxies as {WEBSHARE_PROXY_USERNAME}",
     )
-    proxies = {"http": proxy_url, "https": proxy_url}
-    print(f"✅ Using webshare proxy: {WEBSHARE_PROXY_USERNAME}@{WEBSHARE_PROXY_HOST}:{WEBSHARE_PROXY_PORT}")
-    return proxies
+    return WebshareProxyConfig(proxy_username=WEBSHARE_PROXY_USERNAME, proxy_password=WEBSHARE_PROXY_PASSWORD)
 
 
 # Inject proxy config function into youtube_helpers now that it is defined

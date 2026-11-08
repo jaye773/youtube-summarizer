@@ -5,5 +5,6 @@ google-genai==1.47.0
 google-api-python-client==2.118.0
 google-cloud-texttospeech==2.15.0
 openai==2.21.0
-# Pinned: app uses the static get_transcript/list_transcripts API, removed in later 1.x releases
-youtube-transcript-api==1.1.0
+# Pinned exactly: YouTube changes often break transcript fetching, so upgrade deliberately and re-test.
+# youtube_helpers.get_transcript uses the instance API (YouTubeTranscriptApi(...).list()) added in 1.x.
+youtube-transcript-api==1.2.4

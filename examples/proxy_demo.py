@@ -47,7 +47,7 @@ def demonstrate_proxy_configuration():
     if proxy_config:
         print("✅ Proxy configuration is valid!")
         print(f"   Using proxy: {app.WEBSHARE_PROXY_USERNAME}@{app.WEBSHARE_PROXY_HOST}:{app.WEBSHARE_PROXY_PORT}")
-        print(f"   Proxy URLs: {proxy_config}")
+        print(f"   Proxy type: {type(proxy_config).__name__}")
     else:
         print("❌ Proxy configuration is disabled or invalid")
         if app.WEBSHARE_PROXY_ENABLED:
