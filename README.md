@@ -120,10 +120,17 @@ The test suite bypasses authentication. This requires both `TESTING=true` in the
 | `NETWORK_TIMEOUT` | `60` | Default socket timeout (seconds) for network calls without their own timeout, e.g. transcript fetches |
 | `SSE_MAX_CONNECTIONS` | `20` | Maximum concurrent progress streams (each holds a server thread) |
 | `GUNICORN_THREADS` | `32` | Request threads in the single gunicorn process |
+| `RATE_LIMIT_ENABLED` | `true` | Per-client-IP rate limiting of the endpoints below. `false` disables all of them |
+| `RATE_LIMIT_SUMMARIZE` | `10 per minute;100 per day` | Limit for `/summarize` (AI credits). `;`-separated [limits](https://limits.readthedocs.io/en/stable/quickstart.html#rate-limit-string-notation) strings; empty disables |
+| `RATE_LIMIT_TTS` | `30 per minute;300 per day` | Shared limit for `/speak` and `/preview-voice` (TTS credits); empty disables |
+| `RATE_LIMIT_LOGIN` | `10 per minute` | Limit for `POST /login`, on top of the lockout; empty disables |
+| `SESSION_COOKIE_SECURE` | `false` | Send the session cookie over HTTPS only. Set `true` when served over HTTPS |
 
 Notes:
 - **Settings page:** with login disabled, anyone who can reach the app can open it and change settings (enable login to restrict it). Secrets are never displayed; leave a secret field blank to keep its current value. Changes are written to `DATA_DIR/.env`, which is loaded at startup and overrides other environment values.
 - **Session secret:** if `SESSION_SECRET_KEY` is not set, one is generated once and stored in `DATA_DIR/.secret_key`.
+- **Rate limits:** counted per client IP in memory (reset on restart). Behind a reverse proxy set `TRUST_PROXY_HOPS`, otherwise every request appears to come from the proxy and shares one budget. Exceeding a limit returns HTTP 429 with a JSON error and a `Retry-After` header.
+- **CSRF:** the session cookie is `HttpOnly` and `SameSite=Lax`, and every POST/PUT/PATCH/DELETE must be sent as `Content-Type: application/json` (otherwise HTTP 415), which cross-site HTML forms cannot do. API clients must send that header, even on bodyless requests such as `/logout`.
 - **Single process:** the app keeps its state in memory, so `gunicorn_config.py` runs exactly one worker process with many threads. Do not raise the worker count.
 
 ## 🌐 Webshare Proxy Support

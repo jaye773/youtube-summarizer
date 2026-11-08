@@ -1260,6 +1260,12 @@
                 clearTimeout(timeoutId);
                 
                 if (!response.ok) {
+                    if (response.status === 429) {
+                        const data = await response.json().catch(() => ({}));
+                        const err = new Error(data.error || 'Too many requests. Please wait a moment and try again.');
+                        err.userMessage = err.message;
+                        throw err;
+                    }
                     throw new Error(`Preview failed: ${response.status}`);
                 }
                 
@@ -1308,7 +1314,7 @@
                 button.classList.remove('playing');
                 button.setAttribute('aria-label', `Preview ${voiceId} voice`);
                 currentlyPlayingAudio = null;
-                const errorMsg = 'Failed to preview voice. Please check your Google API key and internet connection, then try again.';
+                const errorMsg = error.userMessage || 'Failed to preview voice. Please check your Google API key and internet connection, then try again.';
                 showMessage(errorMsg, 'error');
                 announceToScreenReader(errorMsg);
             }
