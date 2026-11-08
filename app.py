@@ -16,10 +16,13 @@ import socket
 import google.generativeai as genai
 import httplib2
 import openai
+from dotenv import load_dotenv
 from flask import Flask, Response, jsonify, redirect, render_template, request, session, url_for
 from google.api_core.client_options import ClientOptions
 from google.cloud import texttospeech
 from googleapiclient.discovery import build
+from werkzeug.exceptions import HTTPException
+from werkzeug.middleware.proxy_fix import ProxyFix
 
 from voice_config import (
     AVAILABLE_VOICES,
@@ -69,7 +72,36 @@ from ai_models import (
 )
 
 # --- CONFIGURATION ---
+# Use data directory if running in Docker/Podman, otherwise use current directory
+DATA_DIR = os.environ.get("DATA_DIR", "data" if os.path.exists("/.dockerenv") else ".")
+os.makedirs(DATA_DIR, exist_ok=True)
+
+# Load configuration files before any setting is read:
+#  1. the project .env (never overrides variables already set in the environment);
+#  2. DATA_DIR/.env, written by the settings page, which DOES override so that
+#     changes saved in the UI survive a restart.
+if not os.environ.get("TESTING"):
+    load_dotenv()
+    load_dotenv(os.path.join(DATA_DIR, ".env"), override=True)
+
 app = Flask(__name__)
+
+# Only trust X-Forwarded-* when running behind a known number of reverse proxies;
+# otherwise any client could spoof its IP and bypass the login lockout.
+TRUST_PROXY_HOPS = int(os.environ.get("TRUST_PROXY_HOPS", "0"))
+if TRUST_PROXY_HOPS > 0:
+    app.wsgi_app = ProxyFix(app.wsgi_app, x_for=TRUST_PROXY_HOPS, x_proto=TRUST_PROXY_HOPS, x_host=TRUST_PROXY_HOPS)
+
+# Diagnostic endpoints (/debug_transcript) are off unless explicitly enabled
+DEBUG_ENDPOINTS_ENABLED = os.environ.get("ENABLE_DEBUG_ENDPOINTS", "false").lower() == "true"
+
+# Upper bound on text sent to text-to-speech in one request (cost/abuse guard)
+MAX_TTS_CHARS = int(os.environ.get("MAX_TTS_CHARS", "50000"))
+
+# Process-wide default socket timeout. Some network calls (notably the YouTube
+# transcript fetch) expose no timeout parameter; this keeps them from hanging
+# forever. Clients that set their own timeouts (OpenAI, httplib2) are unaffected.
+socket.setdefaulttimeout(int(os.environ.get("NETWORK_TIMEOUT", "60")))
 
 # --- SSE CONFIGURATION ---
 # Store active SSE connections and their associated queues
@@ -211,9 +243,6 @@ youtube_helpers.set_proxy_config_func(get_proxy_config)
 
 
 # --- CACHE CONFIGURATION ---
-# Use data directory if running in Docker/Podman, otherwise use current directory
-DATA_DIR = os.environ.get("DATA_DIR", "data" if os.path.exists("/.dockerenv") else ".")
-os.makedirs(DATA_DIR, exist_ok=True)
 SUMMARY_CACHE_FILE = os.path.join(DATA_DIR, "summary_cache.json")
 LOGIN_ATTEMPTS_FILE = os.path.join(DATA_DIR, "login_attempts.json")
 AUDIO_CACHE_DIR = os.path.join(DATA_DIR, "audio_cache")
@@ -273,15 +302,39 @@ LOCKOUT_DURATION = int(os.environ.get("LOCKOUT_DURATION", "15"))  # minutes
 # --- TTS CONFIGURATION ---
 TTS_VOICE = os.environ.get("TTS_VOICE", "en-US-Chirp3-HD-Zephyr")
 
-# Configure Flask session
-if LOGIN_ENABLED:
-    if not SESSION_SECRET_KEY:
-        print("Warning: SESSION_SECRET_KEY not set. Using auto-generated key (not recommended for production)")
-        SESSION_SECRET_KEY = os.urandom(24).hex()
-    if not LOGIN_CODE:
-        print("Warning: LOGIN_CODE not set. Login functionality will not work properly.")
 
-app.secret_key = SESSION_SECRET_KEY if SESSION_SECRET_KEY else os.urandom(24)
+def load_or_create_secret_key(data_dir):
+    """Return a session secret that is stable across restarts.
+
+    Used when SESSION_SECRET_KEY is not configured: a random key is generated
+    once and stored in DATA_DIR/.secret_key (mode 0600). A per-boot random key
+    would log everyone out on every restart.
+    """
+    key_path = os.path.join(data_dir, ".secret_key")
+    try:
+        with open(key_path, "r") as f:
+            key = f.read().strip()
+            if key:
+                return key
+    except FileNotFoundError:
+        pass
+    key = os.urandom(32).hex()
+    fd = os.open(key_path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w") as f:
+        f.write(key)
+    return key
+
+
+# Configure Flask session
+if LOGIN_ENABLED and not LOGIN_CODE:
+    print("Warning: LOGIN_CODE not set. Login functionality will not work properly.")
+
+if SESSION_SECRET_KEY:
+    app.secret_key = SESSION_SECRET_KEY
+elif os.environ.get("TESTING"):
+    app.secret_key = os.urandom(24)
+else:
+    app.secret_key = load_or_create_secret_key(DATA_DIR)
 
 print(f"✅ Login system {'enabled' if LOGIN_ENABLED else 'disabled'}")
 if LOGIN_ENABLED:
@@ -302,9 +355,6 @@ def create_youtube_client_with_timeout(api_key, timeout=30):
     """Create a YouTube API client with custom timeout settings"""
     # Create an httplib2 instance with timeout
     http = httplib2.Http(timeout=timeout)
-
-    # Set socket timeout as well for extra safety
-    socket.setdefaulttimeout(timeout)
 
     # Build the YouTube client with the configured http instance
     return build("youtube", "v3", developerKey=api_key, http=http)
@@ -361,11 +411,12 @@ ai_models.set_clients(gemini=gemini_model, openai_cli=openai_client)
 
 # --- HELPER FUNCTIONS ---
 def get_client_ip():
-    """Extract the real client IP address from the request, handling proxies."""
-    client_ip = request.environ.get("HTTP_X_FORWARDED_FOR", request.environ.get("REMOTE_ADDR", "127.0.0.1"))
-    if "," in client_ip:
-        client_ip = client_ip.split(",")[0].strip()
-    return client_ip
+    """Return the client IP address.
+
+    X-Forwarded-For is honoured only via ProxyFix when TRUST_PROXY_HOPS is set,
+    so clients cannot spoof their address by sending the header themselves.
+    """
+    return request.remote_addr or "127.0.0.1"
 
 
 SECRET_SETTINGS = {
@@ -419,13 +470,6 @@ def health_check():
 @require_auth
 def home():
     return render_template("index.html")
-
-
-@app.route("/sse-test")
-@require_auth
-def sse_test():
-    """SSE testing and demonstration page"""
-    return render_template("sse_test.html")
 
 
 @app.route("/login")
@@ -628,78 +672,6 @@ def sse_events():
     )
 
 
-@app.route("/events/status")
-@require_auth
-def sse_status():
-    """Get information about active SSE connections"""
-    cleanup_stale_connections()
-
-    with sse_connection_lock:
-        connection_info = []
-        for conn_id, conn in sse_connections.items():
-            connection_info.append(
-                {
-                    "connection_id": conn_id,
-                    "session_id": conn.session_id,
-                    "user_ip": conn.user_ip,
-                    "created_at": conn.created_at.isoformat(),
-                    "last_activity": conn.last_activity.isoformat(),
-                    "is_active": conn.is_active,
-                    "subscriptions": list(conn.subscriptions),
-                    "queue_size": conn.message_queue.qsize(),
-                }
-            )
-
-    return jsonify({"total_connections": len(sse_connections), "connections": connection_info})
-
-
-@app.route("/events/broadcast", methods=["POST"])
-@require_auth
-def sse_broadcast():
-    """Manual broadcast endpoint for testing (admin/debug use)"""
-    try:
-        data = request.get_json()
-        if not data:
-            return jsonify({"error": "Invalid JSON in request body"}), 400
-
-        event_type = data.get("event_type", "test")
-        message_data = data.get("data", {})
-        session_filter = data.get("session_filter")
-        subscription_filter = data.get("subscription_filter")
-
-        # Validate event type
-        allowed_events = [
-            "test",
-            "system",
-            "summary_complete",
-            "summary_progress",
-            "admin",
-        ]
-        if event_type not in allowed_events:
-            return (
-                jsonify({"error": f"Invalid event type. Allowed: {allowed_events}"}),
-                400,
-            )
-
-        broadcast_to_connections(
-            event_type,
-            message_data,
-            session_filter=session_filter,
-            subscription_filter=subscription_filter,
-        )
-
-        return jsonify(
-            {
-                "success": True,
-                "message": f"Broadcasted {event_type} event",
-                "total_connections": len(sse_connections),
-            }
-        )
-
-    except Exception as e:
-        return jsonify({"error": f"Broadcast failed: {str(e)}"}), 500
-
-
 def format_sse_message(event_type, data, event_id=None, retry=None):
     """Format data as Server-Sent Events message"""
     lines = []
@@ -874,6 +846,9 @@ def api_status():
 @require_auth
 def debug_transcript():
     """Debug endpoint to check transcript retrieval for a specific video"""
+    if not DEBUG_ENDPOINTS_ENABLED:
+        return jsonify({"error": "Endpoint not found"}), 404
+
     url = request.args.get("url", "").strip()
     if not url:
         return jsonify({"error": "URL parameter is required"}), 400
@@ -904,52 +879,6 @@ def debug_transcript():
         result["transcript_preview"] = transcript[:200] + "..." if len(transcript) > 200 else transcript
 
     return jsonify(result)
-
-
-@app.route("/debug_model", methods=["GET"])
-@require_auth
-def debug_model():
-    """Debug endpoint to test model functionality"""
-    model_key = request.args.get("model", "gpt-5")
-
-    try:
-        # Test with a simple transcript
-        test_transcript = "This is a test transcript about artificial intelligence and machine learning technologies."
-        test_title = "Test Video About AI"
-
-        print(f"🔍 Debug endpoint testing model: {model_key}")
-
-        # Test the model
-        summary, error = generate_summary(test_transcript, test_title, model_key)
-
-        result = {
-            "model_key": model_key,
-            "model_config": AVAILABLE_MODELS.get(model_key, {}),
-            "openai_client_available": openai_client is not None,
-            "summary_success": summary is not None,
-            "summary_length": len(summary) if summary else 0,
-            "error": error,
-        }
-
-        if summary:
-            result["summary_preview"] = summary[:200] + "..." if len(summary) > 200 else summary
-
-        return jsonify(result)
-
-    except Exception as e:
-        import traceback
-
-        return (
-            jsonify(
-                {
-                    "error": "Exception in debug_model",
-                    "message": str(e),
-                    "type": type(e).__name__,
-                    "traceback": traceback.format_exc(),
-                }
-            ),
-            500,
-        )
 
 
 def _notify_progress(session_id, data):
@@ -1173,10 +1102,7 @@ def summarize_links():
         return jsonify(results)
     except Exception as e:
         app.logger.error(f"Unhandled exception in /summarize: {str(e)}\n{traceback.format_exc()}")
-        return jsonify({
-            "error": "An unexpected error occurred while processing your request",
-            "message": str(e), "type": type(e).__name__, "stacktrace": traceback.format_exc(),
-        }), 500
+        return jsonify({"error": "An unexpected error occurred while processing your request"}), 500
 
 
 @app.route("/speak", methods=["POST"])
@@ -1189,6 +1115,8 @@ def speak():
         text_to_speak = data.get("text")
         if not text_to_speak:
             return jsonify({"error": "No text provided"}), 400
+        if len(text_to_speak) > MAX_TTS_CHARS:
+            return jsonify({"error": f"Text too long (max {MAX_TTS_CHARS} characters)"}), 413
 
         # Sanitize text input to prevent XSS (though this goes to TTS, not display)
         text_to_speak = html.escape(text_to_speak)
@@ -1645,67 +1573,42 @@ API_ROUTE_PREFIXES = [
 ]
 
 
-# Error handlers to ensure JSON responses for API endpoints
+# Error handlers to ensure JSON responses for API endpoints.
+# Details are logged server-side only; responses never include stack traces.
+def _is_api_request():
+    return any(request.path.startswith(path) for path in API_ROUTE_PREFIXES)
+
+
 @app.errorhandler(400)
 def bad_request(e):
-    if any(request.path.startswith(path) for path in API_ROUTE_PREFIXES):
-        return (
-            jsonify(
-                {
-                    "error": "Bad request",
-                    "message": str(e),
-                    "stacktrace": traceback.format_exc(),
-                }
-            ),
-            400,
-        )
+    if _is_api_request():
+        return jsonify({"error": "Bad request", "message": getattr(e, "description", "")}), 400
     return e
 
 
 @app.errorhandler(404)
 def not_found(e):
-    if any(request.path.startswith(path) for path in API_ROUTE_PREFIXES):
-        return (
-            jsonify({"error": "Endpoint not found", "message": str(e), "path": request.path}),
-            404,
-        )
+    if _is_api_request():
+        return jsonify({"error": "Endpoint not found", "path": request.path}), 404
     return e
 
 
 @app.errorhandler(500)
 def server_error(e):
-    if any(request.path.startswith(path) for path in API_ROUTE_PREFIXES):
-        return (
-            jsonify(
-                {
-                    "error": "Internal server error",
-                    "message": str(e),
-                    "stacktrace": traceback.format_exc(),
-                }
-            ),
-            500,
-        )
+    if _is_api_request():
+        return jsonify({"error": "Internal server error"}), 500
     return e
 
 
 @app.errorhandler(Exception)
 def handle_exception(e):
-    # Log the error with full traceback
+    if isinstance(e, HTTPException):
+        # Let Flask render 4xx/405 etc. (the specific handlers above cover API routes)
+        return e
     app.logger.error(f"Unhandled exception: {str(e)}\n{traceback.format_exc()}")
-    if any(request.path.startswith(path) for path in API_ROUTE_PREFIXES):
-        return (
-            jsonify(
-                {
-                    "error": "An unexpected error occurred",
-                    "message": str(e),
-                    "type": type(e).__name__,
-                    "stacktrace": traceback.format_exc(),
-                }
-            ),
-            500,
-        )
-    # For non-API routes, let Flask handle it normally
-    return e
+    if _is_api_request():
+        return jsonify({"error": "An unexpected error occurred"}), 500
+    return "Internal Server Error", 500
 
 
 if __name__ == "__main__":

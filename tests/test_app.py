@@ -655,6 +655,7 @@ class TestYouTubeSummarizer(unittest.TestCase):
         self.assertIsInstance(data["available_models"], list)
         self.assertGreater(len(data["available_models"]), 0)
 
+    @patch("app.DEBUG_ENDPOINTS_ENABLED", True)
     def test_debug_transcript_no_url(self):
         """Test debug transcript endpoint with no URL"""
         response = self.client.get("/debug_transcript")
@@ -662,6 +663,7 @@ class TestYouTubeSummarizer(unittest.TestCase):
         data = json.loads(response.data)
         self.assertIn("error", data)
 
+    @patch("app.DEBUG_ENDPOINTS_ENABLED", True)
     def test_debug_transcript_invalid_url(self):
         """Test debug transcript endpoint with invalid URL"""
         response = self.client.get("/debug_transcript?url=invalid_url")
@@ -670,6 +672,7 @@ class TestYouTubeSummarizer(unittest.TestCase):
         self.assertIn("error", data)
         self.assertIn("Invalid YouTube URL", data["error"])
 
+    @patch("app.DEBUG_ENDPOINTS_ENABLED", True)
     @patch("app.get_video_details")
     @patch("app.get_transcript")
     def test_debug_transcript_valid_url(self, mock_get_transcript, mock_get_video_details):
@@ -687,6 +690,65 @@ class TestYouTubeSummarizer(unittest.TestCase):
         self.assertEqual(data["video_title"], "Test Video")
         self.assertTrue(data["transcript_success"])
         self.assertEqual(data["transcript_length"], 15)  # Length of "Test transcript"
+
+    def test_debug_transcript_disabled_by_default(self):
+        """Debug endpoints are 404 unless ENABLE_DEBUG_ENDPOINTS is set"""
+        response = self.client.get("/debug_transcript?url=https://www.youtube.com/watch?v=dQw4w9WgXcQ")
+        self.assertEqual(response.status_code, 404)
+
+    def test_removed_debug_endpoints_are_gone(self):
+        """/debug_model, /events/status, /events/broadcast and /sse-test were removed"""
+        self.assertEqual(self.client.get("/debug_model").status_code, 404)
+        self.assertEqual(self.client.get("/events/status").status_code, 404)
+        self.assertEqual(self.client.post("/events/broadcast", json={"event_type": "test"}).status_code, 404)
+        self.assertEqual(self.client.get("/sse-test").status_code, 404)
+
+    @patch("app.get_playlist_id", side_effect=RuntimeError("secret internal detail"))
+    def test_summarize_error_does_not_leak_stack_trace(self, _mock):
+        """Unhandled errors return a generic message without traceback or exception text"""
+        response = self.client.post("/summarize", json={"urls": ["https://youtu.be/x"]})
+        self.assertEqual(response.status_code, 500)
+        body = response.get_data(as_text=True)
+        self.assertNotIn("Traceback", body)
+        self.assertNotIn("stacktrace", body)
+        self.assertNotIn("secret internal detail", body)
+
+    def test_client_ip_ignores_spoofed_forwarded_for(self):
+        """X-Forwarded-For is not trusted unless TRUST_PROXY_HOPS is configured"""
+        import app as app_module
+
+        with self.app.test_request_context(
+            "/", headers={"X-Forwarded-For": "1.2.3.4"}, environ_base={"REMOTE_ADDR": "203.0.113.9"}
+        ):
+            self.assertEqual(app_module.get_client_ip(), "203.0.113.9")
+
+    @patch("app.MAX_TTS_CHARS", 10)
+    def test_speak_rejects_overlong_text(self):
+        """/speak caps text length to bound TTS cost"""
+        response = self.client.post("/speak", json={"text": "x" * 11})
+        self.assertEqual(response.status_code, 413)
+
+    @patch("app.LOGIN_ENABLED", True)
+    def test_testing_env_var_alone_does_not_bypass_auth(self):
+        """TESTING in the environment without a TESTING app config must not disable auth"""
+        self.app.config["TESTING"] = False
+        try:
+            response = self.client.get("/", headers={"Accept": "text/html"})
+            self.assertEqual(response.status_code, 302)
+        finally:
+            self.app.config["TESTING"] = True
+
+    def test_secret_key_is_persisted_and_reused(self):
+        """Without SESSION_SECRET_KEY the generated key survives restarts"""
+        import tempfile
+
+        import app as app_module
+
+        with tempfile.TemporaryDirectory() as tmp:
+            first = app_module.load_or_create_secret_key(tmp)
+            second = app_module.load_or_create_secret_key(tmp)
+            self.assertEqual(first, second)
+            self.assertEqual(os.stat(os.path.join(tmp, ".secret_key")).st_mode & 0o777, 0o600)
 
     # --- DELETE SUMMARY TESTS ---
     @patch("app.summary_cache", {})
