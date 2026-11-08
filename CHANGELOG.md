@@ -19,6 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Gemini calls use the `google-genai` SDK (replaces deprecated `google-generativeai`)
 - Settings saved in the UI persist across restarts (`DATA_DIR/.env` is loaded at startup); generated session secret persists in `DATA_DIR/.secret_key`
 - SSE moved to `sse.py`; idle streams are no longer dropped every 5 minutes
+- Page JavaScript moved out of the templates into `static/js/` (`index.js`, `login.js`, `settings.js`, `theme-init.js`, `settings-theme.js`); only the tiny theme-flash guard stays inline in `<head>`
 
 ### Removed
 - Unused async worker system (`worker_manager`, `job_queue`, `job_models`, `job_state`, `error_handler`, `sse_manager`, `/summarize_async`, `/jobs`) and its client scripts and tests

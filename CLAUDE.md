@@ -17,6 +17,7 @@ YouTube Summarizer is a Flask web application that summarizes YouTube videos and
 | `tts_helpers.py` | Text cleanup and TTS synthesis |
 | `voice_config.py` | Available voices, fallbacks, audio cache keys and cleanup |
 | `gunicorn_config.py` | Production server: **1 process**, gthread, `GUNICORN_THREADS` threads |
+| `templates/` + `static/js/` | Pages and their scripts: `index.js`, `login.js`, `settings.js` (classic scripts, globals used by inline `onclick`), `theme-init.js` / `settings-theme.js` (ES modules importing `theme-manager.js`). Templates keep only the small `<head>` theme-flash guard inline; put new page JS in `static/js/`, not in templates |
 
 ### Request flow
 1. `POST /summarize` with `{"urls": [...], "model": "<key>"}`.
