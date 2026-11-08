@@ -342,21 +342,6 @@ SECRET_SETTINGS = {
 }
 
 
-def settings_writes_allowed():
-    """Whether the current request may change settings.
-
-    With login enabled, require_auth has already authenticated the caller.
-    With login disabled the app is open to anyone who can reach it, so only
-    allow changes from the local machine (by socket address, never by a
-    spoofable header) unless the operator explicitly opts in.
-    """
-    if LOGIN_ENABLED:
-        return True
-    if os.environ.get("ALLOW_UNAUTHENTICATED_SETTINGS", "false").lower() == "true":
-        return True
-    return request.remote_addr in ("127.0.0.1", "::1")
-
-
 # --- API ENDPOINTS ---
 
 
@@ -1228,18 +1213,6 @@ def settings_page():
 @require_auth
 def update_settings():
     """Update environment variables from settings form"""
-    if not settings_writes_allowed():
-        return (
-            jsonify(
-                {
-                    "error": "Settings changes are disabled",
-                    "message": "Enable login (LOGIN_ENABLED=true with LOGIN_CODE) or set "
-                    "ALLOW_UNAUTHENTICATED_SETTINGS=true to change settings from a remote client.",
-                }
-            ),
-            403,
-        )
-
     try:
         data = request.get_json(force=True)
         if not data:

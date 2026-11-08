@@ -1096,29 +1096,22 @@ class TestYouTubeSummarizer(unittest.TestCase):
         self.assertIn("Could not save to .env file", data["message"])
         self.assertFalse(data["env_file_saved"])
 
-    def test_settings_post_rejected_from_remote_when_login_disabled(self):
-        """With login disabled, settings can only be changed from localhost"""
-        with patch("app.LOGIN_ENABLED", False), patch("app.save_env_to_file") as mock_save:
+    def test_settings_editable_from_remote_client_when_login_disabled(self):
+        """With login off, any client can view and change settings"""
+        with patch("app.LOGIN_ENABLED", False), patch("app.save_env_to_file") as mock_save, patch.dict(
+            os.environ, {}
+        ):
+            mock_save.return_value = True
+            remote = {"REMOTE_ADDR": "203.0.113.5"}
+            self.assertEqual(self.client.get("/settings", environ_base=remote).status_code, 200)
             response = self.client.post(
                 "/settings",
-                data=json.dumps({"google_api_key": "attacker"}),
+                data=json.dumps({"max_login_attempts": "7"}),
                 content_type="application/json",
-                environ_base={"REMOTE_ADDR": "203.0.113.5"},
+                environ_base=remote,
             )
-            self.assertEqual(response.status_code, 403)
-            mock_save.assert_not_called()
-
-    def test_settings_post_spoofed_forwarded_for_does_not_count_as_local(self):
-        """X-Forwarded-For: 127.0.0.1 must not unlock settings for a remote client"""
-        with patch("app.LOGIN_ENABLED", False):
-            response = self.client.post(
-                "/settings",
-                data=json.dumps({"google_api_key": "attacker"}),
-                content_type="application/json",
-                headers={"X-Forwarded-For": "127.0.0.1"},
-                environ_base={"REMOTE_ADDR": "203.0.113.5"},
-            )
-            self.assertEqual(response.status_code, 403)
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(os.environ["MAX_LOGIN_ATTEMPTS"], "7")
 
     def test_settings_blank_secret_keeps_existing_value(self):
         """Secrets are rendered blank, so a blank submission must not wipe them"""

@@ -51,7 +51,6 @@ Required: `GOOGLE_API_KEY` (YouTube, Gemini, TTS). Optional: `OPENAI_API_KEY`.
 | `MAX_LOGIN_ATTEMPTS` | `5` | |
 | `LOCKOUT_DURATION` | `15` | **minutes** |
 | `TRUST_PROXY_HOPS` | `0` | Trust `X-Forwarded-For` only behind this many proxies |
-| `ALLOW_UNAUTHENTICATED_SETTINGS` | `false` | With login off, settings are editable from localhost only |
 | `ENABLE_DEBUG_ENDPOINTS` | `false` | Enables `/debug_transcript` |
 | `MAX_TTS_CHARS` | `50000` | `/speak` text limit |
 | `NETWORK_TIMEOUT` | `60` | Process default socket timeout (bounds transcript fetches) |

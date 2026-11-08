@@ -8,7 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Security
-- Settings page no longer renders API keys, login code, session secret or proxy password; with login disabled it only accepts changes from localhost (or `ALLOW_UNAUTHENTICATED_SETTINGS=true`)
+- Settings page no longer renders API keys, login code, session secret or proxy password (blank fields keep the current value)
 - Error responses no longer include stack traces
 - Removed `/debug_model`, `/events/status`, `/events/broadcast` and `/sse-test`; `/debug_transcript` requires `ENABLE_DEBUG_ENDPOINTS=true`
 - `X-Forwarded-For` is only trusted with `TRUST_PROXY_HOPS`; `TESTING` alone no longer disables auth

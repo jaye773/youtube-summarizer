@@ -115,7 +115,6 @@ The test suite bypasses authentication. This requires both `TESTING=true` in the
 |---|---|---|
 | `DATA_DIR` | `data` in Docker, `.` otherwise | Where the summary cache, audio cache, login attempts, session secret and UI-saved settings live |
 | `TRUST_PROXY_HOPS` | `0` | Number of reverse proxies in front of the app. Only then is `X-Forwarded-For` trusted for client IPs (login lockout). Leave at `0` when exposed directly |
-| `ALLOW_UNAUTHENTICATED_SETTINGS` | `false` | With login disabled, the settings page can only be changed from localhost unless this is `true` |
 | `ENABLE_DEBUG_ENDPOINTS` | `false` | Enables `/debug_transcript` |
 | `MAX_TTS_CHARS` | `50000` | Maximum text length accepted by `/speak` |
 | `NETWORK_TIMEOUT` | `60` | Default socket timeout (seconds) for network calls without their own timeout, e.g. transcript fetches |
@@ -123,7 +122,7 @@ The test suite bypasses authentication. This requires both `TESTING=true` in the
 | `GUNICORN_THREADS` | `32` | Request threads in the single gunicorn process |
 
 Notes:
-- **Settings page:** secrets are never displayed; leave a secret field blank to keep its current value. Changes are written to `DATA_DIR/.env`, which is loaded at startup and overrides other environment values.
+- **Settings page:** with login disabled, anyone who can reach the app can open it and change settings (enable login to restrict it). Secrets are never displayed; leave a secret field blank to keep its current value. Changes are written to `DATA_DIR/.env`, which is loaded at startup and overrides other environment values.
 - **Session secret:** if `SESSION_SECRET_KEY` is not set, one is generated once and stored in `DATA_DIR/.secret_key`.
 - **Single process:** the app keeps its state in memory, so `gunicorn_config.py` runs exactly one worker process with many threads. Do not raise the worker count.
 
@@ -386,8 +385,6 @@ To set up OpenAI API:
    - Check that cookies are enabled in your browser
    - Verify the session key doesn't contain special characters that might cause issues
 
-8. **Settings page says "Settings changes are disabled"**
-   - Login is disabled and you are not on localhost. Enable login (`LOGIN_ENABLED=true` + `LOGIN_CODE`) or set `ALLOW_UNAUTHENTICATED_SETTINGS=true`
 
 ## 🧪 Testing
 
