@@ -1,7 +1,7 @@
 import json
 import os
 import unittest
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, Mock, patch
 
 from app import app
 
@@ -41,9 +41,10 @@ class TestIntegration(unittest.TestCase):
         }
 
         # Mock transcript
-        mock_transcript_api.get_transcript.return_value = [
-            {"text": "Never gonna give you up"},
-            {"text": "Never gonna let you down"},
+        # youtube-transcript-api instance API: YouTubeTranscriptApi(...).list(id).find_transcript(...).fetch()
+        mock_transcript_api.return_value.list.return_value.find_transcript.return_value.fetch.return_value = [
+            Mock(text="Never gonna give you up"),
+            Mock(text="Never gonna let you down"),
         ]
 
         # Mock summary generation

@@ -6,19 +6,35 @@ YouTube Transcript API. The youtube API client and proxy config
 function are injected at startup to avoid circular imports.
 """
 
+import os
 import re
 import socket
 import time
 from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
 
+import requests
 from googleapiclient.errors import HttpError
-from youtube_transcript_api import NoTranscriptFound, TranscriptsDisabled, YouTubeTranscriptApi
+from youtube_transcript_api import (
+    AgeRestricted,
+    CouldNotRetrieveTranscript,
+    InvalidVideoId,
+    NoTranscriptFound,
+    PoTokenRequired,
+    RequestBlocked,
+    TranscriptsDisabled,
+    VideoUnavailable,
+    VideoUnplayable,
+    YouTubeRequestFailed,
+    YouTubeTranscriptApi,
+)
+from youtube_transcript_api.proxies import GenericProxyConfig
 
 # --- Injected dependencies ---
 # Set via set_youtube_client() after the API client is created in app.py
 youtube = None
 
-# Set via set_proxy_config_func() after get_proxy_config is defined in app.py
+# Set via set_proxy_config_func() after get_proxy_config is defined in app.py.
+# It returns a youtube_transcript_api ProxyConfig, or None for a direct connection.
 _get_proxy_config = None
 
 
@@ -221,41 +237,117 @@ def get_videos_from_playlist(playlist_id, max_retries=3):
 
 # --- Transcript helper ---
 
+
+def _transcript_timeout():
+    """Per-request timeout (seconds) for transcript HTTP calls, from NETWORK_TIMEOUT (default 60).
+
+    youtube-transcript-api passes no timeout to requests itself, so _TimeoutSession applies this
+    to every request it makes.
+    """
+    try:
+        return max(1, int(os.environ.get("NETWORK_TIMEOUT", "60")))
+    except ValueError:
+        return 60
+
+
+# Preferred transcript languages, in priority order. If none of these exist, any other English
+# variant (e.g. en-GB) is used, manually created before auto-generated.
+PREFERRED_TRANSCRIPT_LANGUAGES = ["en", "en-US"]
+
+BLOCKED_MESSAGE = (
+    "YouTube is blocking transcript requests from this server's IP address. "
+    "Enable a proxy (WEBSHARE_PROXY_* settings) or try again later."
+)
+
+
+class _TimeoutSession(requests.Session):
+    """requests.Session that applies a default timeout to every request."""
+
+    def __init__(self, timeout):
+        super().__init__()
+        self._default_timeout = timeout
+
+    def request(self, method, url, **kwargs):
+        if kwargs.get("timeout") is None:
+            kwargs["timeout"] = self._default_timeout
+        return super().request(method, url, **kwargs)
+
+
+def _resolve_proxy_config():
+    """Return the injected proxy config as a youtube-transcript-api ProxyConfig (or None)."""
+    config = _get_proxy_config() if _get_proxy_config is not None else None
+    if isinstance(config, dict):
+        # Accept a legacy requests-style {"http": url, "https": url} dict.
+        if not (config.get("http") or config.get("https")):
+            return None
+        return GenericProxyConfig(http_url=config.get("http"), https_url=config.get("https"))
+    return config
+
+
+def _find_english_transcript(transcript_list):
+    """Return any English transcript (en-GB, en-CA, ...), manual ones first, or None.
+
+    TranscriptList iterates manually created transcripts before auto-generated ones.
+    """
+    for transcript in transcript_list:
+        if transcript.language_code.lower().startswith("en"):
+            return transcript
+    return None
+
+
 def get_transcript(video_id):
+    """Fetch an English transcript for a video.
+
+    Returns:
+        Tuple of (transcript text, None) on success or (None, user-facing error message).
+    """
     if not video_id:
         return None, "No video ID provided"
 
-    # Get proxy configuration if available
-    proxies = _get_proxy_config() if _get_proxy_config is not None else None
-
+    timeout = _transcript_timeout()
     try:
-        transcript_list = YouTubeTranscriptApi.get_transcript(video_id, languages=["en", "en-US"], proxies=proxies)
-        transcript_text = " ".join([d["text"] for d in transcript_list])
-        return (transcript_text, None) if transcript_text.strip() else (None, "Transcript was found but it is empty.")
-    except NoTranscriptFound:
-        try:
-            fetched = (
-                YouTubeTranscriptApi.list_transcripts(video_id, proxies=proxies).find_transcript(["en"]).fetch()
-            )
-            # youtube-transcript-api 1.x returns a FetchedTranscript of snippet
-            # objects; 0.x returned a list of dicts. Normalize both to text.
-            if hasattr(fetched, "to_raw_data"):
-                fetched = fetched.to_raw_data()
-            transcript_text = " ".join([seg["text"] if isinstance(seg, dict) else seg.text for seg in fetched])
-            return (
-                (transcript_text, None)
-                if transcript_text.strip()
-                else (None, "A transcript was found, but it is empty.")
-            )
-        except (NoTranscriptFound, TranscriptsDisabled):
-            return None, "No transcripts are available for this video."
-        except Exception as e:
-            return (
-                None,
-                f"An unexpected error occurred while fetching the fallback transcript: {e}",
-            )
+        with _TimeoutSession(timeout) as http_client:
+            # New API instance per call: YouTubeTranscriptApi isn't thread-safe and this runs in worker threads.
+            api = YouTubeTranscriptApi(proxy_config=_resolve_proxy_config(), http_client=http_client)
+            transcript_list = api.list(video_id)
+
+            try:
+                transcript = transcript_list.find_transcript(PREFERRED_TRANSCRIPT_LANGUAGES)
+                empty_message = "Transcript was found but it is empty."
+            except NoTranscriptFound:
+                transcript = _find_english_transcript(transcript_list)
+                if transcript is None:
+                    return None, "No transcripts are available for this video."
+                empty_message = "A transcript was found, but it is empty."
+
+            fetched = transcript.fetch()
+
+        transcript_text = " ".join(snippet.text for snippet in fetched)
+        return (transcript_text, None) if transcript_text.strip() else (None, empty_message)
+
     except TranscriptsDisabled:
         return None, "Transcripts are disabled for this video."
+    except NoTranscriptFound:
+        return None, "No transcripts are available for this video."
+    except RequestBlocked:  # includes IpBlocked
+        return None, BLOCKED_MESSAGE
+    except InvalidVideoId:
+        return None, "Invalid YouTube video ID."
+    except VideoUnavailable:
+        return None, "This video is unavailable (it may be private, deleted, or region-restricted)."
+    except AgeRestricted:
+        return None, "This video is age-restricted, so its transcript cannot be fetched."
+    except VideoUnplayable as e:
+        reason = f": {e.reason}" if e.reason else "."
+        return None, f"This video cannot be played, so its transcript is unavailable{reason}"
+    except PoTokenRequired:
+        return None, "YouTube currently requires extra verification for this video's transcript. Try again later."
+    except YouTubeRequestFailed as e:
+        return None, f"The request to YouTube failed while fetching the transcript ({e.reason})."
+    except requests.exceptions.Timeout:
+        return None, f"Timed out fetching the transcript after {timeout} seconds. Try again later."
+    except CouldNotRetrieveTranscript as e:
+        return None, f"Could not retrieve the transcript: {e.cause or type(e).__name__}"
     except Exception as e:
         return (
             None,

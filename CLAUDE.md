@@ -53,7 +53,7 @@ Required: `GOOGLE_API_KEY` (YouTube, Gemini, TTS). Optional: `OPENAI_API_KEY`.
 | `TRUST_PROXY_HOPS` | `0` | Trust `X-Forwarded-For` only behind this many proxies |
 | `ENABLE_DEBUG_ENDPOINTS` | `false` | Enables `/debug_transcript` |
 | `MAX_TTS_CHARS` | `50000` | `/speak` text limit |
-| `NETWORK_TIMEOUT` | `60` | Process default socket timeout (bounds transcript fetches) |
+| `NETWORK_TIMEOUT` | `60` | Per-request timeout for transcript fetches; also the process default socket timeout |
 | `SSE_MAX_CONNECTIONS` | `20` | |
 | `GUNICORN_THREADS` | `32` | |
 | `RATE_LIMIT_ENABLED` | `true` | Per-IP limits (Flask-Limiter, in memory); always off when `TESTING` is set at import |
@@ -62,7 +62,7 @@ Required: `GOOGLE_API_KEY` (YouTube, Gemini, TTS). Optional: `OPENAI_API_KEY`.
 | `RATE_LIMIT_LOGIN` | `10 per minute` | `POST /login`; empty disables |
 | `SESSION_COOKIE_SECURE` | `false` | HTTPS-only session cookie |
 | `TTS_VOICE` | `en-US-Chirp3-HD-Zephyr` | |
-| `WEBSHARE_PROXY_*` | – | Proxy for transcript fetching |
+| `WEBSHARE_PROXY_*` | – | Proxy for transcript fetching (HOST+PORT: fixed proxy; unset: Webshare rotating residential) |
 | `FLASK_DEBUG` | `false` | Only for `python app.py` |
 | `TESTING` | – | Test mode; auth bypass also requires `app.config["TESTING"]` |
 
@@ -100,5 +100,5 @@ CI (`.github/workflows/tests.yml`): flake8 on the app modules, pytest with cover
 
 ## Known Limitations
 - In-memory state means one process; scaling out needs shared storage (e.g. Redis/SQLite) for cache, sessions and SSE fan-out.
-- `youtube-transcript-api` is pinned to 1.1.0 because `youtube_helpers.get_transcript` uses the static API removed in later releases.
+- `youtube-transcript-api` is pinned exactly (1.2.4) because YouTube changes regularly break transcript fetching; upgrade deliberately and run a real fetch. `get_transcript` uses the instance API (`YouTubeTranscriptApi(proxy_config=..., http_client=...).list()`), creating one instance per call (the class is not thread-safe).
 - Long playlists are processed within a single request; the browser waits for the full response.

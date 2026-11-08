@@ -3,7 +3,26 @@ import sys
 import unittest
 from unittest.mock import MagicMock, Mock, patch
 
+import requests
+from youtube_transcript_api import (
+    AgeRestricted,
+    FetchedTranscript,
+    FetchedTranscriptSnippet,
+    InvalidVideoId,
+    IpBlocked,
+    NoTranscriptFound,
+    PoTokenRequired,
+    RequestBlocked,
+    TranscriptsDisabled,
+    VideoUnavailable,
+    VideoUnplayable,
+    YouTubeDataUnparsable,
+    YouTubeRequestFailed,
+)
+from youtube_transcript_api.proxies import GenericProxyConfig, WebshareProxyConfig
+
 import app
+import youtube_helpers
 from app import generate_summary, get_transcript
 
 # Add the parent directory to the path so we can import the app
@@ -48,6 +67,12 @@ class TestWebshareProxyConfiguration(unittest.TestCase):
         proxy_config = app.get_proxy_config()
         self.assertIsNone(proxy_config)
 
+    def _reload_with(self, env):
+        os.environ.update(env)
+        import importlib
+
+        importlib.reload(app)
+
     def test_proxy_enabled_but_missing_config(self):
         """Test proxy enabled but missing required configuration"""
         os.environ["WEBSHARE_PROXY_ENABLED"] = "true"
@@ -62,12 +87,27 @@ class TestWebshareProxyConfiguration(unittest.TestCase):
             self.assertIsNone(proxy_config)
             mock_print.assert_called_with(
                 "⚠️ Webshare proxy is enabled but missing required configuration. "
-                "Required: WEBSHARE_PROXY_HOST, WEBSHARE_PROXY_PORT, WEBSHARE_PROXY_USERNAME, WEBSHARE_PROXY_PASSWORD"
+                "Required: WEBSHARE_PROXY_USERNAME, WEBSHARE_PROXY_PASSWORD, plus both WEBSHARE_PROXY_HOST and "
+                "WEBSHARE_PROXY_PORT for a fixed proxy server (leave both unset for Webshare rotating residential "
+                "proxies)"
             )
 
+    def test_proxy_host_without_port_is_rejected(self):
+        """A host without a port (or vice versa) is a misconfiguration, not a rotating setup"""
+        self._reload_with(
+            {
+                "WEBSHARE_PROXY_ENABLED": "true",
+                "WEBSHARE_PROXY_HOST": "proxy.webshare.io",
+                "WEBSHARE_PROXY_USERNAME": "testuser",
+                "WEBSHARE_PROXY_PASSWORD": "testpass",
+            }
+        )
+        with patch("builtins.print"):
+            self.assertIsNone(app.get_proxy_config())
+
     def test_proxy_fully_configured(self):
-        """Test proxy with full valid configuration"""
-        os.environ.update(
+        """Host/port/credentials produce a GenericProxyConfig for that proxy server"""
+        self._reload_with(
             {
                 "WEBSHARE_PROXY_ENABLED": "true",
                 "WEBSHARE_PROXY_HOST": "proxy.webshare.io",
@@ -77,19 +117,55 @@ class TestWebshareProxyConfiguration(unittest.TestCase):
             }
         )
 
-        # Reload the module to pick up environment changes
-        import importlib
-
-        importlib.reload(app)
-
         with patch("builtins.print") as mock_print:
             proxy_config = app.get_proxy_config()
 
             expected_proxy_url = "http://testuser:testpass@proxy.webshare.io:8080"
-            expected_config = {"http": expected_proxy_url, "https": expected_proxy_url}
-
-            self.assertEqual(proxy_config, expected_config)
+            self.assertIsInstance(proxy_config, GenericProxyConfig)
+            self.assertNotIsInstance(proxy_config, WebshareProxyConfig)
+            self.assertEqual(proxy_config.to_requests_dict(), {"http": expected_proxy_url, "https": expected_proxy_url})
             mock_print.assert_called_with("✅ Using webshare proxy: testuser@proxy.webshare.io:8080")
+
+    def test_proxy_rotating_residential_when_host_unset(self):
+        """Credentials without host/port use Webshare's rotating residential endpoint"""
+        self._reload_with(
+            {
+                "WEBSHARE_PROXY_ENABLED": "true",
+                "WEBSHARE_PROXY_USERNAME": "testuser",
+                "WEBSHARE_PROXY_PASSWORD": "testpass",
+            }
+        )
+
+        with patch("builtins.print") as mock_print:
+            proxy_config = app.get_proxy_config()
+
+        self.assertIsInstance(proxy_config, WebshareProxyConfig)
+        self.assertEqual(proxy_config.url, "http://testuser-rotate:testpass@p.webshare.io:80/")
+        self.assertGreater(proxy_config.retries_when_blocked, 0)
+        mock_print.assert_called_once_with("✅ Using webshare rotating residential proxies as testuser")
+
+    def test_proxy_config_logs_only_once(self):
+        """get_proxy_config runs on every transcript fetch; it should not log every time"""
+        self._reload_with(
+            {
+                "WEBSHARE_PROXY_ENABLED": "true",
+                "WEBSHARE_PROXY_HOST": "proxy.webshare.io",
+                "WEBSHARE_PROXY_PORT": "8080",
+                "WEBSHARE_PROXY_USERNAME": "testuser",
+                "WEBSHARE_PROXY_PASSWORD": "testpass",
+            }
+        )
+
+        with patch("builtins.print") as mock_print:
+            for _ in range(5):
+                self.assertIsNotNone(app.get_proxy_config())
+            self.assertEqual(mock_print.call_count, 1)
+
+            # A changed configuration is logged again
+            with patch.object(app, "WEBSHARE_PROXY_PORT", "9090"):
+                app.get_proxy_config()
+            self.assertEqual(mock_print.call_count, 2)
+            mock_print.assert_called_with("✅ Using webshare proxy: testuser@proxy.webshare.io:9090")
 
     def test_proxy_case_insensitive_enabled(self):
         """Test that WEBSHARE_PROXY_ENABLED is case-insensitive"""
@@ -162,8 +238,50 @@ class TestWebshareProxyConfiguration(unittest.TestCase):
                 self.assertIsNone(proxy_config)
 
 
+def _fetched(*texts, language_code="en", is_generated=False):
+    """Build a real youtube-transcript-api FetchedTranscript from snippet texts."""
+    return FetchedTranscript(
+        snippets=[FetchedTranscriptSnippet(text=t, start=float(i), duration=1.0) for i, t in enumerate(texts)],
+        video_id="vid",
+        language="English",
+        language_code=language_code,
+        is_generated=is_generated,
+    )
+
+
+def _transcript(language_code, *texts, is_generated=False):
+    """A stand-in for youtube_transcript_api.Transcript whose fetch() returns the given texts."""
+    transcript = Mock()
+    transcript.language_code = language_code
+    transcript.is_generated = is_generated
+    transcript.fetch.return_value = _fetched(*texts, language_code=language_code, is_generated=is_generated)
+    return transcript
+
+
+class _FakeTranscriptList:
+    """Mimics TranscriptList: find_transcript() by priority, iteration yields manual before generated."""
+
+    def __init__(self, *transcripts):
+        self._transcripts = list(transcripts)
+
+    def __iter__(self):
+        manual = [t for t in self._transcripts if not t.is_generated]
+        generated = [t for t in self._transcripts if t.is_generated]
+        return iter(manual + generated)
+
+    def find_transcript(self, language_codes):
+        for code in language_codes:
+            for transcript in self:
+                if transcript.language_code == code:
+                    return transcript
+        raise NoTranscriptFound("vid", language_codes, self)
+
+    def __str__(self):
+        return ", ".join(t.language_code for t in self._transcripts)
+
+
 class TestTranscriptWithProxy(unittest.TestCase):
-    """Test suite for transcript fetching with proxy support"""
+    """Test suite for transcript fetching (youtube-transcript-api instance API) with proxy support"""
 
     def setUp(self):
         """Set up test environment"""
@@ -174,6 +292,7 @@ class TestTranscriptWithProxy(unittest.TestCase):
             "WEBSHARE_PROXY_PORT",
             "WEBSHARE_PROXY_USERNAME",
             "WEBSHARE_PROXY_PASSWORD",
+            "NETWORK_TIMEOUT",
         ]
 
         # Store original values and clear them
@@ -190,132 +309,190 @@ class TestTranscriptWithProxy(unittest.TestCase):
             elif var in os.environ:
                 del os.environ[var]
 
-    @patch("youtube_helpers.YouTubeTranscriptApi.get_transcript")
-    def test_get_transcript_without_proxy(self, mock_get_transcript):
-        """Test get_transcript works without proxy configuration"""
-        # Ensure proxy is disabled
-        if "WEBSHARE_PROXY_ENABLED" in os.environ:
-            del os.environ["WEBSHARE_PROXY_ENABLED"]
-
-        # Reload the module to pick up environment changes
+    def _reload_app(self, env=None):
+        os.environ.update(env or {})
         import importlib
 
         importlib.reload(app)
 
-        # Mock successful transcript response
-        mock_get_transcript.return_value = [{"text": "Hello world", "start": 0.0}]
+    @patch("youtube_helpers.YouTubeTranscriptApi")
+    def test_get_transcript_without_proxy(self, mock_api_cls):
+        """No proxy: the API is built without a proxy config and with a timeout-applying session"""
+        self._reload_app()
+        mock_api_cls.return_value.list.return_value = _FakeTranscriptList(_transcript("en", "Hello", "world"))
 
         transcript, error = app.get_transcript("test_video_id")
 
         self.assertEqual(transcript, "Hello world")
         self.assertIsNone(error)
-        mock_get_transcript.assert_called_once_with("test_video_id", languages=["en", "en-US"], proxies=None)
+        mock_api_cls.return_value.list.assert_called_once_with("test_video_id")
+        kwargs = mock_api_cls.call_args.kwargs
+        self.assertIsNone(kwargs["proxy_config"])
+        self.assertIsInstance(kwargs["http_client"], youtube_helpers._TimeoutSession)
 
-    @patch("youtube_helpers.YouTubeTranscriptApi.get_transcript")
-    def test_get_transcript_with_proxy(self, mock_get_transcript):
-        """Test get_transcript works with proxy configuration"""
-        # Configure proxy
-        os.environ.update(
-            {
-                "WEBSHARE_PROXY_ENABLED": "true",
-                "WEBSHARE_PROXY_HOST": "proxy.webshare.io",
-                "WEBSHARE_PROXY_PORT": "8080",
-                "WEBSHARE_PROXY_USERNAME": "testuser",
-                "WEBSHARE_PROXY_PASSWORD": "testpass",
-            }
-        )
+    @patch("youtube_helpers.YouTubeTranscriptApi")
+    def test_get_transcript_with_proxy(self, mock_api_cls):
+        """The configured proxy is passed to the API as a GenericProxyConfig"""
+        with patch("builtins.print"):
+            self._reload_app(
+                {
+                    "WEBSHARE_PROXY_ENABLED": "true",
+                    "WEBSHARE_PROXY_HOST": "proxy.webshare.io",
+                    "WEBSHARE_PROXY_PORT": "8080",
+                    "WEBSHARE_PROXY_USERNAME": "testuser",
+                    "WEBSHARE_PROXY_PASSWORD": "testpass",
+                }
+            )
+            mock_api_cls.return_value.list.return_value = _FakeTranscriptList(_transcript("en", "Hello world"))
 
-        # Reload the module to pick up environment changes
-        import importlib
-
-        importlib.reload(app)
-
-        # Mock successful transcript response
-        mock_get_transcript.return_value = [{"text": "Hello world", "start": 0.0}]
-
-        expected_proxies = {
-            "http": "http://testuser:testpass@proxy.webshare.io:8080",
-            "https": "http://testuser:testpass@proxy.webshare.io:8080",
-        }
-
-        transcript, error = app.get_transcript("test_video_id")
+            transcript, error = app.get_transcript("test_video_id")
 
         self.assertEqual(transcript, "Hello world")
         self.assertIsNone(error)
-        mock_get_transcript.assert_called_once_with(
-            "test_video_id", languages=["en", "en-US"], proxies=expected_proxies
+        proxy_config = mock_api_cls.call_args.kwargs["proxy_config"]
+        self.assertIsInstance(proxy_config, GenericProxyConfig)
+        expected_url = "http://testuser:testpass@proxy.webshare.io:8080"
+        self.assertEqual(proxy_config.to_requests_dict(), {"http": expected_url, "https": expected_url})
+
+    @patch("youtube_helpers.YouTubeTranscriptApi")
+    def test_legacy_dict_proxy_config_is_converted(self, mock_api_cls):
+        """A requests-style proxies dict from an injected config function still works"""
+        mock_api_cls.return_value.list.return_value = _FakeTranscriptList(_transcript("en", "Hi"))
+        legacy = {"http": "http://u:p@h:1", "https": "http://u:p@h:1"}
+
+        with patch.object(youtube_helpers, "_get_proxy_config", lambda: legacy):
+            transcript, error = youtube_helpers.get_transcript("vid")
+
+        self.assertEqual(transcript, "Hi")
+        proxy_config = mock_api_cls.call_args.kwargs["proxy_config"]
+        self.assertIsInstance(proxy_config, GenericProxyConfig)
+        self.assertEqual(proxy_config.to_requests_dict(), legacy)
+
+    @patch("youtube_helpers.YouTubeTranscriptApi")
+    def test_prefers_en_over_other_english_variants(self, mock_api_cls):
+        mock_api_cls.return_value.list.return_value = _FakeTranscriptList(
+            _transcript("en-GB", "British"),
+            _transcript("en", "Auto English", is_generated=True),
         )
-
-    @patch("youtube_helpers.YouTubeTranscriptApi.list_transcripts")
-    @patch("youtube_helpers.YouTubeTranscriptApi.get_transcript")
-    def test_get_transcript_fallback_with_proxy(self, mock_get_transcript, mock_list_transcripts):
-        """Test get_transcript fallback mechanism works with proxy"""
-        # Configure proxy
-        os.environ.update(
-            {
-                "WEBSHARE_PROXY_ENABLED": "true",
-                "WEBSHARE_PROXY_HOST": "proxy.webshare.io",
-                "WEBSHARE_PROXY_PORT": "8080",
-                "WEBSHARE_PROXY_USERNAME": "testuser",
-                "WEBSHARE_PROXY_PASSWORD": "testpass",
-            }
-        )
-
-        # Reload the module to pick up environment changes
-        import importlib
-
-        importlib.reload(app)
-
-        # Mock first call to fail with NoTranscriptFound
-        from youtube_transcript_api import NoTranscriptFound
-
-        mock_get_transcript.side_effect = NoTranscriptFound("test_video_id", [], {})
-
-        # Mock fallback to succeed
-        mock_transcript = Mock()
-        mock_transcript.fetch.return_value = [{"text": "Fallback transcript", "start": 0.0}]
-        mock_list_result = Mock()
-        mock_list_result.find_transcript.return_value = mock_transcript
-        mock_list_transcripts.return_value = mock_list_result
-
-        expected_proxies = {
-            "http": "http://testuser:testpass@proxy.webshare.io:8080",
-            "https": "http://testuser:testpass@proxy.webshare.io:8080",
-        }
-
-        transcript, error = app.get_transcript("test_video_id")
-
-        self.assertEqual(transcript, "Fallback transcript")
-        self.assertIsNone(error)
-        mock_get_transcript.assert_called_once_with(
-            "test_video_id", languages=["en", "en-US"], proxies=expected_proxies
-        )
-        mock_list_transcripts.assert_called_once_with("test_video_id", proxies=expected_proxies)
-
-    @patch("youtube_helpers.YouTubeTranscriptApi.list_transcripts")
-    @patch("youtube_helpers.YouTubeTranscriptApi.get_transcript")
-    def test_get_transcript_fallback_v1_fetchedtranscript(self, mock_get_transcript, mock_list_transcripts):
-        """Fallback handles youtube-transcript-api 1.x FetchedTranscript (snippet objects)."""
-        from youtube_transcript_api import NoTranscriptFound
-
-        mock_get_transcript.side_effect = NoTranscriptFound("vid", [], {})
-
-        # Simulate the 1.x return: a FetchedTranscript exposing to_raw_data().
-        fetched = Mock()
-        fetched.to_raw_data.return_value = [
-            {"text": "Hello", "start": 0.0},
-            {"text": "world", "start": 1.0},
-        ]
-        mock_transcript = Mock()
-        mock_transcript.fetch.return_value = fetched
-        mock_list_result = Mock()
-        mock_list_result.find_transcript.return_value = mock_transcript
-        mock_list_transcripts.return_value = mock_list_result
 
         transcript, error = app.get_transcript("vid")
 
-        self.assertEqual(transcript, "Hello world")
+        self.assertEqual(transcript, "Auto English")
         self.assertIsNone(error)
+
+    @patch("youtube_helpers.YouTubeTranscriptApi")
+    def test_fallback_to_other_english_variant(self, mock_api_cls):
+        """When en/en-US are missing, any English transcript is used, manual before generated"""
+        mock_api_cls.return_value.list.return_value = _FakeTranscriptList(
+            _transcript("de", "Hallo"),
+            _transcript("en-AU", "Generated Aussie", is_generated=True),
+            _transcript("en-GB", "Manual British"),
+        )
+
+        transcript, error = app.get_transcript("vid")
+
+        self.assertEqual(transcript, "Manual British")
+        self.assertIsNone(error)
+
+    @patch("youtube_helpers.YouTubeTranscriptApi")
+    def test_fallback_to_generated_english_variant(self, mock_api_cls):
+        mock_api_cls.return_value.list.return_value = _FakeTranscriptList(
+            _transcript("fr", "Bonjour"),
+            _transcript("en-GB", "Generated British", is_generated=True),
+        )
+
+        transcript, error = app.get_transcript("vid")
+
+        self.assertEqual(transcript, "Generated British")
+        self.assertIsNone(error)
+
+    @patch("youtube_helpers.YouTubeTranscriptApi")
+    def test_no_english_transcript(self, mock_api_cls):
+        mock_api_cls.return_value.list.return_value = _FakeTranscriptList(_transcript("de", "Hallo"))
+
+        transcript, error = app.get_transcript("vid")
+
+        self.assertIsNone(transcript)
+        self.assertEqual(error, "No transcripts are available for this video.")
+
+    @patch("youtube_helpers.YouTubeTranscriptApi")
+    def test_fallback_transcript_empty(self, mock_api_cls):
+        mock_api_cls.return_value.list.return_value = _FakeTranscriptList(_transcript("en-GB", "", "  "))
+
+        transcript, error = app.get_transcript("vid")
+
+        self.assertIsNone(transcript)
+        self.assertEqual(error, "A transcript was found, but it is empty.")
+
+    @patch("youtube_helpers.YouTubeTranscriptApi")
+    def test_library_errors_map_to_clear_messages(self, mock_api_cls):
+        cases = [
+            (TranscriptsDisabled("vid"), "Transcripts are disabled for this video."),
+            (NoTranscriptFound("vid", ["en"], "none"), "No transcripts are available for this video."),
+            (RequestBlocked("vid"), youtube_helpers.BLOCKED_MESSAGE),
+            (IpBlocked("vid"), youtube_helpers.BLOCKED_MESSAGE),
+            (InvalidVideoId("vid"), "Invalid YouTube video ID."),
+            (
+                VideoUnavailable("vid"),
+                "This video is unavailable (it may be private, deleted, or region-restricted).",
+            ),
+            (AgeRestricted("vid"), "This video is age-restricted, so its transcript cannot be fetched."),
+            (
+                VideoUnplayable("vid", "Members only", []),
+                "This video cannot be played, so its transcript is unavailable: Members only",
+            ),
+            (
+                PoTokenRequired("vid"),
+                "YouTube currently requires extra verification for this video's transcript. Try again later.",
+            ),
+            (
+                requests.exceptions.ReadTimeout("read timed out"),
+                "Timed out fetching the transcript after 60 seconds. Try again later.",
+            ),
+        ]
+        for exc, expected in cases:
+            with self.subTest(exc=type(exc).__name__):
+                mock_api_cls.return_value.list.side_effect = exc
+                transcript, error = app.get_transcript("vid")
+                self.assertIsNone(transcript)
+                self.assertEqual(error, expected)
+
+    @patch("youtube_helpers.YouTubeTranscriptApi")
+    def test_request_failed_and_unexpected_errors(self, mock_api_cls):
+        http_error = requests.exceptions.HTTPError("429 Client Error: Too Many Requests")
+        mock_api_cls.return_value.list.side_effect = YouTubeRequestFailed("vid", http_error)
+        _, error = app.get_transcript("vid")
+        self.assertEqual(
+            error,
+            "The request to YouTube failed while fetching the transcript (429 Client Error: Too Many Requests).",
+        )
+
+        mock_api_cls.return_value.list.side_effect = YouTubeDataUnparsable("vid")
+        _, error = app.get_transcript("vid")
+        self.assertTrue(error.startswith("Could not retrieve the transcript: The data required"))
+
+        mock_api_cls.return_value.list.side_effect = RuntimeError("boom")
+        _, error = app.get_transcript("vid")
+        self.assertIn("An unexpected error occurred", error)
+        self.assertIn("boom", error)
+
+    @patch("youtube_helpers.YouTubeTranscriptApi")
+    def test_network_timeout_env_sets_session_timeout(self, mock_api_cls):
+        mock_api_cls.return_value.list.return_value = _FakeTranscriptList(_transcript("en", "x"))
+        with patch.dict(os.environ, {"NETWORK_TIMEOUT": "7"}):
+            app.get_transcript("vid")
+        self.assertEqual(mock_api_cls.call_args.kwargs["http_client"]._default_timeout, 7)
+
+    def test_timeout_session_applies_default_timeout(self):
+        session = youtube_helpers._TimeoutSession(12)
+        with patch("requests.Session.request") as mock_request:
+            session.get("https://www.youtube.com/watch?v=vid")
+            self.assertEqual(mock_request.call_args.kwargs["timeout"], 12)
+
+            # An explicit timeout from the caller is kept
+            session.post("https://www.youtube.com/youtubei/v1/player", timeout=3)
+            self.assertEqual(mock_request.call_args.kwargs["timeout"], 3)
+        session.close()
 
     def test_get_transcript_no_video_id(self):
         """Test get_transcript handles empty video ID"""
@@ -348,10 +525,9 @@ class TestTranscriptAndSummary(unittest.TestCase):
     @patch("youtube_helpers.YouTubeTranscriptApi")
     def test_get_transcript_success(self, mock_transcript_api):
         """Test successful transcript retrieval"""
-        mock_transcript_api.get_transcript.return_value = [
-            {"text": "This is a test"},
-            {"text": "transcript with content"},
-        ]
+        mock_transcript_api.return_value.list.return_value = _FakeTranscriptList(
+            _transcript("en", "This is a test", "transcript with content")
+        )
 
         transcript, error = get_transcript(self.test_video_id)
 
@@ -362,12 +538,12 @@ class TestTranscriptAndSummary(unittest.TestCase):
     @patch("youtube_helpers.YouTubeTranscriptApi")
     def test_get_transcript_no_transcript_found(self, mock_transcript_api):
         """Test when no transcript is found"""
-        mock_transcript_api.get_transcript.side_effect = Exception("NoTranscriptFound")
+        mock_transcript_api.return_value.list.side_effect = NoTranscriptFound(self.test_video_id, ["en"], "none")
 
         transcript, error = get_transcript(self.test_video_id)
 
         self.assertIsNone(transcript)
-        self.assertIsNotNone(error)
+        self.assertEqual(error, "No transcripts are available for this video.")
 
     def test_get_transcript_no_video_id(self):
         """Test get_transcript with no video ID"""
@@ -379,7 +555,7 @@ class TestTranscriptAndSummary(unittest.TestCase):
     @patch("youtube_helpers.YouTubeTranscriptApi")
     def test_get_transcript_empty_transcript(self, mock_transcript_api):
         """Test when transcript is empty"""
-        mock_transcript_api.get_transcript.return_value = [{"text": ""}, {"text": "   "}]
+        mock_transcript_api.return_value.list.return_value = _FakeTranscriptList(_transcript("en", "", "   "))
 
         transcript, error = get_transcript(self.test_video_id)
 
