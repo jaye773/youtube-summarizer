@@ -5,16 +5,20 @@ import socket
 import traceback
 import uuid
 from datetime import datetime
+from urllib.parse import quote
 
 import httplib2
 import openai
 from dotenv import load_dotenv
 from flask import Flask, Response, jsonify, redirect, render_template, request, session, url_for
+from flask_limiter import Limiter
 from google.api_core.client_options import ClientOptions
 from google.cloud import texttospeech
 from googleapiclient.discovery import build
+from limits import parse_many
 from werkzeug.exceptions import HTTPException
 from werkzeug.middleware.proxy_fix import ProxyFix
+from youtube_transcript_api.proxies import GenericProxyConfig, WebshareProxyConfig
 
 from voice_config import (
     AVAILABLE_VOICES,
@@ -52,16 +56,25 @@ from youtube_helpers import (
 )
 
 from tts_helpers import clean_text_for_tts, synthesize_audio
-from cache import build_cache_entry, load_summary_cache, save_summary_cache
+from cache import (
+    build_cache_entry,
+    list_summary_entries,
+    open_summary_cache,
+    save_summary_cache,
+    search_summary_entries,
+)
 import ai_models
 import sse
+import summary_jobs
 from ai_models import (
     AVAILABLE_MODELS,
     DEFAULT_MODEL,
     generate_summary,
     generate_summary_gemini,
     generate_summary_openai,
+    get_model_options,
     get_summary_prompt,
+    resolve_model_key,
 )
 
 # --- CONFIGURATION ---
@@ -85,15 +98,82 @@ TRUST_PROXY_HOPS = int(os.environ.get("TRUST_PROXY_HOPS", "0"))
 if TRUST_PROXY_HOPS > 0:
     app.wsgi_app = ProxyFix(app.wsgi_app, x_for=TRUST_PROXY_HOPS, x_proto=TRUST_PROXY_HOPS, x_host=TRUST_PROXY_HOPS)
 
+# Session cookie hardening. SameSite=Lax keeps the cookie off cross-site POST/DELETE
+# requests (CSRF); Secure is opt-in because many installs run on plain http locally.
+app.config.update(
+    SESSION_COOKIE_HTTPONLY=True,
+    SESSION_COOKIE_SAMESITE="Lax",
+    SESSION_COOKIE_SECURE=os.environ.get("SESSION_COOKIE_SECURE", "false").lower() == "true",
+)
+
+# --- RATE LIMITING ---
+# Per-client-IP limits on endpoints that spend AI/TTS credits. Storage is in
+# memory, which is correct because the app runs as a single process
+# (gunicorn_config.py). A limit string may hold several limits separated by
+# ";" (e.g. "10 per minute;100 per day"); an empty string disables that limit.
+RATE_LIMIT_DEFAULTS = {
+    "RATE_LIMIT_SUMMARIZE": "10 per minute;100 per day",
+    "RATE_LIMIT_TTS": "30 per minute;300 per day",
+    "RATE_LIMIT_LOGIN": "10 per minute",
+}
+
+
+def _read_rate_limit(name):
+    """Read a limit string from the environment, falling back to the default if it doesn't parse."""
+    value = os.environ.get(name, RATE_LIMIT_DEFAULTS[name]).strip()
+    if value:
+        try:
+            parse_many(value)
+        except ValueError:
+            print(f"Warning: invalid {name}={value!r}; using default {RATE_LIMIT_DEFAULTS[name]!r}")
+            value = RATE_LIMIT_DEFAULTS[name]
+    return value
+
+
+RATE_LIMIT_SUMMARIZE = _read_rate_limit("RATE_LIMIT_SUMMARIZE")
+RATE_LIMIT_TTS = _read_rate_limit("RATE_LIMIT_TTS")
+RATE_LIMIT_LOGIN = _read_rate_limit("RATE_LIMIT_LOGIN")
+# Off in the test suite (which makes many requests); tests that exercise limits
+# set app.config["RATE_LIMIT_ENABLED"] = True and call limiter.reset().
+app.config["RATE_LIMIT_ENABLED"] = (
+    os.environ.get("RATE_LIMIT_ENABLED", "true").lower() == "true" and not os.environ.get("TESTING")
+)
+
+# get_client_ip is defined below; the lambda resolves it at request time.
+limiter = Limiter(
+    key_func=lambda: get_client_ip(),
+    app=app,
+    storage_uri="memory://",
+    headers_enabled=True,  # X-RateLimit-* and Retry-After headers
+)
+
+
+@limiter.request_filter
+def _rate_limit_disabled():
+    return not app.config.get("RATE_LIMIT_ENABLED")
+
+
+# Shared limits: every endpoint decorated with the same object draws from the same
+# per-IP budget. Apply summarize_rate_limit to any endpoint that triggers AI
+# summarization, and tts_rate_limit to any endpoint that calls text-to-speech.
+# Limit values are callables so the module globals are read at request time.
+summarize_rate_limit = limiter.shared_limit(
+    lambda: RATE_LIMIT_SUMMARIZE, scope="summarize", exempt_when=lambda: not RATE_LIMIT_SUMMARIZE
+)
+tts_rate_limit = limiter.shared_limit(lambda: RATE_LIMIT_TTS, scope="tts", exempt_when=lambda: not RATE_LIMIT_TTS)
+login_rate_limit = limiter.limit(lambda: RATE_LIMIT_LOGIN, exempt_when=lambda: not RATE_LIMIT_LOGIN)
+
 # Diagnostic endpoints (/debug_transcript) are off unless explicitly enabled
 DEBUG_ENDPOINTS_ENABLED = os.environ.get("ENABLE_DEBUG_ENDPOINTS", "false").lower() == "true"
 
 # Upper bound on text sent to text-to-speech in one request (cost/abuse guard)
 MAX_TTS_CHARS = int(os.environ.get("MAX_TTS_CHARS", "50000"))
 
-# Process-wide default socket timeout. Some network calls (notably the YouTube
-# transcript fetch) expose no timeout parameter; this keeps them from hanging
-# forever. Clients that set their own timeouts (OpenAI, httplib2) are unaffected.
+# Process-wide default socket timeout, kept as a safety net for any library call
+# that opens sockets without its own timeout. The transcript fetch now sets an
+# explicit per-request timeout from the same NETWORK_TIMEOUT value
+# (youtube_helpers._TimeoutSession); clients that set their own timeouts
+# (OpenAI, httplib2) are unaffected.
 socket.setdefaulttimeout(int(os.environ.get("NETWORK_TIMEOUT", "60")))
 
 # --- WEBSHARE PROXY CONFIGURATION ---
@@ -104,31 +184,61 @@ WEBSHARE_PROXY_USERNAME = os.environ.get("WEBSHARE_PROXY_USERNAME")
 WEBSHARE_PROXY_PASSWORD = os.environ.get("WEBSHARE_PROXY_PASSWORD")
 
 
+# Last proxy setup that was logged, so get_proxy_config() (called once per transcript fetch)
+# only prints when the configuration actually changes instead of on every request.
+_last_logged_proxy_setup = None
+
+
+def _log_proxy_setup_once(key, message):
+    global _last_logged_proxy_setup
+    if key != _last_logged_proxy_setup:
+        _last_logged_proxy_setup = key
+        print(message)
+
+
 def get_proxy_config():
-    """Get proxy configuration if webshare proxy is enabled and properly configured"""
+    """Build the youtube-transcript-api proxy config from the WEBSHARE_PROXY_* settings.
+
+    Returns None when the proxy is disabled or misconfigured. Otherwise:
+      - HOST and PORT set: a GenericProxyConfig pointing at that proxy server (the original
+        behavior, e.g. a Webshare "Proxy Server" / static plan or any other HTTP proxy).
+      - HOST and PORT both unset: a WebshareProxyConfig, which uses Webshare's rotating
+        residential endpoint (p.webshare.io) and retries on a new IP when YouTube blocks one.
+    """
+    global _last_logged_proxy_setup
     if not WEBSHARE_PROXY_ENABLED:
+        _last_logged_proxy_setup = None
         return None
 
-    if not all(
-        [
-            WEBSHARE_PROXY_HOST,
-            WEBSHARE_PROXY_PORT,
-            WEBSHARE_PROXY_USERNAME,
-            WEBSHARE_PROXY_PASSWORD,
-        ]
-    ):
-        print(
+    has_credentials = bool(WEBSHARE_PROXY_USERNAME and WEBSHARE_PROXY_PASSWORD)
+    has_server = bool(WEBSHARE_PROXY_HOST and WEBSHARE_PROXY_PORT)
+    partial_server = bool(WEBSHARE_PROXY_HOST) != bool(WEBSHARE_PROXY_PORT)
+
+    if not has_credentials or partial_server:
+        _log_proxy_setup_once(
+            ("missing",),
             "⚠️ Webshare proxy is enabled but missing required configuration. "
-            "Required: WEBSHARE_PROXY_HOST, WEBSHARE_PROXY_PORT, WEBSHARE_PROXY_USERNAME, WEBSHARE_PROXY_PASSWORD"
+            "Required: WEBSHARE_PROXY_USERNAME, WEBSHARE_PROXY_PASSWORD, plus both WEBSHARE_PROXY_HOST and "
+            "WEBSHARE_PROXY_PORT for a fixed proxy server (leave both unset for Webshare rotating residential proxies)",
         )
         return None
 
-    proxy_url = (
-        f"http://{WEBSHARE_PROXY_USERNAME}:{WEBSHARE_PROXY_PASSWORD}" f"@{WEBSHARE_PROXY_HOST}:{WEBSHARE_PROXY_PORT}"
+    if has_server:
+        proxy_url = (
+            f"http://{quote(WEBSHARE_PROXY_USERNAME, safe='')}:{quote(WEBSHARE_PROXY_PASSWORD, safe='')}"
+            f"@{WEBSHARE_PROXY_HOST}:{WEBSHARE_PROXY_PORT}"
+        )
+        _log_proxy_setup_once(
+            ("server", WEBSHARE_PROXY_USERNAME, WEBSHARE_PROXY_HOST, WEBSHARE_PROXY_PORT),
+            f"✅ Using webshare proxy: {WEBSHARE_PROXY_USERNAME}@{WEBSHARE_PROXY_HOST}:{WEBSHARE_PROXY_PORT}",
+        )
+        return GenericProxyConfig(http_url=proxy_url, https_url=proxy_url)
+
+    _log_proxy_setup_once(
+        ("rotating", WEBSHARE_PROXY_USERNAME),
+        f"✅ Using webshare rotating residential proxies as {WEBSHARE_PROXY_USERNAME}",
     )
-    proxies = {"http": proxy_url, "https": proxy_url}
-    print(f"✅ Using webshare proxy: {WEBSHARE_PROXY_USERNAME}@{WEBSHARE_PROXY_HOST}:{WEBSHARE_PROXY_PORT}")
-    return proxies
+    return WebshareProxyConfig(proxy_username=WEBSHARE_PROXY_USERNAME, proxy_password=WEBSHARE_PROXY_PASSWORD)
 
 
 # Inject proxy config function into youtube_helpers now that it is defined
@@ -136,7 +246,8 @@ youtube_helpers.set_proxy_config_func(get_proxy_config)
 
 
 # --- CACHE CONFIGURATION ---
-SUMMARY_CACHE_FILE = os.path.join(DATA_DIR, "summary_cache.json")
+SUMMARY_CACHE_FILE = os.path.join(DATA_DIR, "summary_cache.json")  # legacy; migrated into SUMMARY_DB_FILE
+SUMMARY_DB_FILE = os.path.join(DATA_DIR, "summaries.db")
 LOGIN_ATTEMPTS_FILE = os.path.join(DATA_DIR, "login_attempts.json")
 AUDIO_CACHE_DIR = os.path.join(DATA_DIR, "audio_cache")
 
@@ -144,7 +255,7 @@ os.makedirs(AUDIO_CACHE_DIR, exist_ok=True)
 print(f"✅ Audio cache directory is set to: '{AUDIO_CACHE_DIR}/'")
 
 
-summary_cache = load_summary_cache(SUMMARY_CACHE_FILE)
+summary_cache = open_summary_cache(SUMMARY_DB_FILE, SUMMARY_CACHE_FILE, testing=bool(os.environ.get("TESTING")))
 print(f"✅ Loaded {len(summary_cache)} summaries from cache.")
 
 
@@ -359,6 +470,30 @@ def ensure_session_id():
         session["session_id"] = str(uuid.uuid4())
 
 
+STATE_CHANGING_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
+
+
+@app.before_request
+def require_json_for_state_changes():
+    """CSRF defence: state-changing requests must be Content-Type: application/json.
+
+    A cross-site HTML form can only send urlencoded, multipart or text/plain
+    bodies, and a cross-origin fetch() with application/json needs a CORS
+    preflight that this app never approves. So requiring JSON means another
+    site cannot drive these endpoints with the user's session cookie (on top of
+    SameSite=Lax). This applies to every route, including bodyless ones like
+    /logout, so new endpoints are covered automatically.
+    """
+    if request.method in STATE_CHANGING_METHODS and not request.is_json:
+        return jsonify({"error": "Content-Type must be application/json"}), 415
+
+
+def get_json_body():
+    """Return the request's JSON object, or None if the body is missing, malformed or not an object."""
+    data = request.get_json(silent=True)
+    return data if isinstance(data, dict) else None
+
+
 @app.route("/health")
 def health_check():
     """Lightweight, unauthenticated liveness endpoint for container health checks."""
@@ -386,6 +521,7 @@ def login_page():
 
 # --- AUTHENTICATION ENDPOINTS ---
 @app.route("/login", methods=["POST"])
+@login_rate_limit
 def login():
     """Authenticate user with passcode"""
     if not LOGIN_ENABLED:
@@ -409,7 +545,7 @@ def login():
         )  # Too Many Requests
 
     try:
-        data = request.get_json()
+        data = get_json_body()
         if not data:
             return jsonify({"error": "Invalid JSON in request body"}), 400
 
@@ -540,42 +676,31 @@ def get_cached_summaries():
     elif per_page > 100:  # Cap at 100 to prevent performance issues
         per_page = 100
 
-    cached_list = [
-        {
-            "type": "video",
-            "video_id": video_id,
-            "title": d["title"],
-            "thumbnail_url": d["thumbnail_url"],
-            "summary": d["summary"],
-            "summarized_at": d.get("summarized_at"),
-            "video_url": d.get("video_url"),
-            "error": None,
-        }
-        for video_id, d in summary_cache.items()
-    ]
-    cached_list.sort(key=lambda x: x.get("summarized_at", "1970-01-01T00:00:00.000000"), reverse=True)
+    def to_items(entries):
+        return [
+            {
+                "type": "video",
+                "video_id": video_id,
+                "title": d["title"],
+                "thumbnail_url": d["thumbnail_url"],
+                "summary": d["summary"],
+                "summarized_at": d.get("summarized_at"),
+                "video_url": d.get("video_url"),
+                "error": None,
+            }
+            for video_id, d in entries
+        ]
 
-    total = len(cached_list)
-
-    # Handle backward compatibility with limit parameter
-    if limit is not None:
+    # Legacy (non-paginated) formats: a plain list, newest first, optionally capped by limit
+    if limit is not None or not is_pagination_request:
         if limit == 0:
-            cached_list = []
-        elif limit > 0:
-            cached_list = cached_list[:limit]
-        # Return old format for backward compatibility
-        return jsonify(cached_list)
+            return jsonify([])
+        _, entries = list_summary_entries(summary_cache, 0, limit if limit and limit > 0 else None)
+        return jsonify(to_items(entries))
 
-    # If no pagination parameters were provided, return old format for backward compatibility
-    if not is_pagination_request:
-        return jsonify(cached_list)
-
-    # Calculate pagination
+    total, entries = list_summary_entries(summary_cache, (page - 1) * per_page, per_page)
     total_pages = (total + per_page - 1) // per_page if total > 0 else 0
-    start_index = (page - 1) * per_page
-    end_index = start_index + per_page
-
-    paginated_list = cached_list[start_index:end_index]
+    paginated_list = to_items(entries)
 
     return jsonify(
         {
@@ -604,27 +729,18 @@ def search_summaries():
     if not summary_cache:
         return jsonify([])
 
-    # Perform case-insensitive search in both title and summary
-    results = []
-    for video_id, data in summary_cache.items():
-        title = data.get("title", "").lower()
-        summary = data.get("summary", "").lower()
-        query_lower = query.lower()
-
-        if query_lower in title or query_lower in summary:
-            results.append(
-                {
-                    "video_id": video_id,
-                    "title": data["title"],
-                    "thumbnail_url": data["thumbnail_url"],
-                    "summary": data["summary"],
-                    "summarized_at": data.get("summarized_at"),
-                    "video_url": data.get("video_url"),
-                }
-            )
-
-    # Sort by date (most recent first)
-    results.sort(key=lambda x: x.get("summarized_at", "1970-01-01T00:00:00.000000"), reverse=True)
+    # Case-insensitive search in title and summary, most recent first
+    results = [
+        {
+            "video_id": video_id,
+            "title": data["title"],
+            "thumbnail_url": data["thumbnail_url"],
+            "summary": data["summary"],
+            "summarized_at": data.get("summarized_at"),
+            "video_url": data.get("video_url"),
+        }
+        for video_id, data in search_summary_entries(summary_cache, query)
+    ]
 
     return jsonify(results)
 
@@ -640,6 +756,8 @@ def api_status():
         "gemini_model_initialized": gemini_client is not None,
         "openai_client_initialized": openai_client is not None,
         "available_models": list(AVAILABLE_MODELS.keys()),
+        "models": get_model_options(),
+        "default_model": DEFAULT_MODEL,
         "testing_mode": bool(os.environ.get("TESTING")),
     }
     return jsonify(status)
@@ -718,8 +836,32 @@ def _summarize_and_cache(vid_id, vid_title, thumbnail_url, model_key):
     return summary, err
 
 
-def _process_playlist_url(url, playlist_id, model_key, session_id, processed_count):
-    """Process a playlist URL and return (result_dict, videos_processed_count)."""
+class _ResultEmitter:
+    """Reports per-result events for one input URL to an optional callback.
+
+    The background path uses the callback to record results and push them over
+    SSE as they finish; the synchronous path passes no callback.
+    """
+
+    def __init__(self, on_event, index):
+        self._on_event = on_event
+        self.index = index
+        self.streamed_playlist = False
+
+    def __call__(self, kind, item, **extra):
+        if kind == "playlist":
+            self.streamed_playlist = True
+        if self._on_event is not None:
+            self._on_event(dict(extra, index=self.index, kind=kind, item=item))
+
+
+def _process_playlist_url(url, playlist_id, model_key, session_id, processed_count, emit=None):
+    """Process a playlist URL and return (result_dict, videos_processed_count).
+
+    ``emit`` (a ``_ResultEmitter``) receives a ``playlist`` event once the
+    playlist is known and a ``playlist_video`` event for each finished video.
+    """
+    emit = emit or _ResultEmitter(None, None)
     if not youtube:
         return {"type": "error", "url": url, "error": "YouTube API client not initialized"}, 0
 
@@ -734,6 +876,7 @@ def _process_playlist_url(url, playlist_id, model_key, session_id, processed_cou
         return {"type": "playlist", "title": playlist_title, "error": error, "summaries": []}, 0
 
     total_videos = len(playlist_items)
+    emit("playlist", {"type": "playlist", "title": playlist_title, "summaries": []})
     _notify_progress(session_id, {
         "status": "processing",
         "message": f"Processing playlist with {total_videos} videos",
@@ -743,6 +886,11 @@ def _process_playlist_url(url, playlist_id, model_key, session_id, processed_cou
     })
 
     playlist_summaries = []
+
+    def add_video(video):
+        playlist_summaries.append(video)
+        emit("playlist_video", video, playlist_title=playlist_title)
+
     for index, item in enumerate(playlist_items):
         snippet = item.get("snippet", {})
         vid_id = snippet.get("resourceId", {}).get("videoId")
@@ -758,7 +906,7 @@ def _process_playlist_url(url, playlist_id, model_key, session_id, processed_cou
         })
 
         if vid_title in ["Private video", "Deleted video"]:
-            playlist_summaries.append({
+            add_video({
                 "video_id": vid_id, "title": vid_title, "thumbnail_url": thumbnail_url,
                 "summary": None, "error": "Video is private or deleted.",
             })
@@ -766,7 +914,7 @@ def _process_playlist_url(url, playlist_id, model_key, session_id, processed_cou
 
         if vid_id in summary_cache:
             cached_item = summary_cache[vid_id]
-            playlist_summaries.append({
+            add_video({
                 "video_id": vid_id, "title": cached_item["title"],
                 "thumbnail_url": cached_item["thumbnail_url"],
                 "summary": cached_item["summary"],
@@ -785,7 +933,7 @@ def _process_playlist_url(url, playlist_id, model_key, session_id, processed_cou
                 "model_used": model_key, "playlist": playlist_title,
             })
 
-        playlist_summaries.append({
+        add_video({
             "video_id": vid_id, "title": vid_title, "thumbnail_url": thumbnail_url,
             "summary": summary, "video_url": f"https://www.youtube.com/watch?v={vid_id}",
             "error": err,
@@ -833,83 +981,192 @@ def _process_video_url(video_id, model_key, session_id, processed_count, total_u
     }
 
 
-@app.route("/summarize", methods=["POST"])
-@require_auth
-def summarize_links():
-    try:
-        data = request.get_json()
-        if not data:
-            return jsonify({"error": "Invalid JSON in request body"}), 400
-        urls = data.get("urls", [])
-        if not urls:
-            return jsonify({"error": "No URLs provided"}), 400
+def _run_summary_batch(urls, model_key, session_id, on_event=None):
+    """Summarize every URL in order and return the list of results.
 
-        model_key = data.get("model", DEFAULT_MODEL)
-        if model_key not in AVAILABLE_MODELS:
-            available_models = list(AVAILABLE_MODELS.keys())
-            return jsonify({"error": f"Unsupported model: {model_key}. Available models: {available_models}"}), 400
+    Shared by the synchronous ``/summarize`` route and background requests.
+    An error in one URL is recorded in its result and does not stop the batch.
 
-        session_id = session.get("session_id")
-
-        # Send initial progress notification
-        has_playlists = any(get_playlist_id(url) for url in urls)
-        if has_playlists:
-            _notify_progress(session_id, {
-                "status": "starting", "message": "Analyzing URLs and counting videos...",
-                "progress": 0, "total": None,
-            })
-        else:
-            total_items = sum(1 for url in urls if get_video_id(url))
-            _notify_progress(session_id, {
-                "status": "starting", "message": f"Starting to process {total_items} videos",
-                "progress": 0, "total": total_items,
-            })
-
-        results = []
-        processed_count = 0
-        for url in urls:
-            playlist_id, video_id = get_playlist_id(url), get_video_id(url)
-
-            if playlist_id:
-                try:
-                    result, count = _process_playlist_url(url, playlist_id, model_key, session_id, processed_count)
-                    results.append(result)
-                    processed_count += count
-                except Exception as e:
-                    results.append({
-                        "type": "playlist", "title": "Unknown Playlist",
-                        "error": f"An unexpected error occurred: {e}", "summaries": [],
-                    })
-
-            elif video_id:
-                processed_count += 1
-                try:
-                    result = _process_video_url(video_id, model_key, session_id, processed_count, len(urls))
-                    results.append(result)
-                except Exception as e:
-                    results.append({
-                        "type": "video", "video_id": video_id,
-                        "title": "Unknown Video", "error": f"Failed to process video: {e}",
-                    })
-            else:
-                results.append({"type": "error", "url": url, "error": "Invalid or unsupported YouTube URL."})
-
+    ``on_event(payload)`` is called as results finish. Payloads carry ``index``
+    (position in ``urls``), ``kind`` and ``item``:
+      - ``item``: a complete top-level result (video, error, or failed playlist)
+      - ``playlist``: a playlist started (``item`` has an empty ``summaries``)
+      - ``playlist_video``: one finished playlist video (plus ``playlist_title``)
+    """
+    # Send initial progress notification
+    has_playlists = any(get_playlist_id(url) for url in urls)
+    if has_playlists:
         _notify_progress(session_id, {
-            "status": "completed", "message": "All summaries completed!",
-            "progress": processed_count, "total": processed_count, "results_count": len(results),
+            "status": "starting", "message": "Analyzing URLs and counting videos...",
+            "progress": 0, "total": None,
+        })
+    else:
+        total_items = sum(1 for url in urls if get_video_id(url))
+        _notify_progress(session_id, {
+            "status": "starting", "message": f"Starting to process {total_items} videos",
+            "progress": 0, "total": total_items,
         })
 
-        return jsonify(results)
+    results = []
+    processed_count = 0
+    for index, url in enumerate(urls):
+        emit = _ResultEmitter(on_event, index)
+        playlist_id, video_id = get_playlist_id(url), get_video_id(url)
+
+        if playlist_id:
+            try:
+                result, count = _process_playlist_url(
+                    url, playlist_id, model_key, session_id, processed_count, emit=emit
+                )
+                processed_count += count
+                if not emit.streamed_playlist:
+                    emit("item", result)
+            except Exception as e:
+                app.logger.warning(f"Playlist {playlist_id} failed: {e}\n{traceback.format_exc()}")
+                result = {
+                    "type": "playlist", "title": "Unknown Playlist",
+                    "error": f"An unexpected error occurred: {e}", "summaries": [],
+                }
+                emit("item", result)
+            results.append(result)
+
+        elif video_id:
+            processed_count += 1
+            try:
+                result = _process_video_url(video_id, model_key, session_id, processed_count, len(urls))
+            except Exception as e:
+                app.logger.warning(f"Video {video_id} failed: {e}\n{traceback.format_exc()}")
+                result = {
+                    "type": "video", "video_id": video_id,
+                    "title": "Unknown Video", "error": f"Failed to process video: {e}",
+                }
+            emit("item", result)
+            results.append(result)
+        else:
+            result = {"type": "error", "url": url, "error": "Invalid or unsupported YouTube URL."}
+            emit("item", result)
+            results.append(result)
+
+    _notify_progress(session_id, {
+        "status": "completed", "message": "All summaries completed!",
+        "progress": processed_count, "total": processed_count, "results_count": len(results),
+    })
+    return results
+
+
+def _parse_summarize_request():
+    """Validate a /summarize-style JSON body.
+
+    Returns (urls, model_key, None) or (None, None, error_response).
+    """
+    data = get_json_body()
+    if not data:
+        return None, None, (jsonify({"error": "Invalid JSON in request body"}), 400)
+    urls = data.get("urls", [])
+    if not urls:
+        return None, None, (jsonify({"error": "No URLs provided"}), 400)
+    if not isinstance(urls, list) or not all(isinstance(url, str) for url in urls):
+        return None, None, (jsonify({"error": "urls must be a list of strings"}), 400)
+
+    requested_model = data.get("model", DEFAULT_MODEL)
+    model_key = resolve_model_key(requested_model)  # retired keys map to their successor
+    if model_key is None:
+        available_models = list(AVAILABLE_MODELS.keys())
+        return None, None, (
+            jsonify({"error": f"Unsupported model: {requested_model}. Available models: {available_models}"}), 400
+        )
+    return urls, model_key, None
+
+
+@app.route("/summarize", methods=["POST"])
+@require_auth
+@summarize_rate_limit
+def summarize_links():
+    """Summarize all URLs within this request and return every result (kept for API clients)."""
+    try:
+        urls, model_key, error_response = _parse_summarize_request()
+        if error_response:
+            return error_response
+        return jsonify(_run_summary_batch(urls, model_key, session.get("session_id")))
     except Exception as e:
         app.logger.error(f"Unhandled exception in /summarize: {str(e)}\n{traceback.format_exc()}")
         return jsonify({"error": "An unexpected error occurred while processing your request"}), 500
 
 
+def _run_background_summary(request_id, urls, model_key, session_id):
+    """Executor job for /summarize/start: record and push each result as it finishes."""
+    store = summary_jobs.store
+    store.mark_running(request_id)
+
+    def on_event(payload):
+        stored = store.add_item(request_id, payload)
+        if stored is not None:
+            sse.broadcast(
+                "summary_result", dict(stored, request_id=request_id),
+                session_filter=session_id, subscription_filter="summary_result",
+            )
+
+    status, error, results_count = summary_jobs.STATUS_COMPLETED, None, 0
+    try:
+        results = _run_summary_batch(urls, model_key, session_id, on_event)
+        results_count = len(results)
+        store.finish(request_id, results=results)
+    except Exception as e:
+        app.logger.error(f"Background summary {request_id} failed: {e}\n{traceback.format_exc()}")
+        status, error = summary_jobs.STATUS_FAILED, "An unexpected error occurred while processing your request"
+        store.finish(request_id, error=error)
+
+    sse.broadcast(
+        "summary_done",
+        {"request_id": request_id, "status": status, "error": error, "results_count": results_count},
+        session_filter=session_id, subscription_filter="summary_done",
+    )
+
+
+@app.route("/summarize/start", methods=["POST"])
+@require_auth
+@summarize_rate_limit
+def start_summary():
+    """Queue a summary request and return 202 with its id; results arrive over SSE and GET."""
+    urls, model_key, error_response = _parse_summarize_request()
+    if error_response:
+        return error_response
+
+    session_id = session.get("session_id")
+    try:
+        request_id = summary_jobs.store.create(session_id, urls, model_key)
+    except summary_jobs.StoreFullError as e:
+        return jsonify({"error": str(e)}), 429
+
+    try:
+        summary_jobs.executor.submit(_run_background_summary, request_id, list(urls), model_key, session_id)
+    except RuntimeError:  # executor shut down (process exiting)
+        summary_jobs.store.discard(request_id)
+        return jsonify({"error": "The server is shutting down; try again shortly."}), 503
+
+    return jsonify({
+        "request_id": request_id,
+        "status": summary_jobs.STATUS_QUEUED,
+        "status_url": url_for("summary_status", request_id=request_id),
+    }), 202
+
+
+@app.route("/summarize/<request_id>", methods=["GET"])
+@require_auth
+def summary_status(request_id):
+    """Status and results so far of a background request; 404 unless this session started it."""
+    state = summary_jobs.store.get(request_id, session.get("session_id"))
+    if state is None:
+        return jsonify({"error": "Summary request not found"}), 404
+    return jsonify(state)
+
+
 @app.route("/speak", methods=["POST"])
 @require_auth
+@tts_rate_limit
 def speak():
     try:
-        data = request.get_json()
+        data = get_json_body()
         if not data:
             return jsonify({"error": "Invalid JSON in request body"}), 400
         text_to_speak = data.get("text")
@@ -1048,10 +1305,11 @@ def manual_cache_cleanup():
 
 @app.route("/preview-voice", methods=["POST"])
 @require_auth
+@tts_rate_limit
 def preview_voice():
     """Preview a voice with custom text"""
     try:
-        data = request.get_json()
+        data = get_json_body()
         if not data:
             return jsonify({"error": "Invalid JSON in request body"}), 400
 
@@ -1122,12 +1380,7 @@ def preview_voice():
 def delete_summary():
     """Delete a summary from the cache by video_id"""
     try:
-        # Try to get JSON data
-        try:
-            data = request.get_json(force=True)
-        except Exception:
-            return jsonify({"error": "Invalid JSON in request body"}), 400
-
+        data = get_json_body()
         if data is None:
             return jsonify({"error": "Invalid JSON in request body"}), 400
 
@@ -1213,15 +1466,9 @@ def settings_page():
 @require_auth
 def update_settings():
     """Update environment variables from settings form"""
-    try:
-        data = request.get_json(force=True)
-        if not data:
-            return jsonify({"error": "Invalid JSON in request body"}), 400
-    except Exception as e:
-        return (
-            jsonify({"error": "Invalid JSON in request body", "message": str(e)}),
-            400,
-        )
+    data = get_json_body()
+    if not data:
+        return jsonify({"error": "Invalid JSON in request body"}), 400
 
     try:
         # Define which environment variables we allow to be updated
@@ -1342,6 +1589,8 @@ API_ROUTE_PREFIXES = [
     "/delete_summary",
     "/settings",
     "/events",
+    "/preview-voice",
+    "/api/",
 ]
 
 
@@ -1362,6 +1611,22 @@ def bad_request(e):
 def not_found(e):
     if _is_api_request():
         return jsonify({"error": "Endpoint not found", "path": request.path}), 404
+    return e
+
+
+@app.errorhandler(429)
+def too_many_requests(e):
+    """Rate limit exceeded (Flask-Limiter). Retry-After/X-RateLimit-* headers are added by the limiter."""
+    if _is_api_request():
+        return (
+            jsonify(
+                {
+                    "error": "Too many requests. Please wait a moment and try again.",
+                    "limit": getattr(e, "description", ""),
+                }
+            ),
+            429,
+        )
     return e
 
 

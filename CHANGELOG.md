@@ -13,21 +13,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Removed `/debug_model`, `/events/status`, `/events/broadcast` and `/sse-test`; `/debug_transcript` requires `ENABLE_DEBUG_ENDPOINTS=true`
 - `X-Forwarded-For` is only trusted with `TRUST_PROXY_HOPS`; `TESTING` alone no longer disables auth
 - `/preview-voice` validates `voice_id` (path traversal)
+- Per-client-IP rate limits (Flask-Limiter) on `/summarize`, `/speak` + `/preview-voice` and `POST /login`, configurable via `RATE_LIMIT_SUMMARIZE`, `RATE_LIMIT_TTS`, `RATE_LIMIT_LOGIN`, `RATE_LIMIT_ENABLED`; 429 responses are JSON
+- CSRF hardening: session cookie is `SameSite=Lax` (optional `SESSION_COOKIE_SECURE`); POST/PUT/PATCH/DELETE require `Content-Type: application/json` (415 otherwise) and `/settings`, `/delete_summary` no longer parse non-JSON bodies
 
 ### Changed
+- AI models updated: `gemini-3.5-flash-lite` (new default), `gemini-3.8-flash`, `gemini-4-argon`, `gpt-6-luna`, `gpt-6.1-terra`, `gpt-6.1-sol`. Retired keys (`gemini-2.5-*`, `gpt-5`, `gpt-5-mini`, `gpt-4o*`) map to successors instead of failing; the model selector is built from `/api_status`
+- OpenAI calls set `reasoning_effort="low"` and a 25,000-token completion budget so reasoning tokens can no longer leave the summary empty
+- Docker image and CI use Python 3.13 (was 3.11); CI also runs the tests on 3.9. `coverage` bumped to 7.6.1, the first release with Python 3.13 wheels
 - Docker image runs gunicorn with `gunicorn_config.py` (1 process, gthread) as a non-root user, with a health check
 - Gemini calls use the `google-genai` SDK (replaces deprecated `google-generativeai`)
 - Settings saved in the UI persist across restarts (`DATA_DIR/.env` is loaded at startup); generated session secret persists in `DATA_DIR/.secret_key`
 - SSE moved to `sse.py`; idle streams are no longer dropped every 5 minutes
+- Upgraded `youtube-transcript-api` 1.1.0 → 1.2.4 (instance API, `NETWORK_TIMEOUT` applied per request, clearer errors for blocked/unavailable/age-restricted videos); webshare proxy also supports rotating residential mode when `WEBSHARE_PROXY_HOST`/`PORT` are unset, and the proxy line is logged once instead of on every fetch
+- Summaries are stored in SQLite (`DATA_DIR/summaries.db`, WAL mode) instead of `summary_cache.json`; each write commits one row instead of rewriting the whole file, and listing/search query the database. An existing `summary_cache.json` is imported automatically on first start and renamed to `summary_cache.json.migrated`
+- Page JavaScript moved out of the templates into `static/js/` (`index.js`, `login.js`, `settings.js`, `theme-init.js`, `settings-theme.js`); only the tiny theme-flash guard stays inline in `<head>`
 
 ### Removed
+- `tests/test_dark_mode_integration.py` and `tests/test_theme_performance.py`: they targeted `localhost:5000` with no server started (on macOS that port is the AirPlay receiver), mostly asserted on DOM they injected themselves, and used timing thresholds; replaced by `tests/test_browser_smoke.py`, which runs in a dedicated CI job
 - Unused async worker system (`worker_manager`, `job_queue`, `job_models`, `job_state`, `error_handler`, `sse_manager`, `/summarize_async`, `/jobs`) and its client scripts and tests
 - `Dockerfile.sse`, `docker-compose-sse.yml`, `docker-compose-podman.yml`, `docker/`, `nginx-sse-fixed.conf`
 
 ### Fixed
 - Deleting a summary now deletes its cached audio
+- Long playlists no longer depend on one long HTTP request (which reverse proxies with a 60 s read timeout would cut off)
 
 ### Added
+- Background summaries: `POST /summarize/start` returns `202 {request_id}` immediately and the work runs on a small thread pool (`SUMMARY_WORKERS`, default 2); `GET /summarize/<request_id>` returns status and results so far (only to the session that started it). Each result is pushed over SSE as a `summary_result` event and completion as `summary_done`, so cards render as they finish. The UI uses this flow, polls when SSE is unavailable, and falls back to `POST /summarize` on older servers. `POST /summarize` still works synchronously
+- New settings: `SUMMARY_WORKERS`, `SUMMARY_REQUEST_TTL`, `SUMMARY_MAX_REQUESTS`, `SUMMARY_MAX_ACTIVE_PER_SESSION`
+
+### Added
+- Dependabot (`.github/dependabot.yml`): weekly pip, GitHub Actions and Docker base image updates, minor/patch grouped
 - **Webshare Proxy Support**: Added support for using webshare proxies for YouTube transcript fetching
   - New environment variables: `WEBSHARE_PROXY_ENABLED`, `WEBSHARE_PROXY_HOST`, `WEBSHARE_PROXY_PORT`, `WEBSHARE_PROXY_USERNAME`, `WEBSHARE_PROXY_PASSWORD`
   - Helps bypass IP restrictions, rate limiting, and geographic blocks when fetching transcripts

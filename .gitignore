@@ -26,6 +26,10 @@ instance/
 # Project-specific cache and data
 audio_cache/
 summary_cache.json
+summary_cache.json.migrated*
+*.db
+*.db-wal
+*.db-shm
 data/
 
 # IDE
@@ -72,3 +76,6 @@ tests/test_cache.json
 tests/test_cache.json.lock 
 # Generated session secret (see load_or_create_secret_key in app.py)
 .secret_key
+
+# Claude Code agent worktrees
+.claude/worktrees/

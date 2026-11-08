@@ -4,7 +4,7 @@
 
 ### A powerful Flask application for AI-powered YouTube video and playlist summarization
 
-[![Python](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
+[![Python](https://img.shields.io/badge/python-3.13-blue.svg)](https://www.python.org/downloads/)
 [![Flask](https://img.shields.io/badge/flask-3.0.2-green.svg)](https://flask.palletsprojects.com/)
 [![Docker](https://img.shields.io/badge/docker-%230db7ed.svg?logo=docker&logoColor=white)](https://www.docker.com/)
 
@@ -117,13 +117,23 @@ The test suite bypasses authentication. This requires both `TESTING=true` in the
 | `TRUST_PROXY_HOPS` | `0` | Number of reverse proxies in front of the app. Only then is `X-Forwarded-For` trusted for client IPs (login lockout). Leave at `0` when exposed directly |
 | `ENABLE_DEBUG_ENDPOINTS` | `false` | Enables `/debug_transcript` |
 | `MAX_TTS_CHARS` | `50000` | Maximum text length accepted by `/speak` |
-| `NETWORK_TIMEOUT` | `60` | Default socket timeout (seconds) for network calls without their own timeout, e.g. transcript fetches |
+| `NETWORK_TIMEOUT` | `60` | Timeout (seconds) for each transcript HTTP request; also the default socket timeout for network calls without their own |
 | `SSE_MAX_CONNECTIONS` | `20` | Maximum concurrent progress streams (each holds a server thread) |
+| `SUMMARY_WORKERS` | `2` | Background threads that process summary requests |
+| `SUMMARY_REQUEST_TTL` | `3600` | Seconds finished summary requests stay retrievable |
+| `SUMMARY_MAX_ACTIVE_PER_SESSION` | `3` | Summary requests one browser can have running at once |
 | `GUNICORN_THREADS` | `32` | Request threads in the single gunicorn process |
+| `RATE_LIMIT_ENABLED` | `true` | Per-client-IP rate limiting of the endpoints below. `false` disables all of them |
+| `RATE_LIMIT_SUMMARIZE` | `10 per minute;100 per day` | Limit for `/summarize` (AI credits). `;`-separated [limits](https://limits.readthedocs.io/en/stable/quickstart.html#rate-limit-string-notation) strings; empty disables |
+| `RATE_LIMIT_TTS` | `30 per minute;300 per day` | Shared limit for `/speak` and `/preview-voice` (TTS credits); empty disables |
+| `RATE_LIMIT_LOGIN` | `10 per minute` | Limit for `POST /login`, on top of the lockout; empty disables |
+| `SESSION_COOKIE_SECURE` | `false` | Send the session cookie over HTTPS only. Set `true` when served over HTTPS |
 
 Notes:
 - **Settings page:** with login disabled, anyone who can reach the app can open it and change settings (enable login to restrict it). Secrets are never displayed; leave a secret field blank to keep its current value. Changes are written to `DATA_DIR/.env`, which is loaded at startup and overrides other environment values.
 - **Session secret:** if `SESSION_SECRET_KEY` is not set, one is generated once and stored in `DATA_DIR/.secret_key`.
+- **Rate limits:** counted per client IP in memory (reset on restart). Behind a reverse proxy set `TRUST_PROXY_HOPS`, otherwise every request appears to come from the proxy and shares one budget. Exceeding a limit returns HTTP 429 with a JSON error and a `Retry-After` header.
+- **CSRF:** the session cookie is `HttpOnly` and `SameSite=Lax`, and every POST/PUT/PATCH/DELETE must be sent as `Content-Type: application/json` (otherwise HTTP 415), which cross-site HTML forms cannot do. API clients must send that header, even on bodyless requests such as `/logout`.
 - **Single process:** the app keeps its state in memory, so `gunicorn_config.py` runs exactly one worker process with many threads. Do not raise the worker count.
 
 ## 🌐 Webshare Proxy Support
@@ -141,6 +151,8 @@ WEBSHARE_PROXY_PORT=8080                      # Proxy server port
 WEBSHARE_PROXY_USERNAME=your_username         # Webshare proxy username
 WEBSHARE_PROXY_PASSWORD=your_password         # Webshare proxy password
 ```
+
+With `WEBSHARE_PROXY_HOST` and `WEBSHARE_PROXY_PORT` set, every transcript request goes through that proxy server (works with any HTTP proxy). Leave both unset to use Webshare's **rotating residential** proxies instead (only username and password needed; requires a Webshare "Residential" plan): each request gets a new IP and blocked requests are retried on another IP, which is what the youtube-transcript-api maintainers recommend for getting around YouTube IP blocks.
 
 ### Setup Examples
 
@@ -189,6 +201,8 @@ If you experience issues with proxy configuration:
 
 ## 🔧 Prerequisites
 
+- **Python 3.13** for local runs (the Docker image and CI use 3.13; Python 3.9 is end-of-life and no longer tested).
+  Python 3.14 is not supported yet: `youtube-transcript-api==1.1.0` requires Python < 3.14.
 - **Google API Key** (required) with access to:
   - YouTube Data API v3
   - Google Generative AI (Gemini)
@@ -290,7 +304,7 @@ The application will be available at `http://localhost:5001`
    - Playlist URLs are also supported
    - Multiple URLs can be entered on separate lines
 
-4. **Generate Summaries**: Click the "Summarize" button to process the videos
+4. **Generate Summaries**: Click the "Summarize" button to process the videos. Work runs in the background, so long playlists are not cut off by proxy timeouts; each summary card appears as soon as it is ready
 
 5. **View Results**: 
    - Summaries appear below each video
@@ -304,14 +318,15 @@ youtube-summarizer/
 ├── app.py                # Flask app: routes, settings, client setup
 ├── ai_models.py          # Model registry and Gemini/OpenAI summary generation
 ├── auth.py               # Passcode login, lockout, require_auth
-├── cache.py              # Summary cache load/save (atomic)
+├── cache.py              # SQLite summary store (summaries.db) and JSON migration
 ├── sse.py                # Server-Sent Events progress stream
+├── summary_jobs.py       # Background summary requests (thread pool + request store)
 ├── tts_helpers.py        # Text-to-speech synthesis helpers
 ├── voice_config.py       # TTS voices and audio cache management
 ├── youtube_helpers.py    # YouTube API and transcript helpers
 ├── gunicorn_config.py    # Production server config (1 process, threads)
 ├── templates/            # index, login, settings pages
-├── static/               # CSS, theme JS, icons
+├── static/               # CSS, page and theme JS, icons
 ├── tests/                # pytest suite
 ├── Dockerfile
 └── docker-compose.yml
@@ -333,7 +348,7 @@ To set up Google APIs:
 4. Create an API key and add it as `GOOGLE_API_KEY` to your `.env` file
 
 ### OpenAI API (Optional, for GPT models)
-1. **OpenAI API** - For accessing GPT-4o, GPT-4 Turbo, and GPT-3.5 Turbo models
+1. **OpenAI API** - For accessing the GPT-6 family models listed below
 
 To set up OpenAI API:
 1. Go to [OpenAI Platform](https://platform.openai.com/)
@@ -341,12 +356,18 @@ To set up OpenAI API:
 3. Add it as `OPENAI_API_KEY` to your `.env` file
 
 ### Available AI Models
-- **Google Gemini 2.5 Flash** - Fast and efficient (default)
-- **Google Gemini 2.5 Pro** - More capable for complex content
-- **OpenAI GPT-5** - Most advanced AI model available
-- **OpenAI GPT-5 Mini** - Faster GPT-5 variant
-- **OpenAI GPT-4o** - Advanced multimodal capabilities
-- **OpenAI GPT-4o Mini** - Fast and cost-effective
+| Key | Provider | Notes |
+|---|---|---|
+| `gemini-3.5-flash-lite` | Google | Fastest and cheapest (default) |
+| `gemini-3.8-flash` | Google | Most capable Flash model |
+| `gemini-4-argon` | Google | Flagship reasoning model |
+| `gpt-6-luna` | OpenAI | Lowest-cost OpenAI model |
+| `gpt-6.1-terra` | OpenAI | Fast, efficient |
+| `gpt-6.1-sol` | OpenAI | Near-flagship quality at lower cost |
+
+The older keys (`gemini-2.5-flash`, `gemini-2.5-pro`, `gpt-5`, `gpt-5-mini`, `gpt-4o`, `gpt-4o-mini`) refer to
+models the providers shut down between December 2026 and January 2027. Requests that still send them are served by
+the successor in `ai_models.LEGACY_MODEL_ALIASES`.
 
 ## 🛠️ Troubleshooting
 
@@ -403,7 +424,7 @@ make coverage
 
 Browser (Playwright) tests are skipped unless Playwright and its browsers are installed:
 ```bash
-pip install playwright && playwright install chromium
+pip install playwright==1.64.1 && python -m playwright install chromium
 make test-browser
 ```
 

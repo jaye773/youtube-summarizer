@@ -18,7 +18,9 @@ MAX_CONNECTIONS = int(os.environ.get("SSE_MAX_CONNECTIONS", "20"))
 STALE_AFTER = timedelta(minutes=5)
 KEEPALIVE_SECONDS = 30
 
-DEFAULT_SUBSCRIPTIONS = frozenset({"summary_complete", "summary_progress", "system"})
+DEFAULT_SUBSCRIPTIONS = frozenset(
+    {"summary_complete", "summary_progress", "summary_result", "summary_done", "system"}
+)
 
 connections = {}
 lock = threading.Lock()

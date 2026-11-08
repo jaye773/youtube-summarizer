@@ -1,0 +1,46 @@
+version: 2
+updates:
+  # requirements.txt and requirements-dev.txt (both in the repo root)
+  - package-ecosystem: pip
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    groups:
+      # One PR for all minor/patch bumps; majors still get their own PR
+      python-minor-patch:
+        update-types:
+          - minor
+          - patch
+    commit-message:
+      prefix: deps
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 3
+    groups:
+      github-actions:
+        patterns:
+          - "*"
+    commit-message:
+      prefix: ci
+
+  # Dockerfile base image. The tag is a floating "3.13-slim", so the only
+  # update Dependabot can propose is the next Python minor (e.g. 3.14-slim);
+  # the CI docker job shows whether the pinned requirements support it.
+  - package-ecosystem: docker
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 2
+    ignore:
+      - dependency-name: python
+        update-types:
+          - version-update:semver-major
+    commit-message:
+      prefix: docker
