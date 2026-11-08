@@ -4,7 +4,7 @@
 
 ### A powerful Flask application for AI-powered YouTube video and playlist summarization
 
-[![Python](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
+[![Python](https://img.shields.io/badge/python-3.9%E2%80%933.13-blue.svg)](https://www.python.org/downloads/)
 [![Flask](https://img.shields.io/badge/flask-3.0.2-green.svg)](https://flask.palletsprojects.com/)
 [![Docker](https://img.shields.io/badge/docker-%230db7ed.svg?logo=docker&logoColor=white)](https://www.docker.com/)
 
@@ -189,6 +189,8 @@ If you experience issues with proxy configuration:
 
 ## 🔧 Prerequisites
 
+- **Python 3.13** for local runs (the Docker image uses `python:3.13-slim`; CI also tests 3.9, which is end-of-life).
+  Python 3.14 is not supported yet: `youtube-transcript-api==1.1.0` requires Python < 3.14.
 - **Google API Key** (required) with access to:
   - YouTube Data API v3
   - Google Generative AI (Gemini)

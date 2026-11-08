@@ -84,7 +84,7 @@ Production: `gunicorn -c gunicorn_config.py app:app` (what the Dockerfile runs).
 
 Tests import `app` with `TESTING=true`, which skips real API client creation. Patch module globals such as `app.summary_cache`, `app.tts_client`, `ai_models.gemini_client`, `ai_models.openai_client`.
 
-CI (`.github/workflows/tests.yml`): flake8 on the app modules, pytest with coverage, and a Docker build + `/health` smoke test.
+CI (`.github/workflows/tests.yml`): flake8 on the app modules, pytest with coverage on Python 3.9 and 3.13, and a Docker build + `/health` smoke test. The Docker image runs Python 3.13; code must stay 3.9-compatible while local development still uses 3.9.
 
 ## Security Notes
 - Settings page never renders secret values; blank secret fields keep the current value.
