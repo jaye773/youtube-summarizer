@@ -61,7 +61,7 @@ LOGIN_CODE=your_secret_passcode      # The passcode users must enter
 SESSION_SECRET_KEY=your_random_key   # Secret key for session encryption
 MAX_LOGIN_ATTEMPTS=5                 # Failed attempts before lockout (default: 5)
 LOCKOUT_DURATION=15                  # Lockout time in minutes (default: 15)
-FLASK_DEBUG=false                    # Enable Flask debug mode (default: true, set false for production)
+FLASK_DEBUG=false                    # Flask debug mode for `python app.py` (default: false; never enable in production)
 ```
 
 ### Setup Examples
@@ -107,7 +107,25 @@ When login is enabled:
 
 ### Testing Override
 
-During development and testing, authentication is automatically bypassed when the `TESTING` environment variable is set to `true`. This ensures all existing tests continue to work without modification.
+The test suite bypasses authentication. This requires both `TESTING=true` in the environment **and** a Flask app configured with `TESTING=True` (done by the test fixtures), so a stray `TESTING` variable on a server does not disable login.
+
+## ⚙️ Deployment & Security Settings
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `DATA_DIR` | `data` in Docker, `.` otherwise | Where the summary cache, audio cache, login attempts, session secret and UI-saved settings live |
+| `TRUST_PROXY_HOPS` | `0` | Number of reverse proxies in front of the app. Only then is `X-Forwarded-For` trusted for client IPs (login lockout). Leave at `0` when exposed directly |
+| `ALLOW_UNAUTHENTICATED_SETTINGS` | `false` | With login disabled, the settings page can only be changed from localhost unless this is `true` |
+| `ENABLE_DEBUG_ENDPOINTS` | `false` | Enables `/debug_transcript` |
+| `MAX_TTS_CHARS` | `50000` | Maximum text length accepted by `/speak` |
+| `NETWORK_TIMEOUT` | `60` | Default socket timeout (seconds) for network calls without their own timeout, e.g. transcript fetches |
+| `SSE_MAX_CONNECTIONS` | `20` | Maximum concurrent progress streams (each holds a server thread) |
+| `GUNICORN_THREADS` | `32` | Request threads in the single gunicorn process |
+
+Notes:
+- **Settings page:** secrets are never displayed; leave a secret field blank to keep its current value. Changes are written to `DATA_DIR/.env`, which is loaded at startup and overrides other environment values.
+- **Session secret:** if `SESSION_SECRET_KEY` is not set, one is generated once and stored in `DATA_DIR/.secret_key`.
+- **Single process:** the app keeps its state in memory, so `gunicorn_config.py` runs exactly one worker process with many threads. Do not raise the worker count.
 
 ## 🌐 Webshare Proxy Support
 
@@ -193,30 +211,25 @@ GOOGLE_API_KEY=your_google_api_key_here
 OPENAI_API_KEY=your_openai_api_key_here  # Optional, for GPT models
 ```
 
-### 3. Initialize Data Directory
-Run the initialization script to create the proper directory structure:
+### 3. Run with Docker Compose
 ```bash
-./init_data.sh
-```
-
-This creates the `data` directory with the correct file structure to avoid volume mounting issues.
-
-### 4. Run with Docker Compose
-```bash
-docker-compose up -d
+mkdir -p data
+docker compose up -d
 ```
 
 The application will be available at `http://localhost:5001`
 
-### 5. Stop the Application
+### 4. Stop the Application
 ```bash
-docker-compose down
+docker compose down
 ```
 
 ### Docker Notes
-- Summaries and audio files are persisted in the `./data` directory on your host machine
-- The container automatically restarts if it crashes
-- Logs can be viewed with: `docker-compose logs -f`
+- Summaries, audio and settings are persisted in the `./data` directory on your host machine
+- The container runs as a non-root user (uid 1000); on Linux make sure `./data` is writable by that uid
+- With Podman on SELinux hosts, add `:Z` to the volume in `docker-compose.yml`
+- The container restarts automatically and has a `/health` health check
+- Logs can be viewed with: `docker compose logs -f`
 
 ## 💻 Usage without Docker
 
@@ -259,7 +272,7 @@ python app.py
 
 For production (using Gunicorn):
 ```bash
-gunicorn --bind 0.0.0.0:5001 app:app
+gunicorn -c gunicorn_config.py app:app
 ```
 
 The application will be available at `http://localhost:5001`
@@ -289,15 +302,20 @@ The application will be available at `http://localhost:5001`
 
 ```
 youtube-summarizer/
-├── app.py                 # Main Flask application
-├── templates/
-│   └── index.html        # Web interface
-├── audio_cache/          # Generated MP3 files
-├── summary_cache.json    # Cached summaries
-├── requirements.txt      # Python dependencies
-├── Dockerfile           # Docker image configuration
-├── docker-compose.yml   # Docker Compose configuration
-└── .dockerignore        # Docker ignore patterns
+├── app.py                # Flask app: routes, settings, client setup
+├── ai_models.py          # Model registry and Gemini/OpenAI summary generation
+├── auth.py               # Passcode login, lockout, require_auth
+├── cache.py              # Summary cache load/save (atomic)
+├── sse.py                # Server-Sent Events progress stream
+├── tts_helpers.py        # Text-to-speech synthesis helpers
+├── voice_config.py       # TTS voices and audio cache management
+├── youtube_helpers.py    # YouTube API and transcript helpers
+├── gunicorn_config.py    # Production server config (1 process, threads)
+├── templates/            # index, login, settings pages
+├── static/               # CSS, theme JS, icons
+├── tests/                # pytest suite
+├── Dockerfile
+└── docker-compose.yml
 ```
 
 ## 🔑 API Requirements
@@ -368,9 +386,8 @@ To set up OpenAI API:
    - Check that cookies are enabled in your browser
    - Verify the session key doesn't contain special characters that might cause issues
 
-8. **Login not working in tests**
-   - Tests automatically bypass authentication when `TESTING=true`
-   - This is expected behavior - tests should always pass regardless of login settings
+8. **Settings page says "Settings changes are disabled"**
+   - Login is disabled and you are not on localhost. Enable login (`LOGIN_ENABLED=true` + `LOGIN_CODE`) or set `ALLOW_UNAUTHENTICATED_SETTINGS=true`
 
 ## 🧪 Testing
 
@@ -378,16 +395,19 @@ The project includes comprehensive unit and integration tests.
 
 ### Quick Test
 ```bash
-./quick_test.sh
-# or
-make test
+make quick-test   # core app tests
+make test         # full suite
 ```
 
 ### Full Test Suite with Coverage
 ```bash
-python run_tests.py
-# or
 make coverage
+```
+
+Browser (Playwright) tests are skipped unless Playwright and its browsers are installed:
+```bash
+pip install playwright && playwright install chromium
+make test-browser
 ```
 
 ### Test Structure
@@ -396,6 +416,8 @@ make coverage
 - `tests/test_transcript_and_summary.py` - Transcript and summary generation tests
 - `tests/test_cache.py` - Cache functionality tests
 - `tests/test_integration.py` - End-to-end integration tests
+- `tests/test_sse.py` - Server-Sent Events registry and formatting
+- `tests/test_pagination.py` - Cached summary pagination
 
 ## 🔍 Code Quality
 

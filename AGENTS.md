@@ -16,7 +16,7 @@ The application follows a standard Flask project structure. Here are the key com
 -   **`templates/`**: Contains the HTML templates for the web interface.
 -   **`static/`**: Contains the CSS and JavaScript files for the frontend.
 -   **`data/`**: The directory where cached summaries and audio files are stored.
--   **`worker_manager.py`, `job_models.py`, `job_queue.py`, `job_state.py`**: These files implement a worker system for asynchronous processing of summarization tasks. This is a key feature for handling long-running summarization jobs without blocking the main application thread.
+-   **`ai_models.py`, `auth.py`, `cache.py`, `sse.py`, `tts_helpers.py`, `youtube_helpers.py`, `voice_config.py`**: Modules extracted from `app.py` (AI models, login, summary cache, Server-Sent Events progress stream, text-to-speech, YouTube access, voices). Summarization runs synchronously in the `/summarize` request; progress is pushed over SSE.
 -   **`requirements.txt`**: Lists the Python dependencies for the project.
 -   **`Dockerfile` and `docker-compose.yml`**: Used for building and running the application with Docker.
 -   **`tests/`**: Contains the unit and integration tests for the application.
@@ -51,8 +51,8 @@ To set up the development environment and run the application, follow these step
 
 3.  **Run with Docker (recommended)**:
     ```bash
-    ./init_data.sh
-    docker-compose up -d
+    mkdir -p data
+    docker compose up -d
     ```
     The application will be available at `http://localhost:5001`.
 
