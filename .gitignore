@@ -76,3 +76,6 @@ tests/test_cache.json
 tests/test_cache.json.lock 
 # Generated session secret (see load_or_create_secret_key in app.py)
 .secret_key
+
+# Claude Code agent worktrees
+.claude/worktrees/

@@ -8,7 +8,7 @@ help:
 	@echo "  make install       Install runtime and dev dependencies"
 	@echo "  make test          Run the test suite (browser tests skip without Playwright browsers)"
 	@echo "  make quick-test    Run the core app tests only"
-	@echo "  make test-browser  Run Playwright browser tests (requires: playwright install chromium)"
+	@echo "  make test-browser  Run Playwright browser smoke tests (needs playwright + chromium)"
 	@echo "  make coverage      Run tests with an HTML coverage report"
 	@echo "  make quality       Run all quality checks (format + lint)"
 	@echo "  make format        Check code formatting"
@@ -31,7 +31,8 @@ quick-test:
 	@$(PYTEST) tests/test_app.py tests/test_cache.py tests/test_transcript_and_summary.py tests/test_pagination.py
 
 test-browser:
-	@$(PYTEST) tests/test_dark_mode_integration.py tests/test_theme_performance.py tests/test_visual_dark_mode.py
+	@python3 -c "import playwright" 2>/dev/null || { echo "Install first: pip3 install playwright==1.64.1 && python3 -m playwright install chromium"; exit 1; }
+	@$(PYTEST) tests/test_browser_smoke.py -v
 
 coverage:
 	@TESTING=true python3 -m coverage run -m pytest

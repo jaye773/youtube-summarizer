@@ -43,11 +43,13 @@ Because SSE connections, login lockouts, rate-limit counters and background summ
 `DATA_DIR` defaults to `data` in Docker and `.` otherwise.
 
 ## AI Models
-Defined in `ai_models.AVAILABLE_MODELS` (key → provider + model id):
-- Google: `gemini-2.5-flash` (default), `gemini-2.5-pro`
-- OpenAI: `gpt-5`, `gpt-5-mini`, `gpt-4o`, `gpt-4o-mini`
+Defined in `ai_models.AVAILABLE_MODELS` (key → provider + model id, using provider aliases rather than dated snapshots):
+- Google: `gemini-3.5-flash-lite` (default), `gemini-3.8-flash`, `gemini-4-argon`
+- OpenAI: `gpt-6-luna`, `gpt-6.1-terra`, `gpt-6.1-sol` (reasoning models, called with `reasoning_effort="low"` and `max_completion_tokens=25000` because reasoning tokens count against that budget)
 
-To add a model: add it to `AVAILABLE_MODELS` (the UI reads the list from `/api_status`) and, for a new provider, add a branch in `generate_summary()`.
+Retired keys (`gemini-2.5-*`, `gpt-5`, `gpt-5-mini`, `gpt-4o*`) are mapped to successors by `LEGACY_MODEL_ALIASES`; `resolve_model_key()` is used by `/summarize` and `generate_summary()`.
+
+To add a model: add it to `AVAILABLE_MODELS` (the UI builds the selector from `models` in `/api_status`) and, for a new provider, add a branch in `generate_summary()`. Check the provider deprecation pages when reviewing the list.
 
 ## Environment Variables
 
@@ -98,11 +100,12 @@ Production: `gunicorn -c gunicorn_config.py app:app` (what the Dockerfile runs).
 - `tests/test_cache.py`, `tests/test_pagination.py`, `tests/test_integration.py`, `tests/test_sse.py`
 - `tests/test_rate_limit_csrf.py` – rate limits (429, per-IP, shared budgets) and CSRF (JSON-only, cookie flags)
 - `tests/test_background_summaries.py` – `/summarize/start` + status endpoint, session isolation, TTL, error isolation (patch `summary_jobs.executor` with `SummaryExecutor(synchronous=True)` for deterministic tests)
-- `tests/test_dark_mode_integration.py`, `tests/test_theme_performance.py`, `tests/test_visual_dark_mode.py` – Playwright/theme tests (`make test-browser`)
+- `tests/test_visual_dark_mode.py` – theme CSS variables and WCAG contrast (no browser)
+- `tests/test_browser_smoke.py` – Playwright against a live server on a free port: pages load without JS errors, model selector built from `/api_status`, theme persistence (`make test-browser`; skipped without Playwright; a separate CI job installs Chromium and runs it)
 
 Tests import `app` with `TESTING=true`, which skips real API client creation. Patch module globals such as `app.summary_cache` (a plain dict works; the routes handle both), `app.tts_client`, `ai_models.gemini_client`, `ai_models.openai_client`.
 
-CI (`.github/workflows/tests.yml`): flake8 on the app modules, pytest with coverage, and a Docker build + `/health` smoke test.
+CI (`.github/workflows/tests.yml`): flake8 on the app modules, pytest with coverage on Python 3.9 and 3.13, and a Docker build + `/health` smoke test. The Docker image runs Python 3.13; code must stay 3.9-compatible while local development still uses 3.9.
 
 ## Security Notes
 - Settings page never renders secret values; blank secret fields keep the current value.

@@ -17,6 +17,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - CSRF hardening: session cookie is `SameSite=Lax` (optional `SESSION_COOKIE_SECURE`); POST/PUT/PATCH/DELETE require `Content-Type: application/json` (415 otherwise) and `/settings`, `/delete_summary` no longer parse non-JSON bodies
 
 ### Changed
+- AI models updated: `gemini-3.5-flash-lite` (new default), `gemini-3.8-flash`, `gemini-4-argon`, `gpt-6-luna`, `gpt-6.1-terra`, `gpt-6.1-sol`. Retired keys (`gemini-2.5-*`, `gpt-5`, `gpt-5-mini`, `gpt-4o*`) map to successors instead of failing; the model selector is built from `/api_status`
+- OpenAI calls set `reasoning_effort="low"` and a 25,000-token completion budget so reasoning tokens can no longer leave the summary empty
+- Docker image and CI use Python 3.13 (was 3.11); CI also runs the tests on 3.9. `coverage` bumped to 7.6.1, the first release with Python 3.13 wheels
 - Docker image runs gunicorn with `gunicorn_config.py` (1 process, gthread) as a non-root user, with a health check
 - Gemini calls use the `google-genai` SDK (replaces deprecated `google-generativeai`)
 - Settings saved in the UI persist across restarts (`DATA_DIR/.env` is loaded at startup); generated session secret persists in `DATA_DIR/.secret_key`
@@ -26,6 +29,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Page JavaScript moved out of the templates into `static/js/` (`index.js`, `login.js`, `settings.js`, `theme-init.js`, `settings-theme.js`); only the tiny theme-flash guard stays inline in `<head>`
 
 ### Removed
+- `tests/test_dark_mode_integration.py` and `tests/test_theme_performance.py`: they targeted `localhost:5000` with no server started (on macOS that port is the AirPlay receiver), mostly asserted on DOM they injected themselves, and used timing thresholds; replaced by `tests/test_browser_smoke.py`, which runs in a dedicated CI job
 - Unused async worker system (`worker_manager`, `job_queue`, `job_models`, `job_state`, `error_handler`, `sse_manager`, `/summarize_async`, `/jobs`) and its client scripts and tests
 - `Dockerfile.sse`, `docker-compose-sse.yml`, `docker-compose-podman.yml`, `docker/`, `nginx-sse-fixed.conf`
 
@@ -38,6 +42,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - New settings: `SUMMARY_WORKERS`, `SUMMARY_REQUEST_TTL`, `SUMMARY_MAX_REQUESTS`, `SUMMARY_MAX_ACTIVE_PER_SESSION`
 
 ### Added
+- Dependabot (`.github/dependabot.yml`): weekly pip, GitHub Actions and Docker base image updates, minor/patch grouped
 - **Webshare Proxy Support**: Added support for using webshare proxies for YouTube transcript fetching
   - New environment variables: `WEBSHARE_PROXY_ENABLED`, `WEBSHARE_PROXY_HOST`, `WEBSHARE_PROXY_PORT`, `WEBSHARE_PROXY_USERNAME`, `WEBSHARE_PROXY_PASSWORD`
   - Helps bypass IP restrictions, rate limiting, and geographic blocks when fetching transcripts

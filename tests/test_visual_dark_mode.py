@@ -40,7 +40,7 @@ class ColorAnalyzer:
 
         # Handle 3-character hex (e.g., 'fff' -> 'ffffff')
         if len(hex_color) == 3:
-            hex_color = ''.join([c*2 for c in hex_color])
+            hex_color = ''.join([c * 2 for c in hex_color])
 
         if len(hex_color) != 6:
             raise ValueError(f"Invalid hex color format: {hex_color}")
@@ -716,7 +716,6 @@ class TestVariableValidation:
         shadow_vars = ['shadow-sm', 'shadow-md', 'shadow-lg', 'shadow-xl']
 
         for theme in ['light', 'dark']:
-            colors = css_extractor.get_color_variables(theme)
             vars_dict = css_extractor.light_variables if theme == 'light' else css_extractor.dark_variables
 
             for var in shadow_vars:
@@ -839,7 +838,7 @@ if __name__ == '__main__':
 
         # Print summary
         summary = report['summary']
-        print(f"\nContrast Analysis Summary:")
+        print("\nContrast Analysis Summary:")
         print(f"  Total combinations tested: {summary['total_combinations']}")
         print(f"  Passing WCAG AA: {summary['passing_aa']}")
         print(f"  Passing WCAG AAA: {summary['passing_aaa']}")

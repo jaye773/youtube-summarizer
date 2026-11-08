@@ -400,38 +400,28 @@ async function populateModelOptions() {
         // Clear existing options
         modelSelect.innerHTML = '';
 
-        // Model definitions with display information
-        const modelDefinitions = {
-            'gemini-2.5-flash': { provider: 'Google Gemini', name: 'Gemini 2.5 Flash (Fast)', requiresGoogle: true },
-            'gemini-2.5-pro': { provider: 'Google Gemini', name: 'Gemini 2.5 Pro (Advanced)', requiresGoogle: true },
-            'gpt-5': { provider: 'OpenAI', name: 'GPT-5 (Latest)', requiresOpenAI: true },
-            'gpt-5-mini': { provider: 'OpenAI', name: 'GPT-5 Mini (Fast)', requiresOpenAI: true },
-            'gpt-4o': { provider: 'OpenAI', name: 'GPT-4o (Multimodal)', requiresOpenAI: true },
-            'gpt-4o-mini': { provider: 'OpenAI', name: 'GPT-4o Mini (Efficient)', requiresOpenAI: true }
+        // Model list and display names come from ai_models.AVAILABLE_MODELS via /api_status
+        const providerLabels = { google: 'Google Gemini', openai: 'OpenAI' };
+        const providerKeySet = {
+            google: status.google_api_key_set,
+            openai: status.openai_api_key_set
         };
 
         // Group models by provider
         const providers = {};
 
-        status.available_models.forEach(modelKey => {
-            const modelDef = modelDefinitions[modelKey];
-            if (!modelDef) return;
+        (status.models || []).forEach(model => {
+            // Only offer models whose provider has an API key
+            if (!providerKeySet[model.provider]) return;
 
-            // Check if model is available based on API keys
-            const isAvailable = (
-                (modelDef.requiresGoogle && status.google_api_key_set) ||
-                (modelDef.requiresOpenAI && status.openai_api_key_set)
-            );
-
-            if (isAvailable) {
-                if (!providers[modelDef.provider]) {
-                    providers[modelDef.provider] = [];
-                }
-                providers[modelDef.provider].push({
-                    key: modelKey,
-                    name: modelDef.name
-                });
+            const providerName = providerLabels[model.provider] || model.provider;
+            if (!providers[providerName]) {
+                providers[providerName] = [];
             }
+            providers[providerName].push({
+                key: model.key,
+                name: model.display_name
+            });
         });
 
         // Create optgroups and options
@@ -449,12 +439,10 @@ async function populateModelOptions() {
             modelSelect.appendChild(optgroup);
         });
 
-        // Set default selection (prefer Gemini 2.5 Flash if available, then GPT-5, otherwise first available)
+        // Set default selection (server default if offered, otherwise first available)
         let defaultModel;
-        if (status.available_models.includes('gemini-2.5-flash') && status.google_api_key_set) {
-            defaultModel = 'gemini-2.5-flash';
-        } else if (status.available_models.includes('gpt-5') && status.openai_api_key_set) {
-            defaultModel = 'gpt-5';
+        if (status.default_model && modelSelect.querySelector(`option[value="${status.default_model}"]`)) {
+            defaultModel = status.default_model;
         } else {
             defaultModel = modelSelect.querySelector('option')?.value;
         }
@@ -476,8 +464,8 @@ async function populateModelOptions() {
         console.warn('Could not populate model options:', error);
         // Fallback: add a basic option
         const option = document.createElement('option');
-        option.value = 'gemini-2.5-flash';
-        option.textContent = 'Gemini 2.5 Flash (Default)';
+        option.value = '';  // empty: the server uses its default model
+        option.textContent = 'Default model';
         modelSelect.appendChild(option);
     }
 }

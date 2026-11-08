@@ -75,7 +75,7 @@ class BackgroundSummaryTestCase(unittest.TestCase):
 
 class TestStartAndStatus(BackgroundSummaryTestCase):
     def test_start_returns_202_and_results_are_retrievable(self):
-        response = self.start([VIDEO_A, VIDEO_B], model="gpt-4o")
+        response = self.start([VIDEO_A, VIDEO_B], model="gpt-6-luna")
         self.assertEqual(response.status_code, 202)
         body = response.get_json()
         request_id = body["request_id"]
@@ -88,9 +88,9 @@ class TestStartAndStatus(BackgroundSummaryTestCase):
         self.assertEqual(state["status"], "completed")
         self.assertTrue(state["done"])
         self.assertIsNone(state["error"])
-        self.assertEqual(state["model"], "gpt-4o")
+        self.assertEqual(state["model"], "gpt-6-luna")
         self.assertEqual([r["video_id"] for r in state["results"]], ["aaaaaaaaaaa", "bbbbbbbbbbb"])
-        self.assertEqual(state["results"][0]["summary"], "summary of Title aaaaaaaaaaa (gpt-4o)")
+        self.assertEqual(state["results"][0]["summary"], "summary of Title aaaaaaaaaaa (gpt-6-luna)")
         self.assertEqual([i["seq"] for i in state["items"]], [0, 1])
         self.assertEqual([i["index"] for i in state["items"]], [0, 1])
         self.assertTrue(all(i["kind"] == "item" for i in state["items"]))

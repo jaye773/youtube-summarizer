@@ -4,7 +4,7 @@
 
 ### A powerful Flask application for AI-powered YouTube video and playlist summarization
 
-[![Python](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
+[![Python](https://img.shields.io/badge/python-3.9%E2%80%933.13-blue.svg)](https://www.python.org/downloads/)
 [![Flask](https://img.shields.io/badge/flask-3.0.2-green.svg)](https://flask.palletsprojects.com/)
 [![Docker](https://img.shields.io/badge/docker-%230db7ed.svg?logo=docker&logoColor=white)](https://www.docker.com/)
 
@@ -201,6 +201,8 @@ If you experience issues with proxy configuration:
 
 ## 🔧 Prerequisites
 
+- **Python 3.13** for local runs (the Docker image uses `python:3.13-slim`; CI also tests 3.9, which is end-of-life).
+  Python 3.14 is not supported yet: `youtube-transcript-api==1.1.0` requires Python < 3.14.
 - **Google API Key** (required) with access to:
   - YouTube Data API v3
   - Google Generative AI (Gemini)
@@ -346,7 +348,7 @@ To set up Google APIs:
 4. Create an API key and add it as `GOOGLE_API_KEY` to your `.env` file
 
 ### OpenAI API (Optional, for GPT models)
-1. **OpenAI API** - For accessing GPT-4o, GPT-4 Turbo, and GPT-3.5 Turbo models
+1. **OpenAI API** - For accessing the GPT-6 family models listed below
 
 To set up OpenAI API:
 1. Go to [OpenAI Platform](https://platform.openai.com/)
@@ -354,12 +356,18 @@ To set up OpenAI API:
 3. Add it as `OPENAI_API_KEY` to your `.env` file
 
 ### Available AI Models
-- **Google Gemini 2.5 Flash** - Fast and efficient (default)
-- **Google Gemini 2.5 Pro** - More capable for complex content
-- **OpenAI GPT-5** - Most advanced AI model available
-- **OpenAI GPT-5 Mini** - Faster GPT-5 variant
-- **OpenAI GPT-4o** - Advanced multimodal capabilities
-- **OpenAI GPT-4o Mini** - Fast and cost-effective
+| Key | Provider | Notes |
+|---|---|---|
+| `gemini-3.5-flash-lite` | Google | Fastest and cheapest (default) |
+| `gemini-3.8-flash` | Google | Most capable Flash model |
+| `gemini-4-argon` | Google | Flagship reasoning model |
+| `gpt-6-luna` | OpenAI | Lowest-cost OpenAI model |
+| `gpt-6.1-terra` | OpenAI | Fast, efficient |
+| `gpt-6.1-sol` | OpenAI | Near-flagship quality at lower cost |
+
+The older keys (`gemini-2.5-flash`, `gemini-2.5-pro`, `gpt-5`, `gpt-5-mini`, `gpt-4o`, `gpt-4o-mini`) refer to
+models the providers shut down between December 2026 and January 2027. Requests that still send them are served by
+the successor in `ai_models.LEGACY_MODEL_ALIASES`.
 
 ## 🛠️ Troubleshooting
 
@@ -416,7 +424,7 @@ make coverage
 
 Browser (Playwright) tests are skipped unless Playwright and its browsers are installed:
 ```bash
-pip install playwright && playwright install chromium
+pip install playwright==1.64.1 && python -m playwright install chromium
 make test-browser
 ```
 

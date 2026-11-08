@@ -3,6 +3,7 @@ import sys
 import unittest
 from unittest.mock import MagicMock, Mock, patch
 
+import ai_models
 import requests
 from youtube_transcript_api import (
     AgeRestricted,
@@ -585,7 +586,7 @@ class TestTranscriptAndSummary(unittest.TestCase):
         mock_response.text = "This is a generated summary of the video using Gemini."
         mock_gemini_model.models.generate_content.return_value = mock_response
 
-        summary, error = generate_summary(self.test_transcript, self.test_title, "gemini-2.5-flash")
+        summary, error = generate_summary(self.test_transcript, self.test_title, "gemini-3.5-flash-lite")
 
         self.assertIsNotNone(summary)
         self.assertIsNone(error)
@@ -596,10 +597,10 @@ class TestTranscriptAndSummary(unittest.TestCase):
         """The configured model id for the selected key is passed to the API"""
         mock_client.models.generate_content.return_value = MagicMock(text="ok")
 
-        generate_summary(self.test_transcript, self.test_title, "gemini-2.5-pro")
+        generate_summary(self.test_transcript, self.test_title, "gemini-3.8-flash")
 
         _, kwargs = mock_client.models.generate_content.call_args
-        self.assertEqual(kwargs["model"], "gemini-2.5-pro")
+        self.assertEqual(kwargs["model"], "gemini-3.8-flash")
 
     @patch("ai_models.openai_client")
     def test_generate_summary_openai_success(self, mock_openai_client):
@@ -609,7 +610,7 @@ class TestTranscriptAndSummary(unittest.TestCase):
         mock_response.choices[0].message.content = "This is a generated summary of the video using OpenAI."
         mock_openai_client.chat.completions.create.return_value = mock_response
 
-        summary, error = generate_summary(self.test_transcript, self.test_title, "gpt-4o")
+        summary, error = generate_summary(self.test_transcript, self.test_title, "gpt-6-luna")
 
         self.assertIsNotNone(summary)
         self.assertIsNone(error)
@@ -634,7 +635,7 @@ class TestTranscriptAndSummary(unittest.TestCase):
         """Test summary generation when Gemini API fails"""
         mock_gemini_model.models.generate_content.side_effect = Exception("Gemini API Error")
 
-        summary, error = generate_summary(self.test_transcript, self.test_title, "gemini-2.5-flash")
+        summary, error = generate_summary(self.test_transcript, self.test_title, "gemini-3.5-flash-lite")
 
         self.assertIsNone(summary)
         self.assertIn("Error calling Gemini API", error)
@@ -644,7 +645,7 @@ class TestTranscriptAndSummary(unittest.TestCase):
         """Test summary generation when OpenAI API fails"""
         mock_openai_client.chat.completions.create.side_effect = Exception("OpenAI API Error")
 
-        summary, error = generate_summary(self.test_transcript, self.test_title, "gpt-4o")
+        summary, error = generate_summary(self.test_transcript, self.test_title, "gpt-6-luna")
 
         self.assertIsNone(summary)
         self.assertIn("Error calling OpenAI API", error)
@@ -661,6 +662,121 @@ class TestTranscriptAndSummary(unittest.TestCase):
             self.assertIsNotNone(summary)
             self.assertIsNone(error)
             self.assertEqual(summary, "Default model summary")
+            _, kwargs = mock_gemini_model.models.generate_content.call_args
+            self.assertEqual(kwargs["model"], "gemini-3.5-flash-lite")
+
+
+class TestModelRegistry(unittest.TestCase):
+    """Model list, legacy key aliases and provider request parameters"""
+
+    transcript = "A transcript."
+    title = "A title"
+
+    def test_no_dated_snapshot_ids(self):
+        """Model ids are provider aliases, not dated snapshots that get retired"""
+        import re
+
+        for key, config in ai_models.AVAILABLE_MODELS.items():
+            self.assertIsNone(re.search(r"\d{4}-\d{2}-\d{2}", config["model"]), key)
+            self.assertIn(config["provider"], ("google", "openai"))
+
+    def test_default_model_is_available(self):
+        self.assertIn(ai_models.DEFAULT_MODEL, ai_models.AVAILABLE_MODELS)
+
+    def test_legacy_aliases_point_to_available_models(self):
+        for old_key, new_key in ai_models.LEGACY_MODEL_ALIASES.items():
+            self.assertNotIn(old_key, ai_models.AVAILABLE_MODELS)
+            self.assertIn(new_key, ai_models.AVAILABLE_MODELS, old_key)
+
+    def test_resolve_model_key(self):
+        self.assertEqual(ai_models.resolve_model_key("gpt-6.1-sol"), "gpt-6.1-sol")
+        self.assertEqual(ai_models.resolve_model_key("gpt-4o"), "gpt-6-luna")
+        self.assertEqual(ai_models.resolve_model_key(None), ai_models.DEFAULT_MODEL)
+        self.assertEqual(ai_models.resolve_model_key(""), ai_models.DEFAULT_MODEL)
+        self.assertIsNone(ai_models.resolve_model_key("gpt-3"))
+
+    def test_get_model_options(self):
+        options = ai_models.get_model_options()
+        self.assertEqual([o["key"] for o in options], list(ai_models.AVAILABLE_MODELS))
+        for option in options:
+            self.assertEqual(set(option), {"key", "provider", "display_name", "description"})
+
+    @patch("ai_models.gemini_client")
+    def test_legacy_gemini_key_uses_successor(self, mock_client):
+        mock_client.models.generate_content.return_value = MagicMock(text="ok")
+
+        summary, error = generate_summary(self.transcript, self.title, "gemini-2.5-pro")
+
+        self.assertEqual((summary, error), ("ok", None))
+        _, kwargs = mock_client.models.generate_content.call_args
+        self.assertEqual(kwargs["model"], "gemini-3.8-flash")
+
+    @patch("ai_models.openai_client")
+    def test_legacy_openai_key_uses_successor(self, mock_client):
+        response = MagicMock()
+        response.choices = [MagicMock()]
+        response.choices[0].message.content = "ok"
+        mock_client.chat.completions.create.return_value = response
+
+        summary, error = generate_summary(self.transcript, self.title, "gpt-5-mini")
+
+        self.assertEqual((summary, error), ("ok", None))
+        _, kwargs = mock_client.chat.completions.create.call_args
+        self.assertEqual(kwargs["model"], "gpt-6.1-terra")
+
+    @patch("ai_models.openai_client")
+    def test_openai_reasoning_params(self, mock_client):
+        """Reasoning models get a low effort and a budget that leaves room for reasoning tokens"""
+        response = MagicMock()
+        response.choices = [MagicMock()]
+        response.choices[0].message.content = "ok"
+        mock_client.chat.completions.create.return_value = response
+
+        generate_summary(self.transcript, self.title, "gpt-6.1-sol")
+
+        _, kwargs = mock_client.chat.completions.create.call_args
+        self.assertEqual(kwargs["reasoning_effort"], "low")
+        self.assertEqual(kwargs["max_completion_tokens"], ai_models.OPENAI_MAX_COMPLETION_TOKENS)
+        self.assertGreaterEqual(kwargs["max_completion_tokens"], 25000)
+
+    @patch("ai_models.openai_client")
+    def test_openai_reasoning_effort_omitted_when_not_configured(self, mock_client):
+        response = MagicMock()
+        response.choices = [MagicMock()]
+        response.choices[0].message.content = "ok"
+        mock_client.chat.completions.create.return_value = response
+
+        ai_models.generate_summary_openai(self.transcript, self.title, "some-model")
+
+        _, kwargs = mock_client.chat.completions.create.call_args
+        self.assertNotIn("reasoning_effort", kwargs)
+
+    @patch("ai_models.openai_client")
+    def test_openai_empty_content_at_token_limit(self, mock_client):
+        """Reasoning that exhausts the budget returns empty content with finish_reason=length"""
+        response = MagicMock()
+        response.choices = [MagicMock()]
+        response.choices[0].message.content = ""
+        response.choices[0].finish_reason = "length"
+        mock_client.chat.completions.create.return_value = response
+
+        summary, error = generate_summary(self.transcript, self.title, "gpt-6-luna")
+
+        self.assertIsNone(summary)
+        self.assertIn("output token limit", error)
+
+    @patch("ai_models.openai_client")
+    def test_openai_empty_content(self, mock_client):
+        response = MagicMock()
+        response.choices = [MagicMock()]
+        response.choices[0].message.content = None
+        response.choices[0].finish_reason = "stop"
+        mock_client.chat.completions.create.return_value = response
+
+        summary, error = generate_summary(self.transcript, self.title, "gpt-6-luna")
+
+        self.assertIsNone(summary)
+        self.assertEqual(error, "Empty response from OpenAI API")
 
 
 class TestVideoDetails(unittest.TestCase):
