@@ -311,8 +311,14 @@ class TestIntegration(unittest.TestCase):
         final_cached_data = json.loads(response.data)
         self.assertEqual(len(final_cached_data), 0)
 
-        # Verify audio file removal was attempted
-        mock_remove.assert_called_once()
+        # Verify the /speak audio for the default voice was removed
+        import app as app_module
+
+        removed = {call.args[0] for call in mock_remove.call_args_list}
+        self.assertIn(
+            app_module.speech_cache_path(app_module.TTS_VOICE, app_module.prepare_tts_text(data[0]["summary"])),
+            removed,
+        )
 
     def test_delete_from_search_results_integration(self):
         """Test deleting a summary found through search"""

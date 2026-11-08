@@ -1,23 +1,30 @@
-# --- START OF FILE Dockerfile ---
-
-# Use an official lightweight Python image
 FROM python:3.11-slim
 
-# Set the working directory inside the container
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    DATA_DIR=/app/data
+
 WORKDIR /app
 
-# Copy the requirements file first to leverage Docker's build cache
+# Install Python dependencies first to leverage Docker's layer cache
 COPY requirements.txt .
-
-# Install the Python dependencies
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy the rest of the application code into the container
-COPY . .
+# Run as an unprivileged user
+RUN useradd --create-home --uid 1000 app \
+    && mkdir -p /app/data \
+    && chown -R app:app /app
 
-# Expose the port the app runs on
+COPY --chown=app:app . .
+
+USER app
+
 EXPOSE 5001
 
-# Command to run the application using Gunicorn
-# This is a production-ready server, more robust than Flask's built-in server
-CMD ["gunicorn", "--bind", "0.0.0.0:5001", "app:app"]
+# python:slim has no curl, so probe with the standard library
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
+    CMD python -c "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:5001/health', timeout=4).status == 200 else 1)"
+
+# gunicorn_config.py: one process (app state is in-memory), many threads so
+# long-lived SSE streams and slow summaries don't block other requests.
+CMD ["gunicorn", "-c", "gunicorn_config.py", "app:app"]

@@ -1,9 +1,9 @@
 flask==3.0.2
-google-generativeai==0.3.2
-youtube-transcript-api==1.1.0
+gunicorn==23.0.0
+python-dotenv==1.1.1
+google-genai==1.47.0
 google-api-python-client==2.118.0
 google-cloud-texttospeech==2.15.0
-openai>=1.0.0
-urllib3<2.0.0
-gunicorn==22.0.0
-python-dotenv==1.1.1
+openai==2.21.0
+# Pinned: app uses the static get_transcript/list_transcripts API, removed in later 1.x releases
+youtube-transcript-api==1.1.0

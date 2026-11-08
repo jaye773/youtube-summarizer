@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+- Settings page no longer renders API keys, login code, session secret or proxy password (blank fields keep the current value)
+- Error responses no longer include stack traces
+- Removed `/debug_model`, `/events/status`, `/events/broadcast` and `/sse-test`; `/debug_transcript` requires `ENABLE_DEBUG_ENDPOINTS=true`
+- `X-Forwarded-For` is only trusted with `TRUST_PROXY_HOPS`; `TESTING` alone no longer disables auth
+- `/preview-voice` validates `voice_id` (path traversal)
+
+### Changed
+- Docker image runs gunicorn with `gunicorn_config.py` (1 process, gthread) as a non-root user, with a health check
+- Gemini calls use the `google-genai` SDK (replaces deprecated `google-generativeai`)
+- Settings saved in the UI persist across restarts (`DATA_DIR/.env` is loaded at startup); generated session secret persists in `DATA_DIR/.secret_key`
+- SSE moved to `sse.py`; idle streams are no longer dropped every 5 minutes
+
+### Removed
+- Unused async worker system (`worker_manager`, `job_queue`, `job_models`, `job_state`, `error_handler`, `sse_manager`, `/summarize_async`, `/jobs`) and its client scripts and tests
+- `Dockerfile.sse`, `docker-compose-sse.yml`, `docker-compose-podman.yml`, `docker/`, `nginx-sse-fixed.conf`
+
+### Fixed
+- Deleting a summary now deletes its cached audio
+
 ### Added
 - **Webshare Proxy Support**: Added support for using webshare proxies for YouTube transcript fetching
   - New environment variables: `WEBSHARE_PROXY_ENABLED`, `WEBSHARE_PROXY_HOST`, `WEBSHARE_PROXY_PORT`, `WEBSHARE_PROXY_USERNAME`, `WEBSHARE_PROXY_PASSWORD`

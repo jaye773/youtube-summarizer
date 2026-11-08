@@ -292,6 +292,31 @@ class TestTranscriptWithProxy(unittest.TestCase):
         )
         mock_list_transcripts.assert_called_once_with("test_video_id", proxies=expected_proxies)
 
+    @patch("youtube_helpers.YouTubeTranscriptApi.list_transcripts")
+    @patch("youtube_helpers.YouTubeTranscriptApi.get_transcript")
+    def test_get_transcript_fallback_v1_fetchedtranscript(self, mock_get_transcript, mock_list_transcripts):
+        """Fallback handles youtube-transcript-api 1.x FetchedTranscript (snippet objects)."""
+        from youtube_transcript_api import NoTranscriptFound
+
+        mock_get_transcript.side_effect = NoTranscriptFound("vid", [], {})
+
+        # Simulate the 1.x return: a FetchedTranscript exposing to_raw_data().
+        fetched = Mock()
+        fetched.to_raw_data.return_value = [
+            {"text": "Hello", "start": 0.0},
+            {"text": "world", "start": 1.0},
+        ]
+        mock_transcript = Mock()
+        mock_transcript.fetch.return_value = fetched
+        mock_list_result = Mock()
+        mock_list_result.find_transcript.return_value = mock_transcript
+        mock_list_transcripts.return_value = mock_list_result
+
+        transcript, error = app.get_transcript("vid")
+
+        self.assertEqual(transcript, "Hello world")
+        self.assertIsNone(error)
+
     def test_get_transcript_no_video_id(self):
         """Test get_transcript handles empty video ID"""
         transcript, error = app.get_transcript("")
@@ -361,18 +386,28 @@ class TestTranscriptAndSummary(unittest.TestCase):
         self.assertIsNone(transcript)
         self.assertEqual(error, "Transcript was found but it is empty.")
 
-    @patch("ai_models.gemini_model")
+    @patch("ai_models.gemini_client")
     def test_generate_summary_gemini_success(self, mock_gemini_model):
         """Test successful summary generation with Gemini"""
         mock_response = MagicMock()
         mock_response.text = "This is a generated summary of the video using Gemini."
-        mock_gemini_model.generate_content.return_value = mock_response
+        mock_gemini_model.models.generate_content.return_value = mock_response
 
         summary, error = generate_summary(self.test_transcript, self.test_title, "gemini-2.5-flash")
 
         self.assertIsNotNone(summary)
         self.assertIsNone(error)
         self.assertEqual(summary, "This is a generated summary of the video using Gemini.")
+
+    @patch("ai_models.gemini_client")
+    def test_generate_summary_gemini_uses_selected_model(self, mock_client):
+        """The configured model id for the selected key is passed to the API"""
+        mock_client.models.generate_content.return_value = MagicMock(text="ok")
+
+        generate_summary(self.test_transcript, self.test_title, "gemini-2.5-pro")
+
+        _, kwargs = mock_client.models.generate_content.call_args
+        self.assertEqual(kwargs["model"], "gemini-2.5-pro")
 
     @patch("ai_models.openai_client")
     def test_generate_summary_openai_success(self, mock_openai_client):
@@ -402,10 +437,10 @@ class TestTranscriptAndSummary(unittest.TestCase):
         self.assertIsNone(summary)
         self.assertIn("Unsupported model: invalid-model", error)
 
-    @patch("ai_models.gemini_model")
+    @patch("ai_models.gemini_client")
     def test_generate_summary_gemini_api_error(self, mock_gemini_model):
         """Test summary generation when Gemini API fails"""
-        mock_gemini_model.generate_content.side_effect = Exception("Gemini API Error")
+        mock_gemini_model.models.generate_content.side_effect = Exception("Gemini API Error")
 
         summary, error = generate_summary(self.test_transcript, self.test_title, "gemini-2.5-flash")
 
@@ -424,10 +459,10 @@ class TestTranscriptAndSummary(unittest.TestCase):
 
     def test_generate_summary_default_model(self):
         """Test that default model is used when none specified"""
-        with patch("ai_models.gemini_model") as mock_gemini_model:
+        with patch("ai_models.gemini_client") as mock_gemini_model:
             mock_response = MagicMock()
             mock_response.text = "Default model summary"
-            mock_gemini_model.generate_content.return_value = mock_response
+            mock_gemini_model.models.generate_content.return_value = mock_response
 
             summary, error = generate_summary(self.test_transcript, self.test_title)
 

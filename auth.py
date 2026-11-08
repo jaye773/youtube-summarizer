@@ -11,7 +11,7 @@ import os
 from datetime import datetime, timedelta, timezone
 from functools import wraps
 
-from flask import jsonify, redirect, request, session, url_for
+from flask import current_app, has_app_context, jsonify, redirect, request, session, url_for
 
 # ---------------------------------------------------------------------------
 # Module-level config — kept in a mutable dict so that configure() updates are
@@ -41,6 +41,18 @@ def configure(
     _config["MAX_LOGIN_ATTEMPTS"] = max_login_attempts
     _config["LOCKOUT_DURATION"] = lockout_duration
     _config["LOGIN_ENABLED"] = login_enabled
+
+
+def _testing_mode() -> bool:
+    """True only inside the test suite.
+
+    Requires BOTH the TESTING env var and a Flask app configured with
+    TESTING=True, so a stray TESTING variable in a deployed environment
+    cannot switch off authentication or the login lockout.
+    """
+    if not os.environ.get("TESTING"):
+        return False
+    return has_app_context() and bool(current_app.config.get("TESTING"))
 
 
 # ---------------------------------------------------------------------------
@@ -98,7 +110,7 @@ def is_ip_locked_out(ip_address: str) -> tuple:
     Returns:
         (is_locked: bool, remaining_minutes: int | None)
     """
-    if not _config["LOGIN_ENABLED"] or os.environ.get("TESTING"):
+    if not _config["LOGIN_ENABLED"] or _testing_mode():
         return False, None
 
     attempts_data = load_login_attempts()
@@ -122,7 +134,7 @@ def record_failed_attempt(ip_address: str) -> bool:
     Returns:
         True if the IP was just locked out, False otherwise.
     """
-    if not _config["LOGIN_ENABLED"] or os.environ.get("TESTING"):
+    if not _config["LOGIN_ENABLED"] or _testing_mode():
         return False
 
     max_attempts = _config["MAX_LOGIN_ATTEMPTS"]
@@ -155,7 +167,7 @@ def record_failed_attempt(ip_address: str) -> bool:
 
 def reset_failed_attempts(ip_address: str) -> None:
     """Clear the failed attempt record for an IP after a successful login."""
-    if not _config["LOGIN_ENABLED"] or os.environ.get("TESTING"):
+    if not _config["LOGIN_ENABLED"] or _testing_mode():
         return
 
     attempts_data = load_login_attempts()
@@ -191,7 +203,7 @@ def require_auth(f):
         login_enabled = _app.LOGIN_ENABLED
 
         # Skip authentication when login is disabled or in testing mode
-        if not login_enabled or os.environ.get("TESTING"):
+        if not login_enabled or _testing_mode():
             return f(*args, **kwargs)
 
         # Check for an authenticated session

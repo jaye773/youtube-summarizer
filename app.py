@@ -1,39 +1,20 @@
-import atexit
-import hashlib  # For generating filenames
+import hmac  # For constant-time passcode comparison
 import html  # For HTML escaping user inputs
-import json
 import os
-import re
-import threading
-import time
+import socket
 import traceback
 import uuid
-from datetime import datetime, timedelta, timezone
-from queue import Empty, Queue
+from datetime import datetime
 
-# Import new worker system modules
-try:
-    from job_models import create_playlist_job, create_video_job
-    from job_state import JobStateManager
-    from sse_manager import get_sse_manager
-    from worker_manager import WorkerManager
-
-    WORKER_SYSTEM_AVAILABLE = True
-    print("✅ Worker system modules imported successfully")
-except ImportError as e:
-    WORKER_SYSTEM_AVAILABLE = False
-    print(f"⚠️ Worker system not available: {e}")
-    print("   Falling back to synchronous processing only")
-
-import socket
-
-import google.generativeai as genai
 import httplib2
 import openai
+from dotenv import load_dotenv
 from flask import Flask, Response, jsonify, redirect, render_template, request, session, url_for
 from google.api_core.client_options import ClientOptions
 from google.cloud import texttospeech
 from googleapiclient.discovery import build
+from werkzeug.exceptions import HTTPException
+from werkzeug.middleware.proxy_fix import ProxyFix
 
 from voice_config import (
     AVAILABLE_VOICES,
@@ -45,6 +26,7 @@ from voice_config import (
     get_voice_with_fallback,
     get_voices_by_tier,
     should_cleanup_cache,
+    validate_voice_name,
 )
 
 import auth
@@ -72,6 +54,7 @@ from youtube_helpers import (
 from tts_helpers import clean_text_for_tts, synthesize_audio
 from cache import build_cache_entry, load_summary_cache, save_summary_cache
 import ai_models
+import sse
 from ai_models import (
     AVAILABLE_MODELS,
     DEFAULT_MODEL,
@@ -82,107 +65,36 @@ from ai_models import (
 )
 
 # --- CONFIGURATION ---
+# Use data directory if running in Docker/Podman, otherwise use current directory
+DATA_DIR = os.environ.get("DATA_DIR", "data" if os.path.exists("/.dockerenv") else ".")
+os.makedirs(DATA_DIR, exist_ok=True)
+
+# Load configuration files before any setting is read:
+#  1. the project .env (never overrides variables already set in the environment);
+#  2. DATA_DIR/.env, written by the settings page, which DOES override so that
+#     changes saved in the UI survive a restart.
+if not os.environ.get("TESTING"):
+    load_dotenv()
+    load_dotenv(os.path.join(DATA_DIR, ".env"), override=True)
+
 app = Flask(__name__)
 
-# --- SSE CONFIGURATION ---
-# Store active SSE connections and their associated queues
-sse_connections = {}
-sse_connection_lock = threading.Lock()
+# Only trust X-Forwarded-* when running behind a known number of reverse proxies;
+# otherwise any client could spoof its IP and bypass the login lockout.
+TRUST_PROXY_HOPS = int(os.environ.get("TRUST_PROXY_HOPS", "0"))
+if TRUST_PROXY_HOPS > 0:
+    app.wsgi_app = ProxyFix(app.wsgi_app, x_for=TRUST_PROXY_HOPS, x_proto=TRUST_PROXY_HOPS, x_host=TRUST_PROXY_HOPS)
 
+# Diagnostic endpoints (/debug_transcript) are off unless explicitly enabled
+DEBUG_ENDPOINTS_ENABLED = os.environ.get("ENABLE_DEBUG_ENDPOINTS", "false").lower() == "true"
 
-class SSEConnection:
-    """Manages individual SSE connection state"""
+# Upper bound on text sent to text-to-speech in one request (cost/abuse guard)
+MAX_TTS_CHARS = int(os.environ.get("MAX_TTS_CHARS", "50000"))
 
-    def __init__(self, connection_id, session_id=None, user_ip=None):
-        self.connection_id = connection_id
-        self.session_id = session_id
-        self.user_ip = user_ip
-        self.message_queue = Queue()
-        self.created_at = datetime.now(timezone.utc)
-        self.last_activity = self.created_at
-        self.is_active = True
-        self.subscriptions = set()  # Track what types of events this connection wants
-
-    def send_message(self, event_type, data, event_id=None, retry=None):
-        """Add message to connection's queue"""
-        if not self.is_active:
-            return False
-
-        try:
-            message = {
-                "event": event_type,
-                "data": data,
-                "id": event_id or str(uuid.uuid4()),
-                "timestamp": datetime.now(timezone.utc).isoformat(),
-                "retry": retry,
-            }
-            self.message_queue.put(message, timeout=1)
-            self.last_activity = datetime.now(timezone.utc)
-            return True
-        except Exception:
-            self.is_active = False
-            return False
-
-    def get_messages(self, timeout=30):
-        """Generator that yields messages from queue"""
-        while self.is_active:
-            try:
-                message = self.message_queue.get(timeout=timeout)
-                if message is None:  # Poison pill to stop connection
-                    break
-                yield message
-                self.last_activity = datetime.now(timezone.utc)
-            except Empty:
-                # Send keep-alive ping
-                yield {
-                    "event": "ping",
-                    "data": "keep-alive",
-                    "id": str(uuid.uuid4()),
-                    "timestamp": datetime.now(timezone.utc).isoformat(),
-                }
-
-    def close(self):
-        """Close the connection gracefully"""
-        self.is_active = False
-        self.message_queue.put(None)  # Poison pill
-
-
-def cleanup_stale_connections():
-    """Remove connections that haven't been active for more than 5 minutes"""
-    cutoff_time = datetime.now(timezone.utc) - timedelta(minutes=5)
-
-    with sse_connection_lock:
-        stale_connections = [
-            conn_id
-            for conn_id, conn in sse_connections.items()
-            if conn.last_activity < cutoff_time or not conn.is_active
-        ]
-
-        for conn_id in stale_connections:
-            connection = sse_connections.pop(conn_id, None)
-            if connection:
-                connection.close()
-                print(f"Cleaned up stale SSE connection: {conn_id}")
-
-
-def broadcast_to_connections(event_type, data, session_filter=None, subscription_filter=None):
-    """Broadcast message to all matching connections"""
-    cleanup_stale_connections()
-
-    with sse_connection_lock:
-        for conn_id, connection in list(sse_connections.items()):
-            # Filter by session if specified
-            if session_filter and connection.session_id != session_filter:
-                continue
-
-            # Filter by subscription if specified
-            if subscription_filter and subscription_filter not in connection.subscriptions:
-                continue
-
-            if not connection.send_message(event_type, data):
-                # Connection is dead, remove it
-                sse_connections.pop(conn_id, None)
-
+# Process-wide default socket timeout. Some network calls (notably the YouTube
+# transcript fetch) expose no timeout parameter; this keeps them from hanging
+# forever. Clients that set their own timeouts (OpenAI, httplib2) are unaffected.
+socket.setdefaulttimeout(int(os.environ.get("NETWORK_TIMEOUT", "60")))
 
 # --- WEBSHARE PROXY CONFIGURATION ---
 WEBSHARE_PROXY_ENABLED = os.environ.get("WEBSHARE_PROXY_ENABLED", "false").lower() == "true"
@@ -224,9 +136,6 @@ youtube_helpers.set_proxy_config_func(get_proxy_config)
 
 
 # --- CACHE CONFIGURATION ---
-# Use data directory if running in Docker/Podman, otherwise use current directory
-DATA_DIR = os.environ.get("DATA_DIR", "data" if os.path.exists("/.dockerenv") else ".")
-os.makedirs(DATA_DIR, exist_ok=True)
 SUMMARY_CACHE_FILE = os.path.join(DATA_DIR, "summary_cache.json")
 LOGIN_ATTEMPTS_FILE = os.path.join(DATA_DIR, "login_attempts.json")
 AUDIO_CACHE_DIR = os.path.join(DATA_DIR, "audio_cache")
@@ -237,71 +146,6 @@ print(f"✅ Audio cache directory is set to: '{AUDIO_CACHE_DIR}/'")
 
 summary_cache = load_summary_cache(SUMMARY_CACHE_FILE)
 print(f"✅ Loaded {len(summary_cache)} summaries from cache.")
-
-# Initialize worker system (will be called after API initialization)
-worker_manager = None
-job_state_manager = None
-new_sse_manager = None
-
-
-def init_worker_system():
-    """Initialize the async worker system"""
-    global worker_manager, job_state_manager, new_sse_manager
-
-    if not WORKER_SYSTEM_AVAILABLE:
-        print("⚠️ Worker system not available - running in synchronous mode only")
-        return False
-
-    try:
-        if worker_manager is None:
-            print("🚀 Initializing async worker system...")
-
-            # Initialize managers
-            job_state_manager = JobStateManager()
-            new_sse_manager = get_sse_manager()
-
-            # Initialize worker manager
-            max_workers = int(os.environ.get("WORKER_THREADS", "3"))
-            worker_manager = WorkerManager(
-                num_workers=max_workers,
-                max_queue_size=int(os.environ.get("WORKER_MAX_QUEUE_SIZE", "100")),
-                rate_limit_per_minute=int(os.environ.get("WORKER_RATE_LIMIT", "60")),
-            )
-
-            # Set up app context functions in the worker manager
-            # (These will be passed to worker threads to avoid circular imports)
-            worker_manager.set_app_functions(
-                {
-                    "summary_cache": summary_cache,
-                    "youtube": youtube,
-                    "tts_client": tts_client,
-                    "gemini_model": gemini_model,
-                    "openai_client": openai_client,
-                    "clean_youtube_url": clean_youtube_url,
-                    "get_transcript": get_transcript,
-                    "generate_summary": generate_summary,
-                    "get_video_details": get_video_details,
-                    "save_summary_cache": lambda cache: save_summary_cache(cache, SUMMARY_CACHE_FILE),
-                    "extract_video_id": get_video_id,
-                    "extract_playlist_id": get_playlist_id,
-                    "get_videos_from_playlist": get_videos_from_playlist,
-                    "sse_manager": new_sse_manager,
-                }
-            )
-
-            # Start the worker system
-            worker_manager.start()
-
-            print(f"✅ Worker system initialized with {worker_manager.max_workers} worker threads")
-            return True
-
-    except Exception as e:
-        print(f"❌ Failed to initialize worker system: {e}")
-        print("   Falling back to synchronous processing only")
-        worker_manager = None
-        job_state_manager = None
-        new_sse_manager = None
-        return False
 
 
 # --- ENVIRONMENT VARIABLE PERSISTENCE ---
@@ -351,15 +195,39 @@ LOCKOUT_DURATION = int(os.environ.get("LOCKOUT_DURATION", "15"))  # minutes
 # --- TTS CONFIGURATION ---
 TTS_VOICE = os.environ.get("TTS_VOICE", "en-US-Chirp3-HD-Zephyr")
 
-# Configure Flask session
-if LOGIN_ENABLED:
-    if not SESSION_SECRET_KEY:
-        print("Warning: SESSION_SECRET_KEY not set. Using auto-generated key (not recommended for production)")
-        SESSION_SECRET_KEY = os.urandom(24).hex()
-    if not LOGIN_CODE:
-        print("Warning: LOGIN_CODE not set. Login functionality will not work properly.")
 
-app.secret_key = SESSION_SECRET_KEY if SESSION_SECRET_KEY else os.urandom(24)
+def load_or_create_secret_key(data_dir):
+    """Return a session secret that is stable across restarts.
+
+    Used when SESSION_SECRET_KEY is not configured: a random key is generated
+    once and stored in DATA_DIR/.secret_key (mode 0600). A per-boot random key
+    would log everyone out on every restart.
+    """
+    key_path = os.path.join(data_dir, ".secret_key")
+    try:
+        with open(key_path, "r") as f:
+            key = f.read().strip()
+            if key:
+                return key
+    except FileNotFoundError:
+        pass
+    key = os.urandom(32).hex()
+    fd = os.open(key_path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w") as f:
+        f.write(key)
+    return key
+
+
+# Configure Flask session
+if LOGIN_ENABLED and not LOGIN_CODE:
+    print("Warning: LOGIN_CODE not set. Login functionality will not work properly.")
+
+if SESSION_SECRET_KEY:
+    app.secret_key = SESSION_SECRET_KEY
+elif os.environ.get("TESTING"):
+    app.secret_key = os.urandom(24)
+else:
+    app.secret_key = load_or_create_secret_key(DATA_DIR)
 
 print(f"✅ Login system {'enabled' if LOGIN_ENABLED else 'disabled'}")
 if LOGIN_ENABLED:
@@ -381,9 +249,6 @@ def create_youtube_client_with_timeout(api_key, timeout=30):
     # Create an httplib2 instance with timeout
     http = httplib2.Http(timeout=timeout)
 
-    # Set socket timeout as well for extra safety
-    socket.setdefaulttimeout(timeout)
-
     # Build the YouTube client with the configured http instance
     return build("youtube", "v3", developerKey=api_key, http=http)
 
@@ -393,82 +258,117 @@ google_api_key = os.environ.get("GOOGLE_API_KEY")
 openai_api_key = os.environ.get("OPENAI_API_KEY")
 tts_client = None
 youtube = None
-gemini_model = None
+gemini_client = None
 openai_client = None
 
-# Initialize Google APIs
-if google_api_key and not os.environ.get("TESTING"):
+
+def init_google_clients(api_key):
+    """(Re)create the Google TTS, YouTube and Gemini clients and inject them into helper modules."""
+    global tts_client, youtube, gemini_client
     try:
-        tts_client = texttospeech.TextToSpeechClient(client_options=ClientOptions(api_key=google_api_key))
-        genai.configure(api_key=google_api_key)
-        youtube = create_youtube_client_with_timeout(google_api_key, timeout=30)
-        gemini_model = genai.GenerativeModel(model_name="gemini-2.5-flash-preview-05-20")
-        print("✅ Google APIs initialized successfully")
+        tts_client = texttospeech.TextToSpeechClient(client_options=ClientOptions(api_key=api_key))
+        youtube = create_youtube_client_with_timeout(api_key, timeout=30)
+        gemini_client = ai_models.create_gemini_client(api_key)
     except Exception as e:
         print(f"Warning: Could not configure Google APIs. Error: {e}")
+        return False
+    youtube_helpers.set_youtube_client(youtube)
+    ai_models.set_clients(gemini=gemini_client)
+    print("✅ Google APIs initialized successfully")
+    return True
+
+
+def init_openai_client(api_key):
+    """(Re)create the OpenAI client and inject it into ai_models."""
+    global openai_client
+    try:
+        openai_client = openai.OpenAI(api_key=api_key)
+    except Exception as e:
+        print(f"Warning: Could not configure OpenAI API. Error: {e}")
+        return False
+    ai_models.set_clients(openai_cli=openai_client)
+    print("✅ OpenAI API initialized successfully")
+    return True
+
+
+if google_api_key and not os.environ.get("TESTING"):
+    init_google_clients(google_api_key)
 elif not google_api_key and not os.environ.get("TESTING"):
     print("Warning: GOOGLE_API_KEY environment variable is not set. Google services will be unavailable.")
 
-# Initialize OpenAI API
 if openai_api_key and not os.environ.get("TESTING"):
-    try:
-        openai_client = openai.OpenAI(api_key=openai_api_key)
-        print("✅ OpenAI API initialized successfully")
-    except Exception as e:
-        print(f"Warning: Could not configure OpenAI API. Error: {e}")
+    init_openai_client(openai_api_key)
 elif not openai_api_key and not os.environ.get("TESTING"):
     print("Warning: OPENAI_API_KEY environment variable is not set. OpenAI models will be unavailable.")
 
 # For testing, create clients even without API keys
 if os.environ.get("TESTING"):
     try:
-        if not gemini_model:
-            gemini_model = genai.GenerativeModel(model_name="gemini-2.5-flash-preview-05-20")
+        if not gemini_client:
+            gemini_client = ai_models.create_gemini_client("test-key")
         if not openai_client:
             openai_client = openai.OpenAI(api_key="test-key")
     except Exception:
         pass
-
-# Backward compatibility - keep 'model' variable for existing code
-model = gemini_model
-
-# Inject clients into extracted modules
-youtube_helpers.set_youtube_client(youtube)
-ai_models.set_clients(gemini=gemini_model, openai_cli=openai_client)
-
-# Worker system will be initialized after all functions are defined
+    ai_models.set_clients(gemini=gemini_client, openai_cli=openai_client)
 
 
 # --- HELPER FUNCTIONS ---
 def get_client_ip():
-    """Extract the real client IP address from the request, handling proxies."""
-    client_ip = request.environ.get("HTTP_X_FORWARDED_FOR", request.environ.get("REMOTE_ADDR", "127.0.0.1"))
-    if "," in client_ip:
-        client_ip = client_ip.split(",")[0].strip()
-    return client_ip
+    """Return the client IP address.
+
+    X-Forwarded-For is honoured only via ProxyFix when TRUST_PROXY_HOPS is set,
+    so clients cannot spoof their address by sending the header themselves.
+    """
+    return request.remote_addr or "127.0.0.1"
 
 
+def prepare_tts_text(text):
+    """Normalise text exactly as /speak does before synthesis and cache-keying."""
+    return clean_text_for_tts(html.escape(text))
 
 
-# --- INITIALIZE WORKER SYSTEM ---
-# Initialize worker system now that all functions are defined
-init_worker_system()
+def speech_cache_path(voice_id, prepared_text, prefix=""):
+    """Path of the cached MP3 for a voice + prepared text."""
+    return os.path.join(AUDIO_CACHE_DIR, f"{prefix}{get_optimized_cache_key(voice_id, prepared_text)}.mp3")
+
+
+SECRET_SETTINGS = {
+    "GOOGLE_API_KEY",
+    "OPENAI_API_KEY",
+    "LOGIN_CODE",
+    "SESSION_SECRET_KEY",
+    "WEBSHARE_PROXY_PASSWORD",
+}
 
 
 # --- API ENDPOINTS ---
+
+
+@app.before_request
+def ensure_session_id():
+    """Assign a stable per-session id used to target SSE events.
+
+    Set on every request (the short-circuit means only the first one writes)
+    so the cookie is in place before the browser opens the /events stream.
+    Without this, SSE connections register with session_id=None and progress
+    events get broadcast to every connected client instead of just the user
+    who started the job.
+    """
+    if not session.get("session_id"):
+        session["session_id"] = str(uuid.uuid4())
+
+
+@app.route("/health")
+def health_check():
+    """Lightweight, unauthenticated liveness endpoint for container health checks."""
+    return jsonify({"status": "ok", "sse_connections": sse.connection_count()}), 200
 
 
 @app.route("/")
 @require_auth
 def home():
     return render_template("index.html")
-
-
-@app.route("/sse-test")
-@require_auth
-def sse_test():
-    """SSE testing and demonstration page"""
-    return render_template("sse_test.html")
 
 
 @app.route("/login")
@@ -517,11 +417,10 @@ def login():
         if not passcode:
             return jsonify({"error": "Passcode is required"}), 400
 
-        # Sanitize passcode input to prevent XSS
-        passcode = html.escape(passcode)
-
-        # Simple authentication check
-        if passcode == LOGIN_CODE:
+        # Constant-time comparison to avoid leaking the passcode via timing.
+        # (The passcode is never reflected back, so there's no XSS reason to
+        # html.escape it here — and escaping broke codes containing & < > " '.)
+        if hmac.compare_digest(passcode.encode("utf-8"), (LOGIN_CODE or "").encode("utf-8")):
             # Reset failed attempts on successful login
             reset_failed_attempts(client_ip)
             session["authenticated"] = True
@@ -594,180 +493,12 @@ def login_status():
 @app.route("/events")
 @require_auth
 def sse_events():
-    """Server-Sent Events endpoint for real-time notifications"""
-    # Generate unique connection ID
-    connection_id = str(uuid.uuid4())
-
-    # Get client information for security and tracking
-    session_id = session.get("session_id") or session.sid if hasattr(session, "sid") else None
-    client_ip = get_client_ip()
-
-    # Get subscription preferences from query parameters
-    subscriptions = request.args.get("subscribe", "").split(",")
-    subscriptions = {sub.strip() for sub in subscriptions if sub.strip()}
-    if not subscriptions:
-        subscriptions = {
-            "summary_complete",
-            "summary_progress",
-            "system",
-        }  # Default subscriptions
-
-    # Create and register the connection
-    connection = SSEConnection(connection_id, session_id, client_ip)
-    connection.subscriptions = subscriptions
-
-    with sse_connection_lock:
-        sse_connections[connection_id] = connection
-
-    print(f"New SSE connection established: {connection_id} from {client_ip} (Session: {session_id})")
-
-    def generate():
-        """Generator function for SSE stream"""
-        try:
-            # Send initial connection event
-            yield format_sse_message(
-                "connected",
-                {
-                    "connection_id": connection_id,
-                    "message": "Connected to notification stream",
-                    "subscriptions": list(subscriptions),
-                },
-                event_id=connection_id,
-            )
-
-            # Stream messages from the connection's queue
-            for message in connection.get_messages():
-                if not connection.is_active:
-                    break
-                yield format_sse_message(
-                    message["event"],
-                    message["data"],
-                    message["id"],
-                    message.get("retry"),
-                )
-
-        except GeneratorExit:
-            # Client disconnected
-            print(f"SSE connection closed by client: {connection_id}")
-        except Exception as e:
-            print(f"Error in SSE stream {connection_id}: {e}")
-        finally:
-            # Clean up connection
-            with sse_connection_lock:
-                sse_connections.pop(connection_id, None)
-            connection.close()
-            print(f"SSE connection cleaned up: {connection_id}")
-
-    # Return SSE response with proper headers
-    return Response(
-        generate(),
-        mimetype="text/event-stream",
-        headers={
-            "Cache-Control": "no-cache, no-store, must-revalidate",
-            "Pragma": "no-cache",
-            "Expires": "0",
-            "X-Accel-Buffering": "no",  # Nginx directive to disable buffering
-            "Connection": "keep-alive",
-        },
-    )
-
-
-@app.route("/events/status")
-@require_auth
-def sse_status():
-    """Get information about active SSE connections"""
-    cleanup_stale_connections()
-
-    with sse_connection_lock:
-        connection_info = []
-        for conn_id, conn in sse_connections.items():
-            connection_info.append(
-                {
-                    "connection_id": conn_id,
-                    "session_id": conn.session_id,
-                    "user_ip": conn.user_ip,
-                    "created_at": conn.created_at.isoformat(),
-                    "last_activity": conn.last_activity.isoformat(),
-                    "is_active": conn.is_active,
-                    "subscriptions": list(conn.subscriptions),
-                    "queue_size": conn.message_queue.qsize(),
-                }
-            )
-
-    return jsonify({"total_connections": len(sse_connections), "connections": connection_info})
-
-
-@app.route("/events/broadcast", methods=["POST"])
-@require_auth
-def sse_broadcast():
-    """Manual broadcast endpoint for testing (admin/debug use)"""
-    try:
-        data = request.get_json()
-        if not data:
-            return jsonify({"error": "Invalid JSON in request body"}), 400
-
-        event_type = data.get("event_type", "test")
-        message_data = data.get("data", {})
-        session_filter = data.get("session_filter")
-        subscription_filter = data.get("subscription_filter")
-
-        # Validate event type
-        allowed_events = [
-            "test",
-            "system",
-            "summary_complete",
-            "summary_progress",
-            "admin",
-        ]
-        if event_type not in allowed_events:
-            return (
-                jsonify({"error": f"Invalid event type. Allowed: {allowed_events}"}),
-                400,
-            )
-
-        broadcast_to_connections(
-            event_type,
-            message_data,
-            session_filter=session_filter,
-            subscription_filter=subscription_filter,
-        )
-
-        return jsonify(
-            {
-                "success": True,
-                "message": f"Broadcasted {event_type} event",
-                "total_connections": len(sse_connections),
-            }
-        )
-
-    except Exception as e:
-        return jsonify({"error": f"Broadcast failed: {str(e)}"}), 500
-
-
-def format_sse_message(event_type, data, event_id=None, retry=None):
-    """Format data as Server-Sent Events message"""
-    lines = []
-
-    if event_id:
-        lines.append(f"id: {event_id}")
-
-    if retry:
-        lines.append(f"retry: {retry}")
-
-    lines.append(f"event: {event_type}")
-
-    # Handle data formatting
-    if isinstance(data, (dict, list)):
-        data_str = json.dumps(data)
-    else:
-        data_str = str(data)
-
-    # Split multi-line data properly
-    for line in data_str.split("\n"):
-        lines.append(f"data: {line}")
-
-    lines.append("")  # Empty line to end the message
-    return "\n".join(lines) + "\n"
+    """Server-Sent Events stream of summary progress for the current session."""
+    subscriptions = {sub.strip() for sub in request.args.get("subscribe", "").split(",") if sub.strip()}
+    connection = sse.register(session.get("session_id"), get_client_ip(), subscriptions or None)
+    if connection is None:
+        return jsonify({"error": "Too many open event streams"}), 503
+    return Response(sse.stream(connection), mimetype="text/event-stream", headers=sse.STREAM_HEADERS)
 
 
 @app.route("/get_cached_summaries", methods=["GET"])
@@ -906,7 +637,7 @@ def api_status():
         "openai_api_key_set": bool(openai_api_key),
         "youtube_client_initialized": youtube is not None,
         "tts_client_initialized": tts_client is not None,
-        "gemini_model_initialized": gemini_model is not None,
+        "gemini_model_initialized": gemini_client is not None,
         "openai_client_initialized": openai_client is not None,
         "available_models": list(AVAILABLE_MODELS.keys()),
         "testing_mode": bool(os.environ.get("TESTING")),
@@ -918,6 +649,9 @@ def api_status():
 @require_auth
 def debug_transcript():
     """Debug endpoint to check transcript retrieval for a specific video"""
+    if not DEBUG_ENDPOINTS_ENABLED:
+        return jsonify({"error": "Endpoint not found"}), 404
+
     url = request.args.get("url", "").strip()
     if not url:
         return jsonify({"error": "URL parameter is required"}), 400
@@ -950,55 +684,9 @@ def debug_transcript():
     return jsonify(result)
 
 
-@app.route("/debug_model", methods=["GET"])
-@require_auth
-def debug_model():
-    """Debug endpoint to test model functionality"""
-    model_key = request.args.get("model", "gpt-5")
-
-    try:
-        # Test with a simple transcript
-        test_transcript = "This is a test transcript about artificial intelligence and machine learning technologies."
-        test_title = "Test Video About AI"
-
-        print(f"🔍 Debug endpoint testing model: {model_key}")
-
-        # Test the model
-        summary, error = generate_summary(test_transcript, test_title, model_key)
-
-        result = {
-            "model_key": model_key,
-            "model_config": AVAILABLE_MODELS.get(model_key, {}),
-            "openai_client_available": openai_client is not None,
-            "summary_success": summary is not None,
-            "summary_length": len(summary) if summary else 0,
-            "error": error,
-        }
-
-        if summary:
-            result["summary_preview"] = summary[:200] + "..." if len(summary) > 200 else summary
-
-        return jsonify(result)
-
-    except Exception as e:
-        import traceback
-
-        return (
-            jsonify(
-                {
-                    "error": "Exception in debug_model",
-                    "message": str(e),
-                    "type": type(e).__name__,
-                    "traceback": traceback.format_exc(),
-                }
-            ),
-            500,
-        )
-
-
 def _notify_progress(session_id, data):
     """Send a summary_progress SSE notification."""
-    broadcast_to_connections(
+    sse.broadcast(
         "summary_progress", data,
         session_filter=session_id,
         subscription_filter="summary_progress",
@@ -1007,7 +695,7 @@ def _notify_progress(session_id, data):
 
 def _notify_complete(session_id, data):
     """Send a summary_complete SSE notification."""
-    broadcast_to_connections(
+    sse.broadcast(
         "summary_complete", data,
         session_filter=session_id,
         subscription_filter="summary_complete",
@@ -1024,10 +712,7 @@ def _summarize_and_cache(vid_id, vid_title, thumbnail_url, model_key):
     summary, err = (None, err) if err else generate_summary(transcript, vid_title, model_key)
 
     if summary and not err:
-        audio_filename = f"{hashlib.sha256(summary.encode('utf-8')).hexdigest()}.mp3"
-        summary_cache[vid_id] = build_cache_entry(
-            vid_title, summary, thumbnail_url, vid_id, model_key, audio_filename
-        )
+        summary_cache[vid_id] = build_cache_entry(vid_title, summary, thumbnail_url, vid_id, model_key)
         save_summary_cache(summary_cache, SUMMARY_CACHE_FILE)
 
     return summary, err
@@ -1164,7 +849,7 @@ def summarize_links():
             available_models = list(AVAILABLE_MODELS.keys())
             return jsonify({"error": f"Unsupported model: {model_key}. Available models: {available_models}"}), 400
 
-        session_id = session.get("session_id") or session.sid if hasattr(session, "sid") else None
+        session_id = session.get("session_id")
 
         # Send initial progress notification
         has_playlists = any(get_playlist_id(url) for url in urls)
@@ -1217,113 +902,7 @@ def summarize_links():
         return jsonify(results)
     except Exception as e:
         app.logger.error(f"Unhandled exception in /summarize: {str(e)}\n{traceback.format_exc()}")
-        return jsonify({
-            "error": "An unexpected error occurred while processing your request",
-            "message": str(e), "type": type(e).__name__, "stacktrace": traceback.format_exc(),
-        }), 500
-
-
-# New async endpoints for worker system
-@app.route("/summarize_async", methods=["POST"])
-@require_auth
-def summarize_async():
-    """Async version of summarize - submits jobs to worker queue"""
-    if not WORKER_SYSTEM_AVAILABLE or worker_manager is None:
-        # Fall back to synchronous processing
-        return redirect(url_for("summarize_links"))
-
-    try:
-        data = request.get_json()
-        if not data:
-            return jsonify({"error": "Invalid JSON in request body"}), 400
-
-        urls_input = data.get("urls", "").strip()
-        model_key = data.get("model", "gemini-2.5-flash")
-
-        if not urls_input:
-            return jsonify({"error": "No URLs provided"}), 400
-
-        # Parse URLs
-        urls = [url.strip() for url in urls_input.replace("\n", " ").split() if url.strip()]
-
-        if not urls:
-            return jsonify({"error": "No valid URLs provided"}), 400
-
-        # Submit jobs to worker queue
-        job_ids = []
-        session_id = session.get("session_id", str(uuid.uuid4()))
-        session["session_id"] = session_id
-
-        for url in urls:
-            video_id = get_video_id(url)
-            playlist_id = get_playlist_id(url)
-
-            if video_id:
-                # Single video job
-                job = create_video_job(url=url, model_key=model_key, session_id=session_id)
-
-                if worker_manager.submit_job(job):
-                    job_ids.append(job.job_id)
-
-            elif playlist_id:
-                # Playlist job - video IDs are fetched by the worker during processing
-                job = create_playlist_job(url=url, video_ids=[], model_key=model_key, session_id=session_id)
-
-                if worker_manager.submit_job(job):
-                    job_ids.append(job.job_id)
-
-        if not job_ids:
-            return jsonify({"error": "Failed to submit any jobs"}), 500
-
-        return jsonify(
-            {
-                "success": True,
-                "message": f"Submitted {len(job_ids)} jobs for processing",
-                "job_ids": job_ids,
-                "session_id": session_id,
-            }
-        )
-
-    except Exception as e:
-        app.logger.error(f"Error in summarize_async: {e}")
-        return jsonify({"error": str(e)}), 500
-
-
-@app.route("/jobs/<job_id>/status", methods=["GET"])
-@require_auth
-def get_job_status(job_id):
-    """Get job status and progress"""
-    if not WORKER_SYSTEM_AVAILABLE or job_state_manager is None:
-        return jsonify({"error": "Worker system not available"}), 503
-
-    try:
-        status = job_state_manager.get_job_status(job_id)
-        if status is None:
-            return jsonify({"error": "Job not found"}), 404
-
-        return jsonify(status)
-
-    except Exception as e:
-        app.logger.error(f"Error getting job status: {e}")
-        return jsonify({"error": str(e)}), 500
-
-
-@app.route("/jobs", methods=["GET"])
-@require_auth
-def list_jobs():
-    """List all jobs with optional filtering"""
-    if not WORKER_SYSTEM_AVAILABLE or job_state_manager is None:
-        return jsonify({"jobs": []})
-
-    try:
-        status_filter = request.args.get("status")
-        jobs = job_state_manager.get_all_jobs(status_filter=status_filter)
-
-        return jsonify({"jobs": jobs})
-
-    except Exception as e:
-        app.logger.error(f"Error listing jobs: {e}")
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": "An unexpected error occurred while processing your request"}), 500
 
 
 @app.route("/speak", methods=["POST"])
@@ -1336,17 +915,20 @@ def speak():
         text_to_speak = data.get("text")
         if not text_to_speak:
             return jsonify({"error": "No text provided"}), 400
+        if len(text_to_speak) > MAX_TTS_CHARS:
+            return jsonify({"error": f"Text too long (max {MAX_TTS_CHARS} characters)"}), 413
 
-        # Sanitize text input to prevent XSS (though this goes to TTS, not display)
-        text_to_speak = html.escape(text_to_speak)
-
-        # Clean text for TTS to avoid ASCII pronunciation issues
-        text_to_speak = clean_text_for_tts(text_to_speak)
+        text_to_speak = prepare_tts_text(text_to_speak)
     except Exception as e:
         return jsonify({"error": f"Failed to parse request: {str(e)}"}), 400
 
-    # Get voice selection from request data (default to configured voice)
+    # Get voice selection from request data (default to configured voice).
+    # voice_id becomes the leading component of the cache filename, so reject
+    # anything not in the known-voice allowlist to prevent path traversal
+    # (e.g. "../../etc/x") into the audio cache write/read.
     voice_id = data.get("voice_id", TTS_VOICE)
+    if not validate_voice_name(voice_id):
+        return jsonify({"error": "Invalid voice selection"}), 400
 
     # Check if cache cleanup is needed (do this before generating cache key)
     if should_cleanup_cache(AUDIO_CACHE_DIR):
@@ -1354,10 +936,8 @@ def speak():
         size_mb = cleanup_result["size_freed"] / 1024 / 1024
         print(f"Cache cleanup: removed {cleanup_result['cleaned']} files, freed {size_mb:.1f}MB")
 
-    # Use optimized cache key generation
-    cache_key = get_optimized_cache_key(voice_id, text_to_speak)
-    filename = f"{cache_key}.mp3"
-    filepath = os.path.join(AUDIO_CACHE_DIR, filename)
+    filepath = speech_cache_path(voice_id, text_to_speak)
+    filename = os.path.basename(filepath)
 
     if os.path.exists(filepath):
         print(f"AUDIO CACHE HIT for file: {filename}")
@@ -1483,10 +1063,11 @@ def preview_voice():
         if not text_to_speak:
             return jsonify({"error": "No text provided"}), 400
 
-        # Sanitize text input
-        text_to_speak = html.escape(text_to_speak)
-        # Clean text for TTS to avoid ASCII pronunciation issues
-        text_to_speak = clean_text_for_tts(text_to_speak)
+        # voice_id is part of the cache filename: allowlist it (path traversal)
+        if not validate_voice_name(voice_id):
+            return jsonify({"error": "Invalid voice selection"}), 400
+
+        text_to_speak = prepare_tts_text(text_to_speak)
 
         # Limit text length for previews to prevent abuse
         if len(text_to_speak) > 500:
@@ -1496,9 +1077,8 @@ def preview_voice():
         return jsonify({"error": f"Failed to parse request: {str(e)}"}), 400
 
     # Use optimized cache key for previews
-    preview_key = f"preview_{get_optimized_cache_key(voice_id, text_to_speak)}"
-    filename = f"{preview_key}.mp3"
-    filepath = os.path.join(AUDIO_CACHE_DIR, filename)
+    filepath = speech_cache_path(voice_id, text_to_speak, prefix="preview_")
+    filename = os.path.basename(filepath)
 
     # Check cache first
     if os.path.exists(filepath):
@@ -1561,9 +1141,17 @@ def delete_summary():
         if video_id not in summary_cache:
             return jsonify({"error": "Summary not found"}), 404
 
-        # Get the audio filename before deleting from cache
         cached_item = summary_cache[video_id]
-        audio_filename = cached_item.get("audio_filename")
+
+        # Audio generated by /speak is keyed on voice + prepared text, so check
+        # every known voice. Also honour the legacy audio_filename field.
+        audio_paths = set()
+        if cached_item.get("summary"):
+            prepared = prepare_tts_text(cached_item["summary"])
+            for voice in set(AVAILABLE_VOICES) | {TTS_VOICE}:
+                audio_paths.add(speech_cache_path(voice, prepared))
+        if cached_item.get("audio_filename"):
+            audio_paths.add(os.path.join(AUDIO_CACHE_DIR, os.path.basename(cached_item["audio_filename"])))
 
         # Remove from cache
         del summary_cache[video_id]
@@ -1571,9 +1159,8 @@ def delete_summary():
         # Save the updated cache
         save_summary_cache(summary_cache, SUMMARY_CACHE_FILE)
 
-        # Try to delete the associated audio file if it exists
-        if audio_filename:
-            audio_filepath = os.path.join(AUDIO_CACHE_DIR, audio_filename)
+        # Delete any associated audio files
+        for audio_filepath in audio_paths:
             if os.path.exists(audio_filepath):
                 try:
                     os.remove(audio_filepath)
@@ -1596,23 +1183,26 @@ def delete_summary():
 @app.route("/settings")
 @require_auth
 def settings_page():
-    """Display the settings page with current environment variables"""
-    # Collect current environment variables
+    """Display the settings page.
+
+    Secret values are never rendered; the template only learns whether each
+    one is set (True/False) so the page source cannot leak credentials.
+    """
     env_vars = {
-        "GOOGLE_API_KEY": os.environ.get("GOOGLE_API_KEY", ""),
-        "OPENAI_API_KEY": os.environ.get("OPENAI_API_KEY", ""),
+        "GOOGLE_API_KEY": bool(os.environ.get("GOOGLE_API_KEY")),
+        "OPENAI_API_KEY": bool(os.environ.get("OPENAI_API_KEY")),
         "LOGIN_ENABLED": os.environ.get("LOGIN_ENABLED", "false"),
-        "LOGIN_CODE": os.environ.get("LOGIN_CODE", ""),
-        "SESSION_SECRET_KEY": os.environ.get("SESSION_SECRET_KEY", ""),
+        "LOGIN_CODE": bool(os.environ.get("LOGIN_CODE")),
+        "SESSION_SECRET_KEY": bool(os.environ.get("SESSION_SECRET_KEY")),
         "MAX_LOGIN_ATTEMPTS": os.environ.get("MAX_LOGIN_ATTEMPTS", "5"),
         "LOCKOUT_DURATION": os.environ.get("LOCKOUT_DURATION", "15"),
         "WEBSHARE_PROXY_ENABLED": os.environ.get("WEBSHARE_PROXY_ENABLED", "false"),
         "WEBSHARE_PROXY_HOST": os.environ.get("WEBSHARE_PROXY_HOST", ""),
         "WEBSHARE_PROXY_PORT": os.environ.get("WEBSHARE_PROXY_PORT", ""),
         "WEBSHARE_PROXY_USERNAME": os.environ.get("WEBSHARE_PROXY_USERNAME", ""),
-        "WEBSHARE_PROXY_PASSWORD": os.environ.get("WEBSHARE_PROXY_PASSWORD", ""),
+        "WEBSHARE_PROXY_PASSWORD": bool(os.environ.get("WEBSHARE_PROXY_PASSWORD")),
         "DATA_DIR": os.environ.get("DATA_DIR", ""),
-        "FLASK_DEBUG": os.environ.get("FLASK_DEBUG", "true"),
+        "FLASK_DEBUG": os.environ.get("FLASK_DEBUG", "false"),
         "TTS_VOICE": os.environ.get("TTS_VOICE", "en-US-Chirp3-HD-Zephyr"),
     }
 
@@ -1648,7 +1238,6 @@ def update_settings():
             "webshare_proxy_port": "WEBSHARE_PROXY_PORT",
             "webshare_proxy_username": "WEBSHARE_PROXY_USERNAME",
             "webshare_proxy_password": "WEBSHARE_PROXY_PASSWORD",
-            "data_dir": "DATA_DIR",
             "flask_debug": "FLASK_DEBUG",
             "tts_voice": "TTS_VOICE",
         }
@@ -1659,8 +1248,9 @@ def update_settings():
             if form_key in data:
                 value = data[form_key].strip() if isinstance(data[form_key], str) else str(data[form_key])
 
-                # Sanitize settings input to prevent XSS
-                value = html.escape(value)
+                # Secret fields are rendered blank; blank means "keep current value"
+                if env_key in SECRET_SETTINGS and not value:
+                    continue
 
                 # Special validation for numeric fields
                 if form_key in [
@@ -1681,8 +1271,8 @@ def update_settings():
         # Update global variables that depend on environment variables
         global LOGIN_ENABLED, LOGIN_CODE, SESSION_SECRET_KEY, MAX_LOGIN_ATTEMPTS, LOCKOUT_DURATION
         global WEBSHARE_PROXY_ENABLED, WEBSHARE_PROXY_HOST, WEBSHARE_PROXY_PORT
-        global WEBSHARE_PROXY_USERNAME, WEBSHARE_PROXY_PASSWORD, DATA_DIR, TTS_VOICE
-        global google_api_key, openai_api_key, gemini_model, openai_client, tts_client, youtube
+        global WEBSHARE_PROXY_USERNAME, WEBSHARE_PROXY_PASSWORD, TTS_VOICE
+        global google_api_key, openai_api_key
 
         LOGIN_ENABLED = os.environ.get("LOGIN_ENABLED", "false").lower() == "true"
         LOGIN_CODE = os.environ.get("LOGIN_CODE", "")
@@ -1704,7 +1294,6 @@ def update_settings():
         WEBSHARE_PROXY_USERNAME = os.environ.get("WEBSHARE_PROXY_USERNAME")
         WEBSHARE_PROXY_PASSWORD = os.environ.get("WEBSHARE_PROXY_PASSWORD")
 
-        DATA_DIR = os.environ.get("DATA_DIR", "data" if os.path.exists("/.dockerenv") else ".")
         TTS_VOICE = os.environ.get("TTS_VOICE", "en-US-Chirp3-HD-Zephyr")
 
         # Update Flask secret key if SESSION_SECRET_KEY changed
@@ -1716,27 +1305,10 @@ def update_settings():
             google_api_key = os.environ.get("GOOGLE_API_KEY")
             openai_api_key = os.environ.get("OPENAI_API_KEY")
 
-            # Reinitialize Google APIs if key was updated
             if "GOOGLE_API_KEY" in updated_vars and google_api_key:
-                try:
-                    tts_client = texttospeech.TextToSpeechClient(client_options=ClientOptions(api_key=google_api_key))
-                    genai.configure(api_key=google_api_key)
-                    youtube = create_youtube_client_with_timeout(google_api_key, timeout=30)
-                    gemini_model = genai.GenerativeModel(model_name="gemini-2.5-flash-preview-05-20")
-                    youtube_helpers.set_youtube_client(youtube)
-                    ai_models.set_clients(gemini=gemini_model)
-                    print("✅ Google APIs reinitialized successfully")
-                except Exception as e:
-                    print(f"Warning: Could not reinitialize Google APIs. Error: {e}")
-
-            # Reinitialize OpenAI API if key was updated
+                init_google_clients(google_api_key)
             if "OPENAI_API_KEY" in updated_vars and openai_api_key:
-                try:
-                    openai_client = openai.OpenAI(api_key=openai_api_key)
-                    ai_models.set_clients(openai_cli=openai_client)
-                    print("✅ OpenAI API reinitialized successfully")
-                except Exception as e:
-                    print(f"Warning: Could not reinitialize OpenAI API. Error: {e}")
+                init_openai_client(openai_api_key)
 
         # Save environment variables to .env file for persistence
         save_success = save_env_to_file(updated_vars)
@@ -1773,94 +1345,48 @@ API_ROUTE_PREFIXES = [
 ]
 
 
-# Error handlers to ensure JSON responses for API endpoints
+# Error handlers to ensure JSON responses for API endpoints.
+# Details are logged server-side only; responses never include stack traces.
+def _is_api_request():
+    return any(request.path.startswith(path) for path in API_ROUTE_PREFIXES)
+
+
 @app.errorhandler(400)
 def bad_request(e):
-    if any(request.path.startswith(path) for path in API_ROUTE_PREFIXES):
-        return (
-            jsonify(
-                {
-                    "error": "Bad request",
-                    "message": str(e),
-                    "stacktrace": traceback.format_exc(),
-                }
-            ),
-            400,
-        )
+    if _is_api_request():
+        return jsonify({"error": "Bad request", "message": getattr(e, "description", "")}), 400
     return e
 
 
 @app.errorhandler(404)
 def not_found(e):
-    if any(request.path.startswith(path) for path in API_ROUTE_PREFIXES):
-        return (
-            jsonify({"error": "Endpoint not found", "message": str(e), "path": request.path}),
-            404,
-        )
+    if _is_api_request():
+        return jsonify({"error": "Endpoint not found", "path": request.path}), 404
     return e
 
 
 @app.errorhandler(500)
 def server_error(e):
-    if any(request.path.startswith(path) for path in API_ROUTE_PREFIXES):
-        return (
-            jsonify(
-                {
-                    "error": "Internal server error",
-                    "message": str(e),
-                    "stacktrace": traceback.format_exc(),
-                }
-            ),
-            500,
-        )
+    if _is_api_request():
+        return jsonify({"error": "Internal server error"}), 500
     return e
 
 
 @app.errorhandler(Exception)
 def handle_exception(e):
-    # Log the error with full traceback
+    if isinstance(e, HTTPException):
+        # Let Flask render 4xx/405 etc. (the specific handlers above cover API routes)
+        return e
     app.logger.error(f"Unhandled exception: {str(e)}\n{traceback.format_exc()}")
-    if any(request.path.startswith(path) for path in API_ROUTE_PREFIXES):
-        return (
-            jsonify(
-                {
-                    "error": "An unexpected error occurred",
-                    "message": str(e),
-                    "type": type(e).__name__,
-                    "stacktrace": traceback.format_exc(),
-                }
-            ),
-            500,
-        )
-    # For non-API routes, let Flask handle it normally
-    return e
-
-
-# Graceful shutdown handler
-def cleanup_worker_system():
-    """Cleanup function for application shutdown"""
-    if worker_manager:
-        print("🔄 Shutting down worker system gracefully...")
-        worker_manager.stop()
-        print("✅ Worker system shutdown complete")
-
-    if new_sse_manager:
-        print("🔄 Shutting down SSE manager...")
-        new_sse_manager.shutdown()
-        print("✅ SSE manager shutdown complete")
-
-
-# Register cleanup function
-atexit.register(cleanup_worker_system)
+    if _is_api_request():
+        return jsonify({"error": "An unexpected error occurred"}), 500
+    return "Internal Server Error", 500
 
 
 if __name__ == "__main__":
-    try:
-        # Enable debug mode only in development (configurable via environment variable)
-        debug_mode = os.environ.get("FLASK_DEBUG", "true").lower() == "true"
-        print(f"🚀 Starting YouTube Summarizer on port 5001 (debug={debug_mode})")
-        app.run(debug=debug_mode, port=5001)
-    except KeyboardInterrupt:
-        print("\n🔄 Received shutdown signal, cleaning up...")
-        cleanup_worker_system()
-        print("👋 Shutdown complete")
+    # Debug mode is OFF by default; opt in with FLASK_DEBUG=true for local dev only.
+    # The Werkzeug debugger allows remote code execution, so it must never
+    # default on for a deployed instance.
+    debug_mode = os.environ.get("FLASK_DEBUG", "false").lower() == "true"
+    print(f"🚀 Starting YouTube Summarizer on port 5001 (debug={debug_mode})")
+    app.run(debug=debug_mode, port=5001, threaded=True)

@@ -675,7 +675,7 @@
                 <div class="form-group">
                     <label for="google_api_key">Google API Key</label>
                     <div class="password-toggle">
-                        <input type="password" id="google_api_key" name="google_api_key" value="{{ env_vars.GOOGLE_API_KEY or '' }}">
+                        <input type="password" id="google_api_key" name="google_api_key" value="" autocomplete="new-password" placeholder="{{ 'Configured - leave blank to keep current value' if env_vars.GOOGLE_API_KEY else 'Not set' }}">
                         <button type="button" class="toggle-btn" onclick="togglePassword('google_api_key')">
                             <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                                 <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
@@ -689,7 +689,7 @@
                 <div class="form-group">
                     <label for="openai_api_key">OpenAI API Key</label>
                     <div class="password-toggle">
-                        <input type="password" id="openai_api_key" name="openai_api_key" value="{{ env_vars.OPENAI_API_KEY or '' }}">
+                        <input type="password" id="openai_api_key" name="openai_api_key" value="" autocomplete="new-password" placeholder="{{ 'Configured - leave blank to keep current value' if env_vars.OPENAI_API_KEY else 'Not set' }}">
                         <button type="button" class="toggle-btn" onclick="togglePassword('openai_api_key')">
                             <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                                 <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
@@ -716,7 +716,7 @@
                 <div class="form-group">
                     <label for="login_code">Login Passcode</label>
                     <div class="password-toggle">
-                        <input type="password" id="login_code" name="login_code" value="{{ env_vars.LOGIN_CODE or '' }}">
+                        <input type="password" id="login_code" name="login_code" value="" autocomplete="new-password" placeholder="{{ 'Configured - leave blank to keep current value' if env_vars.LOGIN_CODE else 'Not set' }}">
                         <button type="button" class="toggle-btn" onclick="togglePassword('login_code')">                            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                                 <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
                                 <circle cx="12" cy="12" r="3"></circle>
@@ -729,7 +729,7 @@
                 <div class="form-group">
                     <label for="session_secret_key">Session Secret Key</label>
                     <div class="password-toggle">
-                        <input type="password" id="session_secret_key" name="session_secret_key" value="{{ env_vars.SESSION_SECRET_KEY or '' }}">
+                        <input type="password" id="session_secret_key" name="session_secret_key" value="" autocomplete="new-password" placeholder="{{ 'Configured - leave blank to keep current value' if env_vars.SESSION_SECRET_KEY else 'Not set' }}">
                         <button type="button" class="toggle-btn" onclick="togglePassword('session_secret_key')">                            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                                 <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
                                 <circle cx="12" cy="12" r="3"></circle>
@@ -785,7 +785,7 @@
                 <div class="form-group">
                     <label for="webshare_proxy_password">Proxy Password</label>
                     <div class="password-toggle">
-                        <input type="password" id="webshare_proxy_password" name="webshare_proxy_password" value="{{ env_vars.WEBSHARE_PROXY_PASSWORD or '' }}">
+                        <input type="password" id="webshare_proxy_password" name="webshare_proxy_password" value="" autocomplete="new-password" placeholder="{{ 'Configured - leave blank to keep current value' if env_vars.WEBSHARE_PROXY_PASSWORD else 'Not set' }}">
                         <button type="button" class="toggle-btn" onclick="togglePassword('webshare_proxy_password')">                            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                                 <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
                                 <circle cx="12" cy="12" r="3"></circle>
@@ -802,7 +802,7 @@
                 
                 <div class="form-group">
                     <label for="data_dir">Data Directory</label>
-                    <input type="text" id="data_dir" name="data_dir" value="{{ env_vars.DATA_DIR or '' }}" placeholder="data">
+                    <input type="text" id="data_dir" value="{{ env_vars.DATA_DIR or '' }}" placeholder="data" readonly title="Set DATA_DIR in the environment and restart to change">
                     <div class="description">Directory for storing cache files and data</div>
                 </div>
 

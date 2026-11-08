@@ -39,11 +39,6 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 try:
     from app import app as flask_app
-    from sse_manager import SSEManager
-    from job_models import JobRequest, JobType, JobPriority, JobStatus
-    from job_queue import JobQueue
-    from worker_manager import WorkerManager
-    from voice_config import VoiceConfigManager
 except ImportError as e:
     flask_app = None
     print(f"Warning: Could not import application modules: {e}")
@@ -270,7 +265,10 @@ def browser_page():
         pytest.skip("Playwright not available")
 
     with sync_playwright() as p:
-        browser = p.chromium.launch(headless=True)
+        try:
+            browser = p.chromium.launch(headless=True)
+        except Exception as e:  # browsers not installed (`playwright install chromium`)
+            pytest.skip(f"Playwright browser unavailable: {e}")
         context = browser.new_context()
         page = context.new_page()
 

@@ -2,286 +2,95 @@
 
 ## Project Overview
 
-YouTube Summarizer is a Flask-based web application that uses AI models to generate summaries of YouTube videos and playlists. The application features an async worker system for background processing, real-time updates via Server-Sent Events (SSE), and support for multiple AI models.
+YouTube Summarizer is a Flask web application that summarizes YouTube videos and playlists with Google Gemini or OpenAI models, and reads summaries aloud with Google Cloud Text-to-Speech. Summarization runs synchronously inside the `/summarize` request; progress is pushed to the browser over Server-Sent Events (SSE).
 
 ## Architecture
 
-### Core Components
+| File | Responsibility |
+|---|---|
+| `app.py` | Flask app: configuration, API client setup, routes, settings page, error handlers |
+| `ai_models.py` | `AVAILABLE_MODELS` registry, prompt, Gemini (`google-genai` Client) and OpenAI summary generation |
+| `auth.py` | Passcode login, per-IP lockout, `require_auth` decorator |
+| `cache.py` | Summary cache load/save (atomic, lock-protected) and cache entry builder |
+| `sse.py` | SSE connection registry, session-scoped broadcast, message formatting, stream generator |
+| `youtube_helpers.py` | URL parsing, YouTube Data API calls, transcript fetching (webshare proxy aware) |
+| `tts_helpers.py` | Text cleanup and TTS synthesis |
+| `voice_config.py` | Available voices, fallbacks, audio cache keys and cleanup |
+| `gunicorn_config.py` | Production server: **1 process**, gthread, `GUNICORN_THREADS` threads |
 
-1. **Flask Web Application** (`app.py`)
-   - Main application server
-   - Handles HTTP requests and routing
-   - Manages user sessions and authentication
-   - Integrates with AI models and YouTube API
+### Request flow
+1. `POST /summarize` with `{"urls": [...], "model": "<key>"}`.
+2. For each URL: cache lookup → YouTube details → transcript → `generate_summary()` → cache write.
+3. Progress and completion events are sent with `sse.broadcast(..., session_filter=session["session_id"])` to the user's `/events` stream. A `before_request` hook assigns every browser a `session_id`.
 
-2. **Async Worker System**
-   - **WorkerManager** (`worker_manager.py`): Coordinates multiple worker threads
-   - **JobQueue** (`job_queue.py`): Priority-based job scheduling with rate limiting
-   - **JobModels** (`job_models.py`): Data structures for async processing
-   - **JobState** (`job_state.py`): Persistent state management
-   - **ErrorHandler** (`error_handler.py`): Intelligent error classification and retry logic
+### State and process model
+All state is in process memory or in files under `DATA_DIR`:
+- `summary_cache.json` (summaries), `audio_cache/` (MP3s keyed on voice + text), `login_attempts.json`
+- `.env` written by the settings page (loaded at startup, overrides the environment)
+- `.secret_key` (generated session secret when `SESSION_SECRET_KEY` is unset)
 
-3. **Real-time Updates**
-   - **SSEManager** (`sse_manager.py`): Server-Sent Events for real-time notifications
-   - **Client-side JavaScript**: SSE client, job tracker, and UI updater
+Because SSE connections and the summary cache live in memory, **the app must run as a single process**. Concurrency comes from threads; each open SSE stream holds one thread, so streams are capped by `SSE_MAX_CONNECTIONS` (default 20, below `GUNICORN_THREADS`, default 32).
 
-4. **Voice Configuration** (`voice_config.py`)
-   - Text-to-speech voice management
-   - Multi-tier voice system with fallbacks
-   - Cache optimization for audio files
+`DATA_DIR` defaults to `data` in Docker and `.` otherwise.
 
-## Key Features
+## AI Models
+Defined in `ai_models.AVAILABLE_MODELS` (key → provider + model id):
+- Google: `gemini-2.5-flash` (default), `gemini-2.5-pro`
+- OpenAI: `gpt-5`, `gpt-5-mini`, `gpt-4o`, `gpt-4o-mini`
 
-### AI Model Support
-- **Google Gemini**: Gemini 2.5 Flash (default), Gemini 2.5 Pro
-- **OpenAI**: GPT-5, GPT-5 Mini, GPT-4o, GPT-4o-mini
-
-### Processing Capabilities
-- Single video summarization
-- Playlist processing (with 1-second delay between videos)
-- Batch URL processing
-- Background async processing with progress tracking
-- Fallback to synchronous processing if worker system unavailable
-
-### Error Handling
-- Timeout protection (30-second timeout for YouTube API calls)
-- Retry logic with exponential backoff (up to 3 retries)
-- Intelligent error classification (9 categories)
-- Graceful degradation on failures
-
-## Important Implementation Details
-
-### Worker System
-- **3 worker threads** by default
-- **Priority levels**: HIGH, MEDIUM, LOW
-- **Rate limiting**: 60 requests per minute per IP
-- **State persistence**: JSON-based job state storage
-- **Automatic cleanup**: Jobs older than 24 hours are removed
-
-### API Timeout Handling
-```python
-# YouTube API client with 30-second timeout
-def create_youtube_client_with_timeout(api_key, timeout=30):
-    http = httplib2.Http(timeout=timeout)
-    socket.setdefaulttimeout(timeout)
-    return build("youtube", "v3", developerKey=api_key, http=http)
-```
-
-### Rate Limiting Protection
-- 1-second delay between processing videos in playlists
-- 1-second delay between URLs in batch processing
-- Prevents YouTube API rate limiting
-
-### SSE Connection Management
-- Maximum 100 concurrent connections
-- Automatic cleanup of stale connections (5-minute timeout)
-- Connection status indicator in UI
-- Exponential backoff for reconnection (1s, 2s, 4s, 8s, 16s, max 30s)
-
-## File Structure
-
-```
-youtube-summarizer/
-├── app.py                    # Main Flask application (~2,700 lines)
-├── worker_manager.py         # Async worker coordination
-├── job_queue.py             # Priority job scheduling
-├── job_models.py            # Job data structures
-├── job_state.py             # State persistence
-├── error_handler.py         # Error handling logic
-├── sse_manager.py           # SSE implementation
-├── voice_config.py          # TTS configuration
-├── gunicorn_config.py       # Production gunicorn config
-├── static/
-│   ├── js/
-│   │   ├── sse_client.js   # SSE client
-│   │   ├── job_tracker.js  # Job lifecycle management
-│   │   ├── ui_updater.js   # Dynamic UI updates
-│   │   ├── theme-manager.js # Dark mode theme management
-│   │   ├── theme-persistence.js # Theme preference storage
-│   │   └── theme-toggle.js # Theme toggle UI
-│   ├── css/
-│   │   ├── main.css         # Primary styles
-│   │   ├── theme-variables.css # CSS custom properties
-│   │   ├── dark-mode.css    # Dark mode overrides
-│   │   ├── async_ui.css     # Async UI styling
-│   │   ├── forms-theme.css  # Form theming
-│   │   ├── cards-theme.css  # Card theming
-│   │   ├── responsive-theme.css # Responsive breakpoints
-│   │   ├── theme-integration.css # Theme integration
-│   │   └── theme-toggle.css # Toggle switch styles
-│   └── svg/                 # UI icons (moon, sun, speaker, trash)
-├── templates/
-│   ├── index.html           # Main UI template
-│   ├── login.html           # Login page
-│   ├── settings.html        # Settings page
-│   └── sse_test.html        # SSE testing page
-├── tests/                   # Comprehensive test suite
-├── docker/                  # Docker configs (nginx, supervisord, gunicorn)
-├── Dockerfile               # Production container
-├── docker-compose.yml       # Docker compose config
-└── plans/                   # Implementation planning docs
-```
-
-**Note:** `data/` and `audio_cache/` directories are created at runtime. Outside Docker, data files are stored in the project root.
-
-## Testing
-
-### Test Coverage
-- **500+ test cases** across 20+ test files
-- **Unit tests**: Job models, queue, state management
-- **Integration tests**: End-to-end workflows, API endpoints
-- **Performance tests**: Load testing, memory usage
-- **JavaScript tests**: Client-side functionality
-
-### Running Tests
-```bash
-# Quick essential tests
-make quick-test
-
-# All async worker tests
-make test-worker
-
-# Complete test suite with coverage
-make coverage
-
-# Specific test categories
-make test-models      # Job models
-make test-state       # State management
-make test-sse         # SSE implementation
-make test-integration # Integration tests
-```
+To add a model: add it to `AVAILABLE_MODELS` (the UI reads the list from `/api_status`) and, for a new provider, add a branch in `generate_summary()`.
 
 ## Environment Variables
 
-### Required
-- `GOOGLE_API_KEY`: YouTube API and Gemini models
-- `OPENAI_API_KEY`: OpenAI GPT models
+Required: `GOOGLE_API_KEY` (YouTube, Gemini, TTS). Optional: `OPENAI_API_KEY`.
 
-### Optional
-- `LOGIN_ENABLED`: Enable authentication (default: false)
-- `LOGIN_CODE`: Passcode for login when authentication is enabled
-- `SESSION_SECRET_KEY`: Secret key for Flask sessions
-- `MAX_LOGIN_ATTEMPTS`: Max failed login attempts before lockout (default: 5)
-- `LOCKOUT_DURATION`: Lockout duration in seconds (default: 1800)
-- `WORKER_THREADS`: Number of worker threads (default: 3)
-- `WORKER_MAX_QUEUE_SIZE`: Max jobs in queue (default: 100)
-- `WORKER_RATE_LIMIT`: Requests per minute per IP (default: 60)
-- `TESTING`: Enable test mode
-- `WEBSHARE_PROXY_*`: Proxy configuration
+| Variable | Default | Notes |
+|---|---|---|
+| `LOGIN_ENABLED` / `LOGIN_CODE` | `false` / – | Passcode login |
+| `SESSION_SECRET_KEY` | generated, persisted | |
+| `MAX_LOGIN_ATTEMPTS` | `5` | |
+| `LOCKOUT_DURATION` | `15` | **minutes** |
+| `TRUST_PROXY_HOPS` | `0` | Trust `X-Forwarded-For` only behind this many proxies |
+| `ENABLE_DEBUG_ENDPOINTS` | `false` | Enables `/debug_transcript` |
+| `MAX_TTS_CHARS` | `50000` | `/speak` text limit |
+| `NETWORK_TIMEOUT` | `60` | Process default socket timeout (bounds transcript fetches) |
+| `SSE_MAX_CONNECTIONS` | `20` | |
+| `GUNICORN_THREADS` | `32` | |
+| `TTS_VOICE` | `en-US-Chirp3-HD-Zephyr` | |
+| `WEBSHARE_PROXY_*` | – | Proxy for transcript fetching |
+| `FLASK_DEBUG` | `false` | Only for `python app.py` |
+| `TESTING` | – | Test mode; auth bypass also requires `app.config["TESTING"]` |
 
 ## Common Operations
 
-### Starting the Application
 ```bash
-# Development mode
-make run
-
-# Production mode with workers
-python app.py
+make run            # Flask dev server on :5001
+make test           # pytest suite (browser tests skip without Playwright browsers)
+make quick-test     # core app tests
+make coverage
+make quality        # format + lint
+docker compose up -d
 ```
 
-### Worker System Management
-- Starts automatically with Flask app
-- 3 worker threads process jobs concurrently
-- Graceful shutdown on application exit
-- Automatic recovery from worker failures
+Production: `gunicorn -c gunicorn_config.py app:app` (what the Dockerfile runs). Never raise `workers` above 1.
 
-### Cache Management
-- Summary cache: `data/summary_cache.json`
-- Audio cache: `audio_cache/` directory
-- Job state: `data/job_state.json`
-- Automatic cleanup of old entries
+## Testing
+- `tests/test_app.py` – routes, auth, settings, security regressions
+- `tests/test_transcript_and_summary.py` – transcript and model calls (mocked)
+- `tests/test_cache.py`, `tests/test_pagination.py`, `tests/test_integration.py`, `tests/test_sse.py`
+- `tests/test_dark_mode_integration.py`, `tests/test_theme_performance.py`, `tests/test_visual_dark_mode.py` – Playwright/theme tests (`make test-browser`)
 
-## Known Issues and Solutions
+Tests import `app` with `TESTING=true`, which skips real API client creation. Patch module globals such as `app.summary_cache`, `app.tts_client`, `ai_models.gemini_client`, `ai_models.openai_client`.
 
-### Timeout Errors
-- **Issue**: YouTube API requests timing out
-- **Solution**: Implemented 30-second timeout with retry logic
+CI (`.github/workflows/tests.yml`): flake8 on the app modules, pytest with coverage, and a Docker build + `/health` smoke test.
 
-### Rate Limiting
-- **Issue**: Too many rapid API calls
-- **Solution**: Added 1-second delays between video processing
+## Security Notes
+- Settings page never renders secret values; blank secret fields keep the current value.
+- Error responses never include stack traces; details go to the server log.
+- `voice_id` is allowlisted (`validate_voice_name`) before it becomes part of a cache filename.
+- Login passcode comparison is constant-time (`hmac.compare_digest`).
 
-### Connection Status
-- **Issue**: Multiple disconnect buttons appearing
-- **Solution**: Consolidated to single status indicator
-
-## Development Guidelines
-
-### Adding New AI Models
-1. Update model configuration in `app.py`
-2. Add model to UI selection in `index.html`
-3. Implement model-specific logic in `generate_summary()`
-4. Test with various video types
-
-### Modifying Worker System
-1. Worker configuration in `WorkerManager.__init__()`
-2. Job processing logic in `WorkerThread._process_job()`
-3. Progress notifications via `_notify_progress()`
-4. State persistence through `JobStateManager`
-
-### UI Updates
-1. Progress bars managed by `UIUpdater` class
-2. Real-time updates via SSE events
-3. Toast notifications for user feedback
-4. Responsive design with mobile support
-
-## Performance Considerations
-
-### Optimization Points
-- Cache lookups before API calls
-- Parallel worker processing
-- Rate limiting per client IP
-- Automatic retry with backoff
-- Connection pooling for SSE
-
-### Resource Limits
-- Max 100 jobs in queue (configurable via WORKER_MAX_QUEUE_SIZE)
-- Max 100 SSE connections
-- 24-hour job state retention
-- 30-second API timeout
-- 3 retry attempts per request
-
-## Security Features
-
-### Authentication
-- Optional login system enabled via `LOGIN_ENABLED` env var
-- Passcode-based authentication via `LOGIN_CODE` env var
-- IP-based lockout (5 attempts, 30-minute lockout by default)
-- Session management with configurable secret key
-
-### Input Validation
-- URL sanitization
-- XSS prevention in UI
-- Rate limiting protection
-- Safe file path handling
-
-## Debugging Tips
-
-### Common Issues
-1. **Worker not processing**: Check `worker_manager.is_running`
-2. **SSE not connecting**: Verify `/events` endpoint accessibility
-3. **Cache issues**: Clear `data/` directory
-4. **API failures**: Check environment variables
-5. **Memory usage**: Monitor worker thread count
-
-### Logging
-- Application logs in console
-- Worker logs with thread IDs
-- SSE connection tracking
-- Error classification in logs
-
-## Future Enhancements
-
-### Planned Features
-- Database storage (replace JSON)
-- User accounts and quotas
-- Advanced queue management
-- Webhook notifications
-- API endpoint documentation
-
-### Performance Improvements
-- Redis for caching
-- Celery for distributed workers
-- CDN for static assets
-- Database connection pooling
+## Known Limitations
+- In-memory state means one process; scaling out needs shared storage (e.g. Redis/SQLite) for cache, sessions and SSE fan-out.
+- `youtube-transcript-api` is pinned to 1.1.0 because `youtube_helpers.get_transcript` uses the static API removed in later releases.
+- Long playlists are processed within a single request; the browser waits for the full response.

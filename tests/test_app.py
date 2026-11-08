@@ -35,6 +35,16 @@ class TestYouTubeSummarizer(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
 
     @patch("app.LOGIN_ENABLED", True)
+    def test_health_endpoints_are_public(self):
+        """/health must respond 200 without auth (container health checks)."""
+        if "TESTING" in os.environ:
+            del os.environ["TESTING"]
+        for path in ("/health",):
+            response = self.client.get(path)
+            self.assertEqual(response.status_code, 200, path)
+            self.assertEqual(response.get_json()["status"], "ok")
+
+    @patch("app.LOGIN_ENABLED", True)
     def test_home_page_requires_auth_when_enabled(self):
         """Test that home page redirects to login when authentication is enabled and user not logged in"""
         # Remove testing environment variable to enable authentication
@@ -58,6 +68,25 @@ class TestYouTubeSummarizer(unittest.TestCase):
 
         response = self.client.get("/")
         self.assertEqual(response.status_code, 200)
+
+    def test_login_accepts_passcode_with_special_chars(self):
+        """A correct passcode containing HTML special chars must authenticate.
+
+        The old code html.escape'd the passcode before comparing, so codes
+        containing & < > " ' could never match.
+        """
+        if "TESTING" in os.environ:
+            del os.environ["TESTING"]
+        with patch("app.LOGIN_ENABLED", True), patch("app.LOGIN_CODE", "p@ss&w<rd>"), patch(
+            "app.is_ip_locked_out", return_value=(False, 0)
+        ), patch("app.reset_failed_attempts"):
+            response = self.client.post(
+                "/login",
+                data=json.dumps({"passcode": "p@ss&w<rd>"}),
+                content_type="application/json",
+            )
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(json.loads(response.data)["success"])
 
     def test_get_cached_summaries_empty(self):
         """Test getting cached summaries when cache is empty"""
@@ -214,6 +243,16 @@ class TestYouTubeSummarizer(unittest.TestCase):
         """Test speak endpoint with no text provided"""
         response = self.client.post("/speak", data=json.dumps({}), content_type="application/json")
         self.assertEqual(response.status_code, 400)
+
+    def test_speak_rejects_path_traversal_voice_id(self):
+        """voice_id outside the known-voice allowlist must be rejected (path traversal)."""
+        response = self.client.post(
+            "/speak",
+            data=json.dumps({"text": "Test text", "voice_id": "../../../../tmp/pwn"}),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("Invalid voice", response.get_json()["error"])
 
     @patch("os.path.exists")
     @patch("builtins.open", new_callable=mock_open, read_data=b"fake audio content")
@@ -616,6 +655,7 @@ class TestYouTubeSummarizer(unittest.TestCase):
         self.assertIsInstance(data["available_models"], list)
         self.assertGreater(len(data["available_models"]), 0)
 
+    @patch("app.DEBUG_ENDPOINTS_ENABLED", True)
     def test_debug_transcript_no_url(self):
         """Test debug transcript endpoint with no URL"""
         response = self.client.get("/debug_transcript")
@@ -623,6 +663,7 @@ class TestYouTubeSummarizer(unittest.TestCase):
         data = json.loads(response.data)
         self.assertIn("error", data)
 
+    @patch("app.DEBUG_ENDPOINTS_ENABLED", True)
     def test_debug_transcript_invalid_url(self):
         """Test debug transcript endpoint with invalid URL"""
         response = self.client.get("/debug_transcript?url=invalid_url")
@@ -631,6 +672,7 @@ class TestYouTubeSummarizer(unittest.TestCase):
         self.assertIn("error", data)
         self.assertIn("Invalid YouTube URL", data["error"])
 
+    @patch("app.DEBUG_ENDPOINTS_ENABLED", True)
     @patch("app.get_video_details")
     @patch("app.get_transcript")
     def test_debug_transcript_valid_url(self, mock_get_transcript, mock_get_video_details):
@@ -648,6 +690,65 @@ class TestYouTubeSummarizer(unittest.TestCase):
         self.assertEqual(data["video_title"], "Test Video")
         self.assertTrue(data["transcript_success"])
         self.assertEqual(data["transcript_length"], 15)  # Length of "Test transcript"
+
+    def test_debug_transcript_disabled_by_default(self):
+        """Debug endpoints are 404 unless ENABLE_DEBUG_ENDPOINTS is set"""
+        response = self.client.get("/debug_transcript?url=https://www.youtube.com/watch?v=dQw4w9WgXcQ")
+        self.assertEqual(response.status_code, 404)
+
+    def test_removed_debug_endpoints_are_gone(self):
+        """/debug_model, /events/status, /events/broadcast and /sse-test were removed"""
+        self.assertEqual(self.client.get("/debug_model").status_code, 404)
+        self.assertEqual(self.client.get("/events/status").status_code, 404)
+        self.assertEqual(self.client.post("/events/broadcast", json={"event_type": "test"}).status_code, 404)
+        self.assertEqual(self.client.get("/sse-test").status_code, 404)
+
+    @patch("app.get_playlist_id", side_effect=RuntimeError("secret internal detail"))
+    def test_summarize_error_does_not_leak_stack_trace(self, _mock):
+        """Unhandled errors return a generic message without traceback or exception text"""
+        response = self.client.post("/summarize", json={"urls": ["https://youtu.be/x"]})
+        self.assertEqual(response.status_code, 500)
+        body = response.get_data(as_text=True)
+        self.assertNotIn("Traceback", body)
+        self.assertNotIn("stacktrace", body)
+        self.assertNotIn("secret internal detail", body)
+
+    def test_client_ip_ignores_spoofed_forwarded_for(self):
+        """X-Forwarded-For is not trusted unless TRUST_PROXY_HOPS is configured"""
+        import app as app_module
+
+        with self.app.test_request_context(
+            "/", headers={"X-Forwarded-For": "1.2.3.4"}, environ_base={"REMOTE_ADDR": "203.0.113.9"}
+        ):
+            self.assertEqual(app_module.get_client_ip(), "203.0.113.9")
+
+    @patch("app.MAX_TTS_CHARS", 10)
+    def test_speak_rejects_overlong_text(self):
+        """/speak caps text length to bound TTS cost"""
+        response = self.client.post("/speak", json={"text": "x" * 11})
+        self.assertEqual(response.status_code, 413)
+
+    @patch("app.LOGIN_ENABLED", True)
+    def test_testing_env_var_alone_does_not_bypass_auth(self):
+        """TESTING in the environment without a TESTING app config must not disable auth"""
+        self.app.config["TESTING"] = False
+        try:
+            response = self.client.get("/", headers={"Accept": "text/html"})
+            self.assertEqual(response.status_code, 302)
+        finally:
+            self.app.config["TESTING"] = True
+
+    def test_secret_key_is_persisted_and_reused(self):
+        """Without SESSION_SECRET_KEY the generated key survives restarts"""
+        import tempfile
+
+        import app as app_module
+
+        with tempfile.TemporaryDirectory() as tmp:
+            first = app_module.load_or_create_secret_key(tmp)
+            second = app_module.load_or_create_secret_key(tmp)
+            self.assertEqual(first, second)
+            self.assertEqual(os.stat(os.path.join(tmp, ".secret_key")).st_mode & 0o777, 0o600)
 
     # --- DELETE SUMMARY TESTS ---
     @patch("app.summary_cache", {})
@@ -686,8 +787,35 @@ class TestYouTubeSummarizer(unittest.TestCase):
             # Verify cache was updated
             mock_save_cache.assert_called_once()
 
-            # Verify audio file removal was attempted
-            mock_remove.assert_called_once()
+            # Verify the legacy audio file and the /speak cache file were removed
+            import app as app_module
+
+            removed = {call.args[0] for call in mock_remove.call_args_list}
+            self.assertIn(os.path.join(app_module.AUDIO_CACHE_DIR, "test_audio.mp3"), removed)
+            prepared = app_module.prepare_tts_text("Test summary")
+            self.assertIn(app_module.speech_cache_path(app_module.TTS_VOICE, prepared), removed)
+
+    @patch("app.save_summary_cache")
+    def test_delete_summary_removes_audio_generated_by_speak(self, _mock_save):
+        """Audio cached by /speak for a summary is deleted with the summary"""
+        import tempfile
+
+        import app as app_module
+
+        with tempfile.TemporaryDirectory() as tmp, patch("app.AUDIO_CACHE_DIR", tmp):
+            summary = "A summary with & symbols."
+            audio_path = app_module.speech_cache_path(app_module.TTS_VOICE, app_module.prepare_tts_text(summary))
+            with open(audio_path, "wb") as f:
+                f.write(b"mp3")
+            with patch("app.summary_cache", {"vid1": {"title": "t", "summary": summary, "thumbnail_url": None}}):
+                response = self.client.delete("/delete_summary", json={"video_id": "vid1"})
+            self.assertEqual(response.status_code, 200)
+            self.assertFalse(os.path.exists(audio_path))
+
+    def test_preview_voice_rejects_path_traversal(self):
+        """/preview-voice must allowlist voice_id like /speak does"""
+        response = self.client.post("/preview-voice", json={"voice_id": "../../../tmp/evil", "text": "hi"})
+        self.assertEqual(response.status_code, 400)
 
     @patch("app.summary_cache", {})
     def test_delete_summary_not_found(self):
@@ -734,6 +862,8 @@ class TestYouTubeSummarizer(unittest.TestCase):
             }
         }
 
+        mock_exists.return_value = False  # no audio was ever generated
+
         with patch("app.summary_cache", test_cache):
             response = self.client.delete(
                 "/delete_summary", json={"video_id": test_video_id}, content_type="application/json"
@@ -744,8 +874,7 @@ class TestYouTubeSummarizer(unittest.TestCase):
             data = json.loads(response.data)
             self.assertTrue(data["success"])
 
-            # Audio file operations should not be called
-            mock_exists.assert_not_called()
+            # Nothing on disk, so nothing removed
             mock_remove.assert_not_called()
 
             # Cache should still be saved
@@ -882,9 +1011,10 @@ class TestYouTubeSummarizer(unittest.TestCase):
         with patch.dict(os.environ, test_vars):
             response = self.client.get("/settings")
             self.assertEqual(response.status_code, 200)
-            # Check that the values appear in the form (they'll be in value attributes)
             response_text = response.data.decode("utf-8")
-            self.assertIn('value="test_api_key"', response_text)
+            # Secrets must never be rendered into the page, only whether they are set
+            self.assertNotIn("test_api_key", response_text)
+            self.assertIn("Configured - leave blank to keep current value", response_text)
             self.assertIn("checked", response_text)  # LOGIN_ENABLED checkbox should be checked
             self.assertIn('value="10"', response_text)
 
@@ -965,6 +1095,48 @@ class TestYouTubeSummarizer(unittest.TestCase):
         self.assertTrue(data["success"])
         self.assertIn("Could not save to .env file", data["message"])
         self.assertFalse(data["env_file_saved"])
+
+    def test_settings_editable_from_remote_client_when_login_disabled(self):
+        """With login off, any client can view and change settings"""
+        with patch("app.LOGIN_ENABLED", False), patch("app.save_env_to_file") as mock_save, patch.dict(
+            os.environ, {}
+        ):
+            mock_save.return_value = True
+            remote = {"REMOTE_ADDR": "203.0.113.5"}
+            self.assertEqual(self.client.get("/settings", environ_base=remote).status_code, 200)
+            response = self.client.post(
+                "/settings",
+                data=json.dumps({"max_login_attempts": "7"}),
+                content_type="application/json",
+                environ_base=remote,
+            )
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(os.environ["MAX_LOGIN_ATTEMPTS"], "7")
+
+    def test_settings_blank_secret_keeps_existing_value(self):
+        """Secrets are rendered blank, so a blank submission must not wipe them"""
+        with patch.dict(os.environ, {"OPENAI_API_KEY": "keep-me"}), patch("app.save_env_to_file") as mock_save:
+            mock_save.return_value = True
+            response = self.client.post(
+                "/settings",
+                data=json.dumps({"openai_api_key": "", "max_login_attempts": "5"}),
+                content_type="application/json",
+            )
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(os.environ["OPENAI_API_KEY"], "keep-me")
+            self.assertNotIn("OPENAI_API_KEY", json.loads(response.data)["updated_variables"])
+
+    def test_settings_values_are_not_html_escaped(self):
+        """Secrets containing & < > must be stored verbatim"""
+        with patch.dict(os.environ, {}), patch("app.save_env_to_file") as mock_save:
+            mock_save.return_value = True
+            response = self.client.post(
+                "/settings",
+                data=json.dumps({"login_code": "a&b<c>"}),
+                content_type="application/json",
+            )
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(os.environ["LOGIN_CODE"], "a&b<c>")
 
     def test_settings_authentication_required(self):
         """Test that settings endpoints require authentication when login is enabled"""
