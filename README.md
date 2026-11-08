@@ -252,14 +252,17 @@ git clone <repository-url>
 cd youtube-summarizer
 ```
 
-### 2. Create Virtual Environment
+### 2. Create a Python 3.13 environment and install dependencies
+With [uv](https://docs.astral.sh/uv/) (downloads Python 3.13 if needed):
 ```bash
-python3 -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
+make venv                   # creates .venv and installs requirements + dev requirements
+source .venv/bin/activate   # optional: make targets use .venv automatically
 ```
 
-### 3. Install Dependencies
+Without uv, use any Python 3.13 interpreter:
 ```bash
+python3.13 -m venv .venv
+source .venv/bin/activate  # On Windows: .venv\Scripts\activate
 pip install -r requirements.txt
 ```
 

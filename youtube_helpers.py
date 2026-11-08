@@ -29,6 +29,19 @@ from youtube_transcript_api import (
 )
 from youtube_transcript_api.proxies import GenericProxyConfig
 
+
+_API_KEY_PARAM = re.compile(r"([?&]key=)[^&\s\"'>]+")
+
+
+def redact_api_key(error):
+    """Return str(error) with any ?key=... query value hidden.
+
+    googleapiclient's HttpError includes the request URL, and the YouTube
+    client is built with the API key as a query parameter.
+    """
+    return _API_KEY_PARAM.sub(r"\1<redacted>", str(error))
+
+
 # --- Injected dependencies ---
 # Set via set_youtube_client() after the API client is created in app.py
 youtube = None
@@ -123,7 +136,7 @@ def get_video_details(video_ids, max_retries=3):
         except (socket.timeout, TimeoutError, OSError) as e:
             retry_count += 1
             if retry_count > max_retries:
-                print(f"Max retries ({max_retries}) exceeded for video details. Error: {e}")
+                print(f"Max retries ({max_retries}) exceeded for video details. Error: {redact_api_key(e)}")
                 return {}
 
             # Exponential backoff with jitter
@@ -139,7 +152,10 @@ def get_video_details(video_ids, max_retries=3):
             if e.resp.status in [500, 502, 503, 504]:  # Server errors
                 retry_count += 1
                 if retry_count > max_retries:
-                    print(f"Max retries ({max_retries}) exceeded for video details. HTTP Error: {e}")
+                    print(
+                        f"Max retries ({max_retries}) exceeded for video details. "
+                        f"HTTP Error: {redact_api_key(e)}"
+                    )
                     return {}
 
                 delay = base_delay * (2 ** (retry_count - 1))
@@ -147,11 +163,11 @@ def get_video_details(video_ids, max_retries=3):
                 time.sleep(delay)
             else:
                 # For other HTTP errors, don't retry
-                print(f"Error fetching video details: {e}")
+                print(f"Error fetching video details: {redact_api_key(e)}")
                 return {}
 
         except Exception as e:
-            print(f"Unexpected error fetching video details: {e}")
+            print(f"Unexpected error fetching video details: {redact_api_key(e)}")
             return {}
 
     return {}
@@ -196,7 +212,7 @@ def get_videos_from_playlist(playlist_id, max_retries=3):
                 if retry_count > max_retries:
                     return (
                         None,
-                        f"Timeout error fetching playlist after {max_retries} retries: {e}",
+                        f"Timeout error fetching playlist after {max_retries} retries: {redact_api_key(e)}",
                     )
 
                 # Exponential backoff with jitter
@@ -214,7 +230,7 @@ def get_videos_from_playlist(playlist_id, max_retries=3):
                     if retry_count > max_retries:
                         return (
                             None,
-                            f"Server error fetching playlist after {max_retries} retries: {e}",
+                            f"Server error fetching playlist after {max_retries} retries: {redact_api_key(e)}",
                         )
 
                     delay = base_delay * (2 ** (retry_count - 1))
@@ -224,10 +240,10 @@ def get_videos_from_playlist(playlist_id, max_retries=3):
                     time.sleep(delay)
                 else:
                     # For other HTTP errors (like 403, 404), don't retry
-                    return None, f"Could not fetch playlist. Is it public? Error: {e}"
+                    return None, f"Could not fetch playlist. Is it public? Error: {redact_api_key(e)}"
 
             except Exception as e:
-                return None, f"Unexpected error fetching playlist: {e}"
+                return None, f"Unexpected error fetching playlist: {redact_api_key(e)}"
 
         if not next_page_token:
             break

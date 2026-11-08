@@ -84,6 +84,7 @@ Required: `GOOGLE_API_KEY` (YouTube, Gemini, TTS). Optional: `OPENAI_API_KEY`.
 ## Common Operations
 
 ```bash
+make venv           # Python 3.13 .venv via uv (make targets use it automatically)
 make run            # Flask dev server on :5001
 make test           # pytest suite (browser tests skip without Playwright browsers)
 make quick-test     # core app tests
@@ -105,7 +106,7 @@ Production: `gunicorn -c gunicorn_config.py app:app` (what the Dockerfile runs).
 
 Tests import `app` with `TESTING=true`, which skips real API client creation. Patch module globals such as `app.summary_cache` (a plain dict works; the routes handle both), `app.tts_client`, `ai_models.gemini_client`, `ai_models.openai_client`.
 
-CI (`.github/workflows/tests.yml`): flake8 on the app modules, pytest with coverage on Python 3.13 (the Docker image's version), a Playwright browser job, and a Docker build + `/health` smoke test. CI no longer tests 3.9 (EOL, not available on current runners); local 3.9 still works today but isn't guaranteed.
+CI (`.github/workflows/tests.yml`): flake8 on the app modules, pytest with coverage on Python 3.13 (the Docker image's version), a Playwright browser job, and a Docker build + `/health` smoke test. Locally, `make venv` creates a Python 3.13 `.venv` with uv (`.python-version` pins 3.13) and every make target uses it when present; the system `python3` on macOS is 3.9 (EOL, untested).
 
 ## Security Notes
 - Settings page never renders secret values; blank secret fields keep the current value.
