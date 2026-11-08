@@ -12,9 +12,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # 3.13 is what the Docker image runs; 3.9 is the oldest version still used
-        # for local development (EOL; drop it once local setups move on).
-        python-version: ["3.9", "3.13"]
+        # Matches the Docker image. (3.9 is EOL and no longer offered by the
+        # ubuntu-latest runners.)
+        python-version: ["3.13"]
 
     steps:
     - uses: actions/checkout@v4
@@ -49,7 +49,6 @@ jobs:
           --cov-report=xml --cov-report=term-missing -v
 
     - name: Upload coverage reports to Codecov
-      if: matrix.python-version == '3.13'
       uses: codecov/codecov-action@v5
       with:
         token: ${{ secrets.CODECOV_TOKEN }}
