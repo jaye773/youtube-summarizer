@@ -58,9 +58,8 @@ To set up the development environment and run the application, follow these step
 
 4.  **Run manually**:
     ```bash
-    python3 -m venv venv
-    source venv/bin/activate
-    pip install -r requirements.txt
+    make venv            # Python 3.13 .venv via uv (or: python3.13 -m venv .venv)
+    source .venv/bin/activate
     python app.py
     ```
 

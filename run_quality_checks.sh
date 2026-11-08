@@ -34,6 +34,11 @@ command_exists() {
     command -v "$1" >/dev/null 2>&1
 }
 
+# Use the project's .venv (created by `make venv`) when present
+if [ -x .venv/bin/python ]; then
+    export PATH="$PWD/.venv/bin:$PATH"
+fi
+
 # Banner
 echo "================================================="
 echo "YouTube Summarizer - Code Quality & Testing Suite"
@@ -48,9 +53,9 @@ echo ""
 
 # Install/upgrade development dependencies
 print_status "Installing/upgrading development dependencies..."
-pip3 install --upgrade pip >/dev/null 2>&1
-pip3 install --upgrade -r requirements-dev.txt >/dev/null 2>&1
-pip3 install --upgrade black autopep8 isort flake8 pylint >/dev/null 2>&1
+python3 -m pip install --upgrade pip >/dev/null 2>&1
+python3 -m pip install --upgrade -r requirements-dev.txt >/dev/null 2>&1
+python3 -m pip install --upgrade black autopep8 isort flake8 pylint >/dev/null 2>&1
 print_success "Development dependencies installed"
 echo ""
 
@@ -115,10 +120,10 @@ if [ "$RUN_ALL" = true ] || [ "$RUN_FORMAT" = true ]; then
     print_status "Cleaning up whitespace issues..."
     
     # Remove trailing whitespace
-    find . -name "*.py" -not -path "./venv/*" -not -path "./htmlcov/*" -exec sed -i '' 's/[[:space:]]*$//' {} \; 2>/dev/null || true
+    find . -name "*.py" -not -path "./venv/*" -not -path "./.venv/*" -not -path "./htmlcov/*" -exec sed -i '' 's/[[:space:]]*$//' {} \; 2>/dev/null || true
     
     # Add final newlines where missing
-    find . -name "*.py" -not -path "./venv/*" -not -path "./htmlcov/*" -exec sh -c 'tail -c1 {} | read -r _ || echo >> {}' \; 2>/dev/null || true
+    find . -name "*.py" -not -path "./venv/*" -not -path "./.venv/*" -not -path "./htmlcov/*" -exec sh -c 'tail -c1 {} | read -r _ || echo >> {}' \; 2>/dev/null || true
     
     print_success "Whitespace cleanup completed"
     echo ""
@@ -129,10 +134,10 @@ if [ "$RUN_ALL" = true ] || [ "$RUN_FORMAT" = true ]; then
     print_status "Sorting imports with isort..."
     
     if [ "$FIX_ISSUES" = true ]; then
-        python3 -m isort . --skip venv --skip htmlcov --line-length 120
+        python3 -m isort . --skip venv --skip .venv --skip htmlcov --line-length 120
         print_success "Imports sorted"
     else
-        if python3 -m isort . --check-only --diff --skip venv --skip htmlcov --line-length 120; then
+        if python3 -m isort . --check-only --diff --skip venv --skip .venv --skip htmlcov --line-length 120; then
             print_success "Import order is correct"
         else
             print_warning "Import order issues found. Run with --fix to auto-fix"
@@ -146,10 +151,10 @@ if [ "$RUN_ALL" = true ] || [ "$RUN_FORMAT" = true ]; then
     print_status "Checking code formatting with black..."
     
     if [ "$FIX_ISSUES" = true ]; then
-        black . --exclude='/(venv|htmlcov)/' --line-length 120
+        black . --exclude='/(\.?venv|htmlcov)/' --line-length 120
         print_success "Code formatted with black"
     else
-        if black . --check --exclude='/(venv|htmlcov)/' --line-length 120; then
+        if black . --check --exclude='/(\.?venv|htmlcov)/' --line-length 120; then
             print_success "Code formatting is correct"
         else
             print_warning "Formatting issues found. Run with --fix to auto-format"
@@ -167,7 +172,7 @@ if [ "$RUN_ALL" = true ] || [ "$RUN_LINT" = true ]; then
         cat > .flake8 << EOF
 [flake8]
 max-line-length = 120
-exclude = venv,htmlcov,.git,__pycache__
+exclude = venv,.venv,htmlcov,.git,__pycache__
 ignore = E203,W503,E501
 EOF
     fi
@@ -235,7 +240,7 @@ if [ "$RUN_ALL" = true ] || [ "$RUN_LINT" = true ]; then
     print_status "Running security checks with bandit..."
     
     if python3 -c "import bandit" 2>/dev/null; then
-        python3 -m bandit -r . -x /venv/,/htmlcov/,/tests/ -ll || true
+        python3 -m bandit -r . -x /venv/,/.venv/,/htmlcov/,/tests/ -ll || true
         print_success "Security scan completed"
     else
         print_warning "Bandit not installed. Run: pip install bandit"

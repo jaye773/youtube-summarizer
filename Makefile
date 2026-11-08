@@ -1,10 +1,13 @@
-.PHONY: help install test quick-test test-browser coverage format lint quality fix clean run docker-build docker-run all
+.PHONY: help venv install test quick-test test-browser coverage format lint quality fix clean run docker-build docker-run all
 
-PYTEST = TESTING=true python3 -m pytest
+# Use the project's .venv (Python 3.13, created by `make venv`) when it exists
+PYTHON ?= $(if $(wildcard .venv/bin/python),.venv/bin/python,python3)
+PYTEST = TESTING=true $(PYTHON) -m pytest
 
 help:
 	@echo "YouTube Summarizer - Development Commands"
 	@echo ""
+	@echo "  make venv          Create .venv with Python 3.13 (needs uv) and install dependencies"
 	@echo "  make install       Install runtime and dev dependencies"
 	@echo "  make test          Run the test suite (browser tests skip without Playwright browsers)"
 	@echo "  make quick-test    Run the core app tests only"
@@ -20,9 +23,12 @@ help:
 	@echo "  make clean         Remove caches and generated files"
 	@echo "  make all           format + lint + test"
 
+venv:
+	uv venv --python 3.13 .venv
+	uv pip install --python .venv/bin/python -r requirements.txt -r requirements-dev.txt
+
 install:
-	pip3 install -r requirements.txt
-	pip3 install -r requirements-dev.txt
+	$(PYTHON) -m pip install -r requirements.txt -r requirements-dev.txt
 
 test:
 	@$(PYTEST)
@@ -31,13 +37,13 @@ quick-test:
 	@$(PYTEST) tests/test_app.py tests/test_cache.py tests/test_transcript_and_summary.py tests/test_pagination.py
 
 test-browser:
-	@python3 -c "import playwright" 2>/dev/null || { echo "Install first: pip3 install playwright==1.64.1 && python3 -m playwright install chromium"; exit 1; }
+	@$(PYTHON) -c "import playwright" 2>/dev/null || { echo "Install first: $(PYTHON) -m pip install playwright==1.64.1 && $(PYTHON) -m playwright install chromium"; exit 1; }
 	@$(PYTEST) tests/test_browser_smoke.py -v
 
 coverage:
-	@TESTING=true python3 -m coverage run -m pytest
-	@python3 -m coverage report -m
-	@python3 -m coverage html
+	@TESTING=true $(PYTHON) -m coverage run -m pytest
+	@$(PYTHON) -m coverage report -m
+	@$(PYTHON) -m coverage html
 	@echo "Coverage report generated in htmlcov/"
 
 format:
@@ -59,7 +65,7 @@ clean:
 	@echo "Clean complete!"
 
 run:
-	@FLASK_APP=app.py FLASK_DEBUG=true python3 -m flask run --port 5001
+	@FLASK_APP=app.py FLASK_DEBUG=true $(PYTHON) -m flask run --port 5001
 
 docker-build:
 	docker compose build
