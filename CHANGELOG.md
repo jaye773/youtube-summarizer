@@ -27,6 +27,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 - Deleting a summary now deletes its cached audio
+- Long playlists no longer depend on one long HTTP request (which reverse proxies with a 60 s read timeout would cut off)
+
+### Added
+- Background summaries: `POST /summarize/start` returns `202 {request_id}` immediately and the work runs on a small thread pool (`SUMMARY_WORKERS`, default 2); `GET /summarize/<request_id>` returns status and results so far (only to the session that started it). Each result is pushed over SSE as a `summary_result` event and completion as `summary_done`, so cards render as they finish. The UI uses this flow, polls when SSE is unavailable, and falls back to `POST /summarize` on older servers. `POST /summarize` still works synchronously
+- New settings: `SUMMARY_WORKERS`, `SUMMARY_REQUEST_TTL`, `SUMMARY_MAX_REQUESTS`, `SUMMARY_MAX_ACTIVE_PER_SESSION`
 
 ### Added
 - **Webshare Proxy Support**: Added support for using webshare proxies for YouTube transcript fetching

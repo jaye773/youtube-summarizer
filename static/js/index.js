@@ -47,7 +47,7 @@ function initializeSSE() {
     }
 
     // Subscribe to summary completion and progress events
-    const subscriptions = 'summary_complete,summary_progress,system';
+    const subscriptions = 'summary_complete,summary_progress,summary_result,summary_done,system';
     eventSource = new EventSource(`/events?subscribe=${subscriptions}`);
 
     eventSource.onopen = function(event) {
@@ -75,6 +75,14 @@ function initializeSSE() {
         const data = JSON.parse(event.data);
         handleSummaryComplete(data);
         showNotification(`Summary completed: ${data.title}`, 'success');
+    });
+
+    eventSource.addEventListener('summary_result', function(event) {
+        handleSummaryResultEvent(JSON.parse(event.data));
+    });
+
+    eventSource.addEventListener('summary_done', function(event) {
+        handleSummaryDoneEvent(JSON.parse(event.data));
     });
 
     eventSource.addEventListener('system', function(event) {
@@ -612,6 +620,205 @@ async function loadInitialSummaries() {
     initializeSSE();
 }
 
+// --- BACKGROUND SUMMARY REQUESTS ---
+// POST /summarize/start queues the work and returns a request_id at once.
+// Results arrive as `summary_result` SSE events (each with a per-request `seq`)
+// and a final `summary_done` event; GET /summarize/<id> is the fallback and the
+// end-of-request reconcile. Older servers without /summarize/start get the
+// synchronous POST /summarize.
+const SUMMARY_POLL_FAST_MS = 3000;   // SSE not connected
+const SUMMARY_POLL_SLOW_MS = 15000;  // SSE connected: occasional safety reconcile
+const MAX_PENDING_SUMMARY_EVENTS = 500;
+
+let activeSummary = null;
+let summaryStartInFlight = false;
+const pendingSummaryEvents = [];
+
+async function readJsonResponse(response) {
+    // Check if the response is JSON before trying to parse it
+    const contentType = response.headers.get('content-type');
+    if (!contentType || !contentType.includes('application/json')) {
+        // If not JSON, it's likely an HTML error page
+        const text = await response.text();
+        console.error('Server returned non-JSON response:', text);
+        throw new Error('Server error: Expected JSON response but received HTML. Please check if the server is running correctly.');
+    }
+    return response.json();
+}
+
+async function summarizeSynchronously(urls, model) {
+    const response = await fetch('/summarize', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ urls: urls, model: model }),
+    });
+    const data = await readJsonResponse(response);
+    if (!response.ok) throw new Error(data.error || 'An unknown server error occurred.');
+    const newResultsContainer = document.getElementById('new-results');
+    displayResults(data, newResultsContainer, true, true);
+}
+
+function isSSEConnected() {
+    return !!eventSource && eventSource.readyState === EventSource.OPEN;
+}
+
+function handleSummaryResultEvent(data) {
+    if (activeSummary && data.request_id === activeSummary.requestId) {
+        acceptSummaryItem(activeSummary, data);
+    } else if (summaryStartInFlight && pendingSummaryEvents.length < MAX_PENDING_SUMMARY_EVENTS) {
+        // Arrived before /summarize/start answered with the request_id
+        pendingSummaryEvents.push({ type: 'result', data });
+    }
+}
+
+function handleSummaryDoneEvent(data) {
+    if (activeSummary && data.request_id === activeSummary.requestId) {
+        reconcileSummary(activeSummary);
+    } else if (summaryStartInFlight && pendingSummaryEvents.length < MAX_PENDING_SUMMARY_EVENTS) {
+        pendingSummaryEvents.push({ type: 'done', data });
+    }
+}
+
+// Resolves when the request finishes; rejects if it failed or was lost.
+function trackSummaryRequest(requestId) {
+    return new Promise((resolve, reject) => {
+        const newResultsContainer = document.getElementById('new-results');
+        const heading = ensureNewSummariesHeading(newResultsContainer);
+        const group = document.createElement('div');
+        group.className = 'summary-request-results';
+        group.dataset.requestId = requestId;
+        heading.after(group);
+
+        const tracker = {
+            requestId, group, resolve, reject,
+            nextSeq: 0,
+            buffered: new Map(),
+            playlists: {},
+            finished: false,
+            polling: false,
+            timer: null,
+        };
+        activeSummary = tracker;
+        summaryStartInFlight = false;
+
+        const pending = pendingSummaryEvents.splice(0);
+        let sawDone = false;
+        pending.forEach(evt => {
+            if (evt.data.request_id !== requestId) return;
+            if (evt.type === 'result') acceptSummaryItem(tracker, evt.data);
+            else sawDone = true;
+        });
+
+        if (sawDone) reconcileSummary(tracker);
+        else scheduleSummaryPoll(tracker);
+    });
+}
+
+function scheduleSummaryPoll(tracker) {
+    if (tracker.finished) return;
+    clearTimeout(tracker.timer);
+    const delay = isSSEConnected() ? SUMMARY_POLL_SLOW_MS : SUMMARY_POLL_FAST_MS;
+    tracker.timer = setTimeout(() => reconcileSummary(tracker), delay);
+}
+
+// Fetch the request state, render anything missed, and finish if it is done.
+async function reconcileSummary(tracker) {
+    if (tracker.finished || tracker.polling) return;
+    tracker.polling = true;
+    try {
+        const response = await fetch(`/summarize/${encodeURIComponent(tracker.requestId)}`);
+        if (response.status === 404) {
+            finishSummary(tracker, new Error('The summary request is no longer available (the server may have restarted).'));
+            return;
+        }
+        const state = await readJsonResponse(response);
+        if (!response.ok) throw new Error(state.error || `Status check failed (${response.status})`);
+        (state.items || []).forEach(item => acceptSummaryItem(tracker, item));
+        if (state.done) {
+            finishSummary(tracker, state.status === 'failed' ? new Error(state.error || 'Summarization failed.') : null);
+            return;
+        }
+    } catch (error) {
+        // Transient network problem: keep going, the next poll retries
+        console.warn('Could not fetch summary status:', error);
+    } finally {
+        tracker.polling = false;
+    }
+    scheduleSummaryPoll(tracker);
+}
+
+function finishSummary(tracker, error) {
+    if (tracker.finished) return;
+    tracker.finished = true;
+    clearTimeout(tracker.timer);
+    if (activeSummary === tracker) activeSummary = null;
+    if (!tracker.group.children.length) tracker.group.remove();
+    if (error) tracker.reject(error);
+    else tracker.resolve();
+}
+
+// Render items strictly in `seq` order; a gap (missed SSE event) triggers a status fetch.
+function acceptSummaryItem(tracker, payload) {
+    if (typeof payload.seq !== 'number' || payload.seq < tracker.nextSeq) return;
+    tracker.buffered.set(payload.seq, payload);
+    while (tracker.buffered.has(tracker.nextSeq)) {
+        renderSummaryItem(tracker, tracker.buffered.get(tracker.nextSeq));
+        tracker.buffered.delete(tracker.nextSeq);
+        tracker.nextSeq++;
+    }
+    if (tracker.buffered.size > 0 && !tracker.finished) {
+        reconcileSummary(tracker);
+    }
+}
+
+function renderSummaryItem(tracker, payload) {
+    const { kind, item, index } = payload;
+    if (!tracker.group.isConnected) {
+        // "Clear" / "Move to Previous" emptied New Summaries mid-request; start a fresh group
+        tracker.group.innerHTML = '';
+        tracker.playlists = {};
+        ensureNewSummariesHeading(document.getElementById('new-results')).after(tracker.group);
+    }
+    if (kind === 'playlist') {
+        tracker.playlists[index] = createPlaylistContainer(item.title, tracker.group);
+    } else if (kind === 'playlist_video') {
+        let playlistContainer = tracker.playlists[index];
+        if (!playlistContainer) {
+            playlistContainer = createPlaylistContainer(payload.playlist_title, tracker.group);
+            tracker.playlists[index] = playlistContainer;
+        }
+        appendVideoCard(item, playlistContainer);
+    } else if (item.type === 'playlist') {
+        const playlistContainer = createPlaylistContainer(item.title, tracker.group);
+        if (item.error) {
+            playlistContainer.innerHTML += `<div class="result-card error-card"><p>Error processing playlist: ${escapeHtml(item.error)}</p></div>`;
+        }
+        (item.summaries || []).forEach(video => appendVideoCard(video, playlistContainer));
+    } else if (item.type === 'video') {
+        appendVideoCard(item, tracker.group);
+    } else if (item.type === 'error') {
+        tracker.group.appendChild(createResultCard(item.url, null, item.error, null, null, null));
+    }
+}
+
+function createPlaylistContainer(title, parent) {
+    const playlistContainer = document.createElement('div');
+    playlistContainer.className = 'playlist-container';
+    playlistContainer.innerHTML = `<h2>Playlist: ${escapeHtml(title)}</h2>`;
+    parent.appendChild(playlistContainer);
+    return playlistContainer;
+}
+
+function appendVideoCard(video, parent) {
+    // A re-summarized video replaces its earlier card in New Summaries
+    if (video.video_id) {
+        const newResultsContainer = document.getElementById('new-results');
+        const existing = newResultsContainer.querySelector(`.result-card[data-video-id="${CSS.escape(video.video_id)}"]`);
+        if (existing) existing.remove();
+    }
+    parent.appendChild(createResultCard(video.title, video.summary, video.error, video.thumbnail_url, video.video_id, video.video_url));
+}
+
 summarizeBtn.addEventListener('click', async () => {
     if (currentAudioPlayer.state !== 'stopped') {
         player.pause();
@@ -627,7 +834,9 @@ summarizeBtn.addEventListener('click', async () => {
     loader.classList.add('active');
     try {
         const selectedModel = document.getElementById('model-select').value;
-        const response = await fetch('/summarize', {
+        summaryStartInFlight = true;
+        pendingSummaryEvents.length = 0;
+        const response = await fetch('/summarize/start', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -636,24 +845,24 @@ summarizeBtn.addEventListener('click', async () => {
             }),
         });
 
-        // Check if the response is JSON before trying to parse it
-        const contentType = response.headers.get('content-type');
-        if (!contentType || !contentType.includes('application/json')) {
-            // If not JSON, it's likely an HTML error page
-            const text = await response.text();
-            console.error('Server returned non-JSON response:', text);
-            throw new Error('Server error: Expected JSON response but received HTML. Please check if the server is running correctly.');
+        if (response.status === 404) {
+            // Older server without background requests
+            summaryStartInFlight = false;
+            pendingSummaryEvents.length = 0;
+            await summarizeSynchronously(urls, selectedModel);
+        } else {
+            const data = await readJsonResponse(response);
+            // 429 (rate limited / too many requests) and 400s carry a message in `error`
+            if (!response.ok) throw new Error(data.error || data.message || 'An unknown server error occurred.');
+            await trackSummaryRequest(data.request_id);
         }
-
-        const data = await response.json();
-        if (!response.ok) throw new Error(data.error || 'An unknown server error occurred.');
-        const newResultsContainer = document.getElementById('new-results');
-        displayResults(data, newResultsContainer, true, true);
         linksTextarea.value = '';
 
         // Refresh pagination to show updated summaries
         await loadPaginatedSummaries(currentPage, currentPageSize);
     } catch (error) {
+        summaryStartInFlight = false;
+        pendingSummaryEvents.length = 0;
         console.error('Error during summarization:', error);
         alert(`An Error Occurred: ${error.message}`);
     } finally {
@@ -817,25 +1026,30 @@ async function handleDeleteClick(button, videoId, card) {
 }
 
 // --- HTML Creation and Display Logic ---
+function ensureNewSummariesHeading(container) {
+    // Check if heading already exists
+    let heading = container.querySelector('.new-summaries-heading');
+    if (!heading) {
+        heading = document.createElement('h2');
+        heading.className = 'new-summaries-heading';
+        heading.innerHTML = `
+            <span>New Summaries</span>
+            <div style="display: flex; gap: 10px;">
+                <button class="clear-new-btn" onclick="moveNewToPrevious()" title="Move to Previously Summarized">Move to Previous</button>
+                <button class="clear-new-btn" onclick="clearNewSummaries()" title="Clear from view">Clear</button>
+            </div>
+        `;
+        container.appendChild(heading);
+    }
+    return heading;
+}
+
 function displayResults(data, container, prepend = false, isNewSummary = false) {
     if (data.length === 0) return;
 
     // Add heading for new summaries if this is the first item
     if (isNewSummary && container.id === 'new-results') {
-        // Check if heading already exists
-        let heading = container.querySelector('.new-summaries-heading');
-        if (!heading) {
-            heading = document.createElement('h2');
-            heading.className = 'new-summaries-heading';
-            heading.innerHTML = `
-                <span>New Summaries</span>
-                <div style="display: flex; gap: 10px;">
-                    <button class="clear-new-btn" onclick="moveNewToPrevious()" title="Move to Previously Summarized">Move to Previous</button>
-                    <button class="clear-new-btn" onclick="clearNewSummaries()" title="Clear from view">Clear</button>
-                </div>
-            `;
-            container.appendChild(heading);
-        }
+        ensureNewSummariesHeading(container);
     }
     data.forEach(item => {
         if (item.type === 'playlist') {

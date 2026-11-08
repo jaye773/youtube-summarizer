@@ -55,6 +55,7 @@ from tts_helpers import clean_text_for_tts, synthesize_audio
 from cache import build_cache_entry, load_summary_cache, save_summary_cache
 import ai_models
 import sse
+import summary_jobs
 from ai_models import (
     AVAILABLE_MODELS,
     DEFAULT_MODEL,
@@ -551,7 +552,9 @@ def get_cached_summaries():
             "video_url": d.get("video_url"),
             "error": None,
         }
-        for video_id, d in summary_cache.items()
+        # list() snapshots the items so background summary threads adding entries
+        # cannot break the iteration
+        for video_id, d in list(summary_cache.items())
     ]
     cached_list.sort(key=lambda x: x.get("summarized_at", "1970-01-01T00:00:00.000000"), reverse=True)
 
@@ -606,7 +609,7 @@ def search_summaries():
 
     # Perform case-insensitive search in both title and summary
     results = []
-    for video_id, data in summary_cache.items():
+    for video_id, data in list(summary_cache.items()):
         title = data.get("title", "").lower()
         summary = data.get("summary", "").lower()
         query_lower = query.lower()
@@ -718,8 +721,32 @@ def _summarize_and_cache(vid_id, vid_title, thumbnail_url, model_key):
     return summary, err
 
 
-def _process_playlist_url(url, playlist_id, model_key, session_id, processed_count):
-    """Process a playlist URL and return (result_dict, videos_processed_count)."""
+class _ResultEmitter:
+    """Reports per-result events for one input URL to an optional callback.
+
+    The background path uses the callback to record results and push them over
+    SSE as they finish; the synchronous path passes no callback.
+    """
+
+    def __init__(self, on_event, index):
+        self._on_event = on_event
+        self.index = index
+        self.streamed_playlist = False
+
+    def __call__(self, kind, item, **extra):
+        if kind == "playlist":
+            self.streamed_playlist = True
+        if self._on_event is not None:
+            self._on_event(dict(extra, index=self.index, kind=kind, item=item))
+
+
+def _process_playlist_url(url, playlist_id, model_key, session_id, processed_count, emit=None):
+    """Process a playlist URL and return (result_dict, videos_processed_count).
+
+    ``emit`` (a ``_ResultEmitter``) receives a ``playlist`` event once the
+    playlist is known and a ``playlist_video`` event for each finished video.
+    """
+    emit = emit or _ResultEmitter(None, None)
     if not youtube:
         return {"type": "error", "url": url, "error": "YouTube API client not initialized"}, 0
 
@@ -734,6 +761,7 @@ def _process_playlist_url(url, playlist_id, model_key, session_id, processed_cou
         return {"type": "playlist", "title": playlist_title, "error": error, "summaries": []}, 0
 
     total_videos = len(playlist_items)
+    emit("playlist", {"type": "playlist", "title": playlist_title, "summaries": []})
     _notify_progress(session_id, {
         "status": "processing",
         "message": f"Processing playlist with {total_videos} videos",
@@ -743,6 +771,11 @@ def _process_playlist_url(url, playlist_id, model_key, session_id, processed_cou
     })
 
     playlist_summaries = []
+
+    def add_video(video):
+        playlist_summaries.append(video)
+        emit("playlist_video", video, playlist_title=playlist_title)
+
     for index, item in enumerate(playlist_items):
         snippet = item.get("snippet", {})
         vid_id = snippet.get("resourceId", {}).get("videoId")
@@ -758,7 +791,7 @@ def _process_playlist_url(url, playlist_id, model_key, session_id, processed_cou
         })
 
         if vid_title in ["Private video", "Deleted video"]:
-            playlist_summaries.append({
+            add_video({
                 "video_id": vid_id, "title": vid_title, "thumbnail_url": thumbnail_url,
                 "summary": None, "error": "Video is private or deleted.",
             })
@@ -766,7 +799,7 @@ def _process_playlist_url(url, playlist_id, model_key, session_id, processed_cou
 
         if vid_id in summary_cache:
             cached_item = summary_cache[vid_id]
-            playlist_summaries.append({
+            add_video({
                 "video_id": vid_id, "title": cached_item["title"],
                 "thumbnail_url": cached_item["thumbnail_url"],
                 "summary": cached_item["summary"],
@@ -785,7 +818,7 @@ def _process_playlist_url(url, playlist_id, model_key, session_id, processed_cou
                 "model_used": model_key, "playlist": playlist_title,
             })
 
-        playlist_summaries.append({
+        add_video({
             "video_id": vid_id, "title": vid_title, "thumbnail_url": thumbnail_url,
             "summary": summary, "video_url": f"https://www.youtube.com/watch?v={vid_id}",
             "error": err,
@@ -833,76 +866,181 @@ def _process_video_url(video_id, model_key, session_id, processed_count, total_u
     }
 
 
+def _run_summary_batch(urls, model_key, session_id, on_event=None):
+    """Summarize every URL in order and return the list of results.
+
+    Shared by the synchronous ``/summarize`` route and background requests.
+    An error in one URL is recorded in its result and does not stop the batch.
+
+    ``on_event(payload)`` is called as results finish. Payloads carry ``index``
+    (position in ``urls``), ``kind`` and ``item``:
+      - ``item``: a complete top-level result (video, error, or failed playlist)
+      - ``playlist``: a playlist started (``item`` has an empty ``summaries``)
+      - ``playlist_video``: one finished playlist video (plus ``playlist_title``)
+    """
+    # Send initial progress notification
+    has_playlists = any(get_playlist_id(url) for url in urls)
+    if has_playlists:
+        _notify_progress(session_id, {
+            "status": "starting", "message": "Analyzing URLs and counting videos...",
+            "progress": 0, "total": None,
+        })
+    else:
+        total_items = sum(1 for url in urls if get_video_id(url))
+        _notify_progress(session_id, {
+            "status": "starting", "message": f"Starting to process {total_items} videos",
+            "progress": 0, "total": total_items,
+        })
+
+    results = []
+    processed_count = 0
+    for index, url in enumerate(urls):
+        emit = _ResultEmitter(on_event, index)
+        playlist_id, video_id = get_playlist_id(url), get_video_id(url)
+
+        if playlist_id:
+            try:
+                result, count = _process_playlist_url(
+                    url, playlist_id, model_key, session_id, processed_count, emit=emit
+                )
+                processed_count += count
+                if not emit.streamed_playlist:
+                    emit("item", result)
+            except Exception as e:
+                app.logger.warning(f"Playlist {playlist_id} failed: {e}\n{traceback.format_exc()}")
+                result = {
+                    "type": "playlist", "title": "Unknown Playlist",
+                    "error": f"An unexpected error occurred: {e}", "summaries": [],
+                }
+                emit("item", result)
+            results.append(result)
+
+        elif video_id:
+            processed_count += 1
+            try:
+                result = _process_video_url(video_id, model_key, session_id, processed_count, len(urls))
+            except Exception as e:
+                app.logger.warning(f"Video {video_id} failed: {e}\n{traceback.format_exc()}")
+                result = {
+                    "type": "video", "video_id": video_id,
+                    "title": "Unknown Video", "error": f"Failed to process video: {e}",
+                }
+            emit("item", result)
+            results.append(result)
+        else:
+            result = {"type": "error", "url": url, "error": "Invalid or unsupported YouTube URL."}
+            emit("item", result)
+            results.append(result)
+
+    _notify_progress(session_id, {
+        "status": "completed", "message": "All summaries completed!",
+        "progress": processed_count, "total": processed_count, "results_count": len(results),
+    })
+    return results
+
+
+def _parse_summarize_request():
+    """Validate a /summarize-style JSON body.
+
+    Returns (urls, model_key, None) or (None, None, error_response).
+    """
+    data = request.get_json(silent=True)
+    if not data or not isinstance(data, dict):
+        return None, None, (jsonify({"error": "Invalid JSON in request body"}), 400)
+    urls = data.get("urls", [])
+    if not urls:
+        return None, None, (jsonify({"error": "No URLs provided"}), 400)
+    if not isinstance(urls, list) or not all(isinstance(url, str) for url in urls):
+        return None, None, (jsonify({"error": "urls must be a list of strings"}), 400)
+
+    model_key = data.get("model", DEFAULT_MODEL)
+    if model_key not in AVAILABLE_MODELS:
+        available_models = list(AVAILABLE_MODELS.keys())
+        return None, None, (
+            jsonify({"error": f"Unsupported model: {model_key}. Available models: {available_models}"}), 400
+        )
+    return urls, model_key, None
+
+
 @app.route("/summarize", methods=["POST"])
 @require_auth
 def summarize_links():
+    """Summarize all URLs within this request and return every result (kept for API clients)."""
     try:
-        data = request.get_json()
-        if not data:
-            return jsonify({"error": "Invalid JSON in request body"}), 400
-        urls = data.get("urls", [])
-        if not urls:
-            return jsonify({"error": "No URLs provided"}), 400
-
-        model_key = data.get("model", DEFAULT_MODEL)
-        if model_key not in AVAILABLE_MODELS:
-            available_models = list(AVAILABLE_MODELS.keys())
-            return jsonify({"error": f"Unsupported model: {model_key}. Available models: {available_models}"}), 400
-
-        session_id = session.get("session_id")
-
-        # Send initial progress notification
-        has_playlists = any(get_playlist_id(url) for url in urls)
-        if has_playlists:
-            _notify_progress(session_id, {
-                "status": "starting", "message": "Analyzing URLs and counting videos...",
-                "progress": 0, "total": None,
-            })
-        else:
-            total_items = sum(1 for url in urls if get_video_id(url))
-            _notify_progress(session_id, {
-                "status": "starting", "message": f"Starting to process {total_items} videos",
-                "progress": 0, "total": total_items,
-            })
-
-        results = []
-        processed_count = 0
-        for url in urls:
-            playlist_id, video_id = get_playlist_id(url), get_video_id(url)
-
-            if playlist_id:
-                try:
-                    result, count = _process_playlist_url(url, playlist_id, model_key, session_id, processed_count)
-                    results.append(result)
-                    processed_count += count
-                except Exception as e:
-                    results.append({
-                        "type": "playlist", "title": "Unknown Playlist",
-                        "error": f"An unexpected error occurred: {e}", "summaries": [],
-                    })
-
-            elif video_id:
-                processed_count += 1
-                try:
-                    result = _process_video_url(video_id, model_key, session_id, processed_count, len(urls))
-                    results.append(result)
-                except Exception as e:
-                    results.append({
-                        "type": "video", "video_id": video_id,
-                        "title": "Unknown Video", "error": f"Failed to process video: {e}",
-                    })
-            else:
-                results.append({"type": "error", "url": url, "error": "Invalid or unsupported YouTube URL."})
-
-        _notify_progress(session_id, {
-            "status": "completed", "message": "All summaries completed!",
-            "progress": processed_count, "total": processed_count, "results_count": len(results),
-        })
-
-        return jsonify(results)
+        urls, model_key, error_response = _parse_summarize_request()
+        if error_response:
+            return error_response
+        return jsonify(_run_summary_batch(urls, model_key, session.get("session_id")))
     except Exception as e:
         app.logger.error(f"Unhandled exception in /summarize: {str(e)}\n{traceback.format_exc()}")
         return jsonify({"error": "An unexpected error occurred while processing your request"}), 500
+
+
+def _run_background_summary(request_id, urls, model_key, session_id):
+    """Executor job for /summarize/start: record and push each result as it finishes."""
+    store = summary_jobs.store
+    store.mark_running(request_id)
+
+    def on_event(payload):
+        stored = store.add_item(request_id, payload)
+        if stored is not None:
+            sse.broadcast(
+                "summary_result", dict(stored, request_id=request_id),
+                session_filter=session_id, subscription_filter="summary_result",
+            )
+
+    status, error, results_count = summary_jobs.STATUS_COMPLETED, None, 0
+    try:
+        results = _run_summary_batch(urls, model_key, session_id, on_event)
+        results_count = len(results)
+        store.finish(request_id, results=results)
+    except Exception as e:
+        app.logger.error(f"Background summary {request_id} failed: {e}\n{traceback.format_exc()}")
+        status, error = summary_jobs.STATUS_FAILED, "An unexpected error occurred while processing your request"
+        store.finish(request_id, error=error)
+
+    sse.broadcast(
+        "summary_done",
+        {"request_id": request_id, "status": status, "error": error, "results_count": results_count},
+        session_filter=session_id, subscription_filter="summary_done",
+    )
+
+
+@app.route("/summarize/start", methods=["POST"])
+@require_auth
+def start_summary():
+    """Queue a summary request and return 202 with its id; results arrive over SSE and GET."""
+    urls, model_key, error_response = _parse_summarize_request()
+    if error_response:
+        return error_response
+
+    session_id = session.get("session_id")
+    try:
+        request_id = summary_jobs.store.create(session_id, urls, model_key)
+    except summary_jobs.StoreFullError as e:
+        return jsonify({"error": str(e)}), 429
+
+    try:
+        summary_jobs.executor.submit(_run_background_summary, request_id, list(urls), model_key, session_id)
+    except RuntimeError:  # executor shut down (process exiting)
+        summary_jobs.store.discard(request_id)
+        return jsonify({"error": "The server is shutting down; try again shortly."}), 503
+
+    return jsonify({
+        "request_id": request_id,
+        "status": summary_jobs.STATUS_QUEUED,
+        "status_url": url_for("summary_status", request_id=request_id),
+    }), 202
+
+
+@app.route("/summarize/<request_id>", methods=["GET"])
+@require_auth
+def summary_status(request_id):
+    """Status and results so far of a background request; 404 unless this session started it."""
+    state = summary_jobs.store.get(request_id, session.get("session_id"))
+    if state is None:
+        return jsonify({"error": "Summary request not found"}), 404
+    return jsonify(state)
 
 
 @app.route("/speak", methods=["POST"])

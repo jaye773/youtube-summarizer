@@ -33,7 +33,7 @@ jobs:
 
     - name: Run linting
       run: |
-        flake8 app.py ai_models.py auth.py cache.py sse.py tts_helpers.py youtube_helpers.py \
+        flake8 app.py ai_models.py auth.py cache.py sse.py summary_jobs.py tts_helpers.py youtube_helpers.py \
           voice_config.py gunicorn_config.py --max-line-length=120 --exclude=venv,__pycache__
 
     - name: Run tests with coverage
