@@ -39,11 +39,6 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 try:
     from app import app as flask_app
-    from sse_manager import SSEManager
-    from job_models import JobRequest, JobType, JobPriority, JobStatus
-    from job_queue import JobQueue
-    from worker_manager import WorkerManager
-    from voice_config import VoiceConfigManager
 except ImportError as e:
     flask_app = None
     print(f"Warning: Could not import application modules: {e}")

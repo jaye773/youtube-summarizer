@@ -36,10 +36,10 @@ class TestYouTubeSummarizer(unittest.TestCase):
 
     @patch("app.LOGIN_ENABLED", True)
     def test_health_endpoints_are_public(self):
-        """/health and /sse/health must respond 200 without auth (container health checks)."""
+        """/health must respond 200 without auth (container health checks)."""
         if "TESTING" in os.environ:
             del os.environ["TESTING"]
-        for path in ("/health", "/sse/health"):
+        for path in ("/health",):
             response = self.client.get(path)
             self.assertEqual(response.status_code, 200, path)
             self.assertEqual(response.get_json()["status"], "ok")

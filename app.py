@@ -1,4 +1,3 @@
-import atexit
 import hashlib  # For generating filenames
 import hmac  # For constant-time passcode comparison
 import html  # For HTML escaping user inputs
@@ -11,20 +10,6 @@ import traceback
 import uuid
 from datetime import datetime, timedelta, timezone
 from queue import Empty, Queue
-
-# Import new worker system modules
-try:
-    from job_models import create_playlist_job, create_video_job
-    from job_state import JobStateManager
-    from sse_manager import get_sse_manager
-    from worker_manager import WorkerManager
-
-    WORKER_SYSTEM_AVAILABLE = True
-    print("✅ Worker system modules imported successfully")
-except ImportError as e:
-    WORKER_SYSTEM_AVAILABLE = False
-    print(f"⚠️ Worker system not available: {e}")
-    print("   Falling back to synchronous processing only")
 
 import socket
 
@@ -240,72 +225,6 @@ print(f"✅ Audio cache directory is set to: '{AUDIO_CACHE_DIR}/'")
 summary_cache = load_summary_cache(SUMMARY_CACHE_FILE)
 print(f"✅ Loaded {len(summary_cache)} summaries from cache.")
 
-# Initialize worker system (will be called after API initialization)
-worker_manager = None
-job_state_manager = None
-new_sse_manager = None
-
-
-def init_worker_system():
-    """Initialize the async worker system"""
-    global worker_manager, job_state_manager, new_sse_manager
-
-    if not WORKER_SYSTEM_AVAILABLE:
-        print("⚠️ Worker system not available - running in synchronous mode only")
-        return False
-
-    try:
-        if worker_manager is None:
-            print("🚀 Initializing async worker system...")
-
-            # Initialize managers
-            job_state_manager = JobStateManager()
-            new_sse_manager = get_sse_manager()
-
-            # Initialize worker manager
-            max_workers = int(os.environ.get("WORKER_THREADS", "3"))
-            worker_manager = WorkerManager(
-                num_workers=max_workers,
-                max_queue_size=int(os.environ.get("WORKER_MAX_QUEUE_SIZE", "100")),
-                rate_limit_per_minute=int(os.environ.get("WORKER_RATE_LIMIT", "60")),
-            )
-
-            # Set up app context functions in the worker manager
-            # (These will be passed to worker threads to avoid circular imports)
-            worker_manager.set_app_functions(
-                {
-                    "summary_cache": summary_cache,
-                    "youtube": youtube,
-                    "tts_client": tts_client,
-                    "gemini_model": gemini_model,
-                    "openai_client": openai_client,
-                    "clean_youtube_url": clean_youtube_url,
-                    "get_transcript": get_transcript,
-                    "generate_summary": generate_summary,
-                    "get_video_details": get_video_details,
-                    "load_summary_cache": lambda: load_summary_cache(SUMMARY_CACHE_FILE),
-                    "save_summary_cache": lambda cache: save_summary_cache(cache, SUMMARY_CACHE_FILE),
-                    "extract_video_id": get_video_id,
-                    "extract_playlist_id": get_playlist_id,
-                    "get_videos_from_playlist": get_videos_from_playlist,
-                    "sse_manager": new_sse_manager,
-                }
-            )
-
-            # Start the worker system
-            worker_manager.start()
-
-            print(f"✅ Worker system initialized with {worker_manager.max_workers} worker threads")
-            return True
-
-    except Exception as e:
-        print(f"❌ Failed to initialize worker system: {e}")
-        print("   Falling back to synchronous processing only")
-        worker_manager = None
-        job_state_manager = None
-        new_sse_manager = None
-        return False
-
 
 # --- ENVIRONMENT VARIABLE PERSISTENCE ---
 def save_env_to_file(env_vars, filename=".env"):
@@ -439,8 +358,6 @@ model = gemini_model
 youtube_helpers.set_youtube_client(youtube)
 ai_models.set_clients(gemini=gemini_model, openai_cli=openai_client)
 
-# Worker system will be initialized after all functions are defined
-
 
 # --- HELPER FUNCTIONS ---
 def get_client_ip():
@@ -475,11 +392,6 @@ def settings_writes_allowed():
     return request.remote_addr in ("127.0.0.1", "::1")
 
 
-# --- INITIALIZE WORKER SYSTEM ---
-# Initialize worker system now that all functions are defined
-init_worker_system()
-
-
 # --- API ENDPOINTS ---
 
 
@@ -498,25 +410,9 @@ def ensure_session_id():
 
 
 @app.route("/health")
-@app.route("/sse/health")
 def health_check():
-    """Lightweight, unauthenticated health endpoint for container/orchestration
-    health checks (referenced by the Docker/compose configs). Reports liveness
-    plus a quick view of the worker subsystem."""
-    worker_running = bool(
-        WORKER_SYSTEM_AVAILABLE and worker_manager is not None and getattr(worker_manager, "is_running", False)
-    )
-    return (
-        jsonify(
-            {
-                "status": "ok",
-                "worker_system_available": WORKER_SYSTEM_AVAILABLE,
-                "worker_running": worker_running,
-                "sse_connections": len(sse_connections),
-            }
-        ),
-        200,
-    )
+    """Lightweight, unauthenticated liveness endpoint for container health checks."""
+    return jsonify({"status": "ok", "sse_connections": len(sse_connections)}), 200
 
 
 @app.route("/")
@@ -1283,118 +1179,6 @@ def summarize_links():
         }), 500
 
 
-# New async endpoints for worker system
-@app.route("/summarize_async", methods=["POST"])
-@require_auth
-def summarize_async():
-    """Async version of summarize - submits jobs to worker queue"""
-    if not WORKER_SYSTEM_AVAILABLE or worker_manager is None:
-        # Fall back to synchronous processing
-        return redirect(url_for("summarize_links"))
-
-    try:
-        data = request.get_json()
-        if not data:
-            return jsonify({"error": "Invalid JSON in request body"}), 400
-
-        urls_input = data.get("urls", "").strip()
-        model_key = data.get("model", "gemini-2.5-flash")
-
-        if not urls_input:
-            return jsonify({"error": "No URLs provided"}), 400
-
-        # Parse URLs
-        urls = [url.strip() for url in urls_input.replace("\n", " ").split() if url.strip()]
-
-        if not urls:
-            return jsonify({"error": "No valid URLs provided"}), 400
-
-        # Submit jobs to worker queue
-        job_ids = []
-        failures = []
-        client_ip = get_client_ip()
-        session_id = session.get("session_id", str(uuid.uuid4()))
-        session["session_id"] = session_id
-
-        for url in urls:
-            video_id = get_video_id(url)
-            playlist_id = get_playlist_id(url)
-
-            if video_id:
-                # Single video job
-                job = create_video_job(url=url, model_key=model_key, session_id=session_id)
-            elif playlist_id:
-                # Playlist job - video IDs are fetched by the worker during processing
-                job = create_playlist_job(url=url, video_ids=[], model_key=model_key, session_id=session_id)
-            else:
-                failures.append({"url": url, "error": "Not a valid YouTube video or playlist URL"})
-                continue
-
-            # submit_job returns (success, message); a failure tuple is truthy,
-            # so it must be unpacked rather than tested directly. Pass client_ip
-            # so the per-IP rate limiter actually applies.
-            success, message = worker_manager.submit_job(job, client_ip)
-            if success:
-                job_ids.append(job.job_id)
-            else:
-                failures.append({"url": url, "error": message})
-
-        if not job_ids:
-            error_detail = failures[0]["error"] if failures else "No valid URLs to submit"
-            return jsonify({"error": f"Failed to submit any jobs: {error_detail}", "failures": failures}), 500
-
-        return jsonify(
-            {
-                "success": True,
-                "message": f"Submitted {len(job_ids)} jobs for processing",
-                "job_ids": job_ids,
-                "failures": failures,
-                "session_id": session_id,
-            }
-        )
-
-    except Exception as e:
-        app.logger.error(f"Error in summarize_async: {e}")
-        return jsonify({"error": str(e)}), 500
-
-
-@app.route("/jobs/<job_id>/status", methods=["GET"])
-@require_auth
-def get_job_status(job_id):
-    """Get job status and progress"""
-    if not WORKER_SYSTEM_AVAILABLE or job_state_manager is None:
-        return jsonify({"error": "Worker system not available"}), 503
-
-    try:
-        status = job_state_manager.get_job_status(job_id)
-        if status is None:
-            return jsonify({"error": "Job not found"}), 404
-
-        return jsonify(status)
-
-    except Exception as e:
-        app.logger.error(f"Error getting job status: {e}")
-        return jsonify({"error": str(e)}), 500
-
-
-@app.route("/jobs", methods=["GET"])
-@require_auth
-def list_jobs():
-    """List all jobs with optional filtering"""
-    if not WORKER_SYSTEM_AVAILABLE or job_state_manager is None:
-        return jsonify({"jobs": []})
-
-    try:
-        status_filter = request.args.get("status")
-        jobs = job_state_manager.get_all_jobs(status_filter=status_filter)
-
-        return jsonify({"jobs": jobs})
-
-    except Exception as e:
-        app.logger.error(f"Error listing jobs: {e}")
-        return jsonify({"error": str(e)}), 500
-
-
 @app.route("/speak", methods=["POST"])
 @require_auth
 def speak():
@@ -1924,33 +1708,10 @@ def handle_exception(e):
     return e
 
 
-# Graceful shutdown handler
-def cleanup_worker_system():
-    """Cleanup function for application shutdown"""
-    if worker_manager:
-        print("🔄 Shutting down worker system gracefully...")
-        worker_manager.stop()
-        print("✅ Worker system shutdown complete")
-
-    if new_sse_manager:
-        print("🔄 Shutting down SSE manager...")
-        new_sse_manager.shutdown()
-        print("✅ SSE manager shutdown complete")
-
-
-# Register cleanup function
-atexit.register(cleanup_worker_system)
-
-
 if __name__ == "__main__":
-    try:
-        # Debug mode is OFF by default; opt in with FLASK_DEBUG=true for local dev only.
-        # The Werkzeug debugger allows remote code execution, so it must never
-        # default on for a deployed instance.
-        debug_mode = os.environ.get("FLASK_DEBUG", "false").lower() == "true"
-        print(f"🚀 Starting YouTube Summarizer on port 5001 (debug={debug_mode})")
-        app.run(debug=debug_mode, port=5001)
-    except KeyboardInterrupt:
-        print("\n🔄 Received shutdown signal, cleaning up...")
-        cleanup_worker_system()
-        print("👋 Shutdown complete")
+    # Debug mode is OFF by default; opt in with FLASK_DEBUG=true for local dev only.
+    # The Werkzeug debugger allows remote code execution, so it must never
+    # default on for a deployed instance.
+    debug_mode = os.environ.get("FLASK_DEBUG", "false").lower() == "true"
+    print(f"🚀 Starting YouTube Summarizer on port 5001 (debug={debug_mode})")
+    app.run(debug=debug_mode, port=5001, threaded=True)
