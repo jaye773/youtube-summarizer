@@ -921,9 +921,10 @@ class TestYouTubeSummarizer(unittest.TestCase):
         with patch.dict(os.environ, test_vars):
             response = self.client.get("/settings")
             self.assertEqual(response.status_code, 200)
-            # Check that the values appear in the form (they'll be in value attributes)
             response_text = response.data.decode("utf-8")
-            self.assertIn('value="test_api_key"', response_text)
+            # Secrets must never be rendered into the page, only whether they are set
+            self.assertNotIn("test_api_key", response_text)
+            self.assertIn("Configured - leave blank to keep current value", response_text)
             self.assertIn("checked", response_text)  # LOGIN_ENABLED checkbox should be checked
             self.assertIn('value="10"', response_text)
 
@@ -1004,6 +1005,55 @@ class TestYouTubeSummarizer(unittest.TestCase):
         self.assertTrue(data["success"])
         self.assertIn("Could not save to .env file", data["message"])
         self.assertFalse(data["env_file_saved"])
+
+    def test_settings_post_rejected_from_remote_when_login_disabled(self):
+        """With login disabled, settings can only be changed from localhost"""
+        with patch("app.LOGIN_ENABLED", False), patch("app.save_env_to_file") as mock_save:
+            response = self.client.post(
+                "/settings",
+                data=json.dumps({"google_api_key": "attacker"}),
+                content_type="application/json",
+                environ_base={"REMOTE_ADDR": "203.0.113.5"},
+            )
+            self.assertEqual(response.status_code, 403)
+            mock_save.assert_not_called()
+
+    def test_settings_post_spoofed_forwarded_for_does_not_count_as_local(self):
+        """X-Forwarded-For: 127.0.0.1 must not unlock settings for a remote client"""
+        with patch("app.LOGIN_ENABLED", False):
+            response = self.client.post(
+                "/settings",
+                data=json.dumps({"google_api_key": "attacker"}),
+                content_type="application/json",
+                headers={"X-Forwarded-For": "127.0.0.1"},
+                environ_base={"REMOTE_ADDR": "203.0.113.5"},
+            )
+            self.assertEqual(response.status_code, 403)
+
+    def test_settings_blank_secret_keeps_existing_value(self):
+        """Secrets are rendered blank, so a blank submission must not wipe them"""
+        with patch.dict(os.environ, {"OPENAI_API_KEY": "keep-me"}), patch("app.save_env_to_file") as mock_save:
+            mock_save.return_value = True
+            response = self.client.post(
+                "/settings",
+                data=json.dumps({"openai_api_key": "", "max_login_attempts": "5"}),
+                content_type="application/json",
+            )
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(os.environ["OPENAI_API_KEY"], "keep-me")
+            self.assertNotIn("OPENAI_API_KEY", json.loads(response.data)["updated_variables"])
+
+    def test_settings_values_are_not_html_escaped(self):
+        """Secrets containing & < > must be stored verbatim"""
+        with patch.dict(os.environ, {}), patch("app.save_env_to_file") as mock_save:
+            mock_save.return_value = True
+            response = self.client.post(
+                "/settings",
+                data=json.dumps({"login_code": "a&b<c>"}),
+                content_type="application/json",
+            )
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(os.environ["LOGIN_CODE"], "a&b<c>")
 
     def test_settings_authentication_required(self):
         """Test that settings endpoints require authentication when login is enabled"""
