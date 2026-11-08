@@ -823,6 +823,12 @@
                     body: JSON.stringify({ text: textToSpeak }),
                 });
                 if (!response.ok) {
+                    if (response.status === 429) {
+                        const data = await response.json().catch(() => ({}));
+                        const err = new Error(data.error || 'Too many requests. Please wait a moment and try again.');
+                        err.userMessage = err.message;
+                        throw err;
+                    }
                     const contentType = response.headers.get('content-type');
                     if (contentType && contentType.includes('text/html')) {
                         throw new Error('Server returned an error page. The server might be experiencing issues.');
@@ -836,7 +842,7 @@
                 button.textContent = '⏹️';
             } catch (error) {
                 console.error('Error fetching speech:', error);
-                alert('Sorry, could not generate speech for this summary.');
+                alert(error.userMessage || 'Sorry, could not generate speech for this summary.');
                 resetAudioPlayerUI();
             } finally {
                 button.disabled = false;

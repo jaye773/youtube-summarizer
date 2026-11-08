@@ -10,9 +10,11 @@ import httplib2
 import openai
 from dotenv import load_dotenv
 from flask import Flask, Response, jsonify, redirect, render_template, request, session, url_for
+from flask_limiter import Limiter
 from google.api_core.client_options import ClientOptions
 from google.cloud import texttospeech
 from googleapiclient.discovery import build
+from limits import parse_many
 from werkzeug.exceptions import HTTPException
 from werkzeug.middleware.proxy_fix import ProxyFix
 
@@ -84,6 +86,71 @@ app = Flask(__name__)
 TRUST_PROXY_HOPS = int(os.environ.get("TRUST_PROXY_HOPS", "0"))
 if TRUST_PROXY_HOPS > 0:
     app.wsgi_app = ProxyFix(app.wsgi_app, x_for=TRUST_PROXY_HOPS, x_proto=TRUST_PROXY_HOPS, x_host=TRUST_PROXY_HOPS)
+
+# Session cookie hardening. SameSite=Lax keeps the cookie off cross-site POST/DELETE
+# requests (CSRF); Secure is opt-in because many installs run on plain http locally.
+app.config.update(
+    SESSION_COOKIE_HTTPONLY=True,
+    SESSION_COOKIE_SAMESITE="Lax",
+    SESSION_COOKIE_SECURE=os.environ.get("SESSION_COOKIE_SECURE", "false").lower() == "true",
+)
+
+# --- RATE LIMITING ---
+# Per-client-IP limits on endpoints that spend AI/TTS credits. Storage is in
+# memory, which is correct because the app runs as a single process
+# (gunicorn_config.py). A limit string may hold several limits separated by
+# ";" (e.g. "10 per minute;100 per day"); an empty string disables that limit.
+RATE_LIMIT_DEFAULTS = {
+    "RATE_LIMIT_SUMMARIZE": "10 per minute;100 per day",
+    "RATE_LIMIT_TTS": "30 per minute;300 per day",
+    "RATE_LIMIT_LOGIN": "10 per minute",
+}
+
+
+def _read_rate_limit(name):
+    """Read a limit string from the environment, falling back to the default if it doesn't parse."""
+    value = os.environ.get(name, RATE_LIMIT_DEFAULTS[name]).strip()
+    if value:
+        try:
+            parse_many(value)
+        except ValueError:
+            print(f"Warning: invalid {name}={value!r}; using default {RATE_LIMIT_DEFAULTS[name]!r}")
+            value = RATE_LIMIT_DEFAULTS[name]
+    return value
+
+
+RATE_LIMIT_SUMMARIZE = _read_rate_limit("RATE_LIMIT_SUMMARIZE")
+RATE_LIMIT_TTS = _read_rate_limit("RATE_LIMIT_TTS")
+RATE_LIMIT_LOGIN = _read_rate_limit("RATE_LIMIT_LOGIN")
+# Off in the test suite (which makes many requests); tests that exercise limits
+# set app.config["RATE_LIMIT_ENABLED"] = True and call limiter.reset().
+app.config["RATE_LIMIT_ENABLED"] = (
+    os.environ.get("RATE_LIMIT_ENABLED", "true").lower() == "true" and not os.environ.get("TESTING")
+)
+
+# get_client_ip is defined below; the lambda resolves it at request time.
+limiter = Limiter(
+    key_func=lambda: get_client_ip(),
+    app=app,
+    storage_uri="memory://",
+    headers_enabled=True,  # X-RateLimit-* and Retry-After headers
+)
+
+
+@limiter.request_filter
+def _rate_limit_disabled():
+    return not app.config.get("RATE_LIMIT_ENABLED")
+
+
+# Shared limits: every endpoint decorated with the same object draws from the same
+# per-IP budget. Apply summarize_rate_limit to any endpoint that triggers AI
+# summarization, and tts_rate_limit to any endpoint that calls text-to-speech.
+# Limit values are callables so the module globals are read at request time.
+summarize_rate_limit = limiter.shared_limit(
+    lambda: RATE_LIMIT_SUMMARIZE, scope="summarize", exempt_when=lambda: not RATE_LIMIT_SUMMARIZE
+)
+tts_rate_limit = limiter.shared_limit(lambda: RATE_LIMIT_TTS, scope="tts", exempt_when=lambda: not RATE_LIMIT_TTS)
+login_rate_limit = limiter.limit(lambda: RATE_LIMIT_LOGIN, exempt_when=lambda: not RATE_LIMIT_LOGIN)
 
 # Diagnostic endpoints (/debug_transcript) are off unless explicitly enabled
 DEBUG_ENDPOINTS_ENABLED = os.environ.get("ENABLE_DEBUG_ENDPOINTS", "false").lower() == "true"
@@ -359,6 +426,30 @@ def ensure_session_id():
         session["session_id"] = str(uuid.uuid4())
 
 
+STATE_CHANGING_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
+
+
+@app.before_request
+def require_json_for_state_changes():
+    """CSRF defence: state-changing requests must be Content-Type: application/json.
+
+    A cross-site HTML form can only send urlencoded, multipart or text/plain
+    bodies, and a cross-origin fetch() with application/json needs a CORS
+    preflight that this app never approves. So requiring JSON means another
+    site cannot drive these endpoints with the user's session cookie (on top of
+    SameSite=Lax). This applies to every route, including bodyless ones like
+    /logout, so new endpoints are covered automatically.
+    """
+    if request.method in STATE_CHANGING_METHODS and not request.is_json:
+        return jsonify({"error": "Content-Type must be application/json"}), 415
+
+
+def get_json_body():
+    """Return the request's JSON object, or None if the body is missing, malformed or not an object."""
+    data = request.get_json(silent=True)
+    return data if isinstance(data, dict) else None
+
+
 @app.route("/health")
 def health_check():
     """Lightweight, unauthenticated liveness endpoint for container health checks."""
@@ -386,6 +477,7 @@ def login_page():
 
 # --- AUTHENTICATION ENDPOINTS ---
 @app.route("/login", methods=["POST"])
+@login_rate_limit
 def login():
     """Authenticate user with passcode"""
     if not LOGIN_ENABLED:
@@ -409,7 +501,7 @@ def login():
         )  # Too Many Requests
 
     try:
-        data = request.get_json()
+        data = get_json_body()
         if not data:
             return jsonify({"error": "Invalid JSON in request body"}), 400
 
@@ -835,9 +927,10 @@ def _process_video_url(video_id, model_key, session_id, processed_count, total_u
 
 @app.route("/summarize", methods=["POST"])
 @require_auth
+@summarize_rate_limit
 def summarize_links():
     try:
-        data = request.get_json()
+        data = get_json_body()
         if not data:
             return jsonify({"error": "Invalid JSON in request body"}), 400
         urls = data.get("urls", [])
@@ -907,9 +1000,10 @@ def summarize_links():
 
 @app.route("/speak", methods=["POST"])
 @require_auth
+@tts_rate_limit
 def speak():
     try:
-        data = request.get_json()
+        data = get_json_body()
         if not data:
             return jsonify({"error": "Invalid JSON in request body"}), 400
         text_to_speak = data.get("text")
@@ -1048,10 +1142,11 @@ def manual_cache_cleanup():
 
 @app.route("/preview-voice", methods=["POST"])
 @require_auth
+@tts_rate_limit
 def preview_voice():
     """Preview a voice with custom text"""
     try:
-        data = request.get_json()
+        data = get_json_body()
         if not data:
             return jsonify({"error": "Invalid JSON in request body"}), 400
 
@@ -1122,12 +1217,7 @@ def preview_voice():
 def delete_summary():
     """Delete a summary from the cache by video_id"""
     try:
-        # Try to get JSON data
-        try:
-            data = request.get_json(force=True)
-        except Exception:
-            return jsonify({"error": "Invalid JSON in request body"}), 400
-
+        data = get_json_body()
         if data is None:
             return jsonify({"error": "Invalid JSON in request body"}), 400
 
@@ -1213,15 +1303,9 @@ def settings_page():
 @require_auth
 def update_settings():
     """Update environment variables from settings form"""
-    try:
-        data = request.get_json(force=True)
-        if not data:
-            return jsonify({"error": "Invalid JSON in request body"}), 400
-    except Exception as e:
-        return (
-            jsonify({"error": "Invalid JSON in request body", "message": str(e)}),
-            400,
-        )
+    data = get_json_body()
+    if not data:
+        return jsonify({"error": "Invalid JSON in request body"}), 400
 
     try:
         # Define which environment variables we allow to be updated
@@ -1342,6 +1426,8 @@ API_ROUTE_PREFIXES = [
     "/delete_summary",
     "/settings",
     "/events",
+    "/preview-voice",
+    "/api/",
 ]
 
 
@@ -1362,6 +1448,22 @@ def bad_request(e):
 def not_found(e):
     if _is_api_request():
         return jsonify({"error": "Endpoint not found", "path": request.path}), 404
+    return e
+
+
+@app.errorhandler(429)
+def too_many_requests(e):
+    """Rate limit exceeded (Flask-Limiter). Retry-After/X-RateLimit-* headers are added by the limiter."""
+    if _is_api_request():
+        return (
+            jsonify(
+                {
+                    "error": "Too many requests. Please wait a moment and try again.",
+                    "limit": getattr(e, "description", ""),
+                }
+            ),
+            429,
+        )
     return e
 
 

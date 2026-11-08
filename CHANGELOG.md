@@ -13,6 +13,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Removed `/debug_model`, `/events/status`, `/events/broadcast` and `/sse-test`; `/debug_transcript` requires `ENABLE_DEBUG_ENDPOINTS=true`
 - `X-Forwarded-For` is only trusted with `TRUST_PROXY_HOPS`; `TESTING` alone no longer disables auth
 - `/preview-voice` validates `voice_id` (path traversal)
+- Per-client-IP rate limits (Flask-Limiter) on `/summarize`, `/speak` + `/preview-voice` and `POST /login`, configurable via `RATE_LIMIT_SUMMARIZE`, `RATE_LIMIT_TTS`, `RATE_LIMIT_LOGIN`, `RATE_LIMIT_ENABLED`; 429 responses are JSON
+- CSRF hardening: session cookie is `SameSite=Lax` (optional `SESSION_COOKIE_SECURE`); POST/PUT/PATCH/DELETE require `Content-Type: application/json` (415 otherwise) and `/settings`, `/delete_summary` no longer parse non-JSON bodies
 
 ### Changed
 - Docker image runs gunicorn with `gunicorn_config.py` (1 process, gthread) as a non-root user, with a health check
