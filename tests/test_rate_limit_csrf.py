@@ -50,6 +50,14 @@ class TestRateLimiting(RateLimitTestCase):
         self.assertEqual(self.post_json("/summarize", {"urls": []}, ip="10.0.0.2").status_code, 400)
 
     @patch("app.RATE_LIMIT_SUMMARIZE", "2 per minute")
+    def test_background_start_shares_summarize_budget(self):
+        """/summarize/start draws from the same per-IP budget as /summarize"""
+        self.assertEqual(self.post_json("/summarize", {"urls": []}).status_code, 400)
+        self.assertEqual(self.post_json("/summarize/start", {"urls": []}).status_code, 400)
+        self.assertEqual(self.post_json("/summarize/start", {"urls": []}).status_code, 429)
+        self.assertEqual(self.post_json("/summarize", {"urls": []}).status_code, 429)
+
+    @patch("app.RATE_LIMIT_SUMMARIZE", "2 per minute")
     def test_spoofed_x_forwarded_for_does_not_bypass_limit(self):
         """Without TRUST_PROXY_HOPS, X-Forwarded-For is ignored, so rotating it doesn't reset the limit."""
         for i in range(2):

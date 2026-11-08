@@ -23,6 +23,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - SSE moved to `sse.py`; idle streams are no longer dropped every 5 minutes
 - Upgraded `youtube-transcript-api` 1.1.0 → 1.2.4 (instance API, `NETWORK_TIMEOUT` applied per request, clearer errors for blocked/unavailable/age-restricted videos); webshare proxy also supports rotating residential mode when `WEBSHARE_PROXY_HOST`/`PORT` are unset, and the proxy line is logged once instead of on every fetch
 - Summaries are stored in SQLite (`DATA_DIR/summaries.db`, WAL mode) instead of `summary_cache.json`; each write commits one row instead of rewriting the whole file, and listing/search query the database. An existing `summary_cache.json` is imported automatically on first start and renamed to `summary_cache.json.migrated`
+- Page JavaScript moved out of the templates into `static/js/` (`index.js`, `login.js`, `settings.js`, `theme-init.js`, `settings-theme.js`); only the tiny theme-flash guard stays inline in `<head>`
 
 ### Removed
 - Unused async worker system (`worker_manager`, `job_queue`, `job_models`, `job_state`, `error_handler`, `sse_manager`, `/summarize_async`, `/jobs`) and its client scripts and tests
@@ -30,6 +31,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 - Deleting a summary now deletes its cached audio
+- Long playlists no longer depend on one long HTTP request (which reverse proxies with a 60 s read timeout would cut off)
+
+### Added
+- Background summaries: `POST /summarize/start` returns `202 {request_id}` immediately and the work runs on a small thread pool (`SUMMARY_WORKERS`, default 2); `GET /summarize/<request_id>` returns status and results so far (only to the session that started it). Each result is pushed over SSE as a `summary_result` event and completion as `summary_done`, so cards render as they finish. The UI uses this flow, polls when SSE is unavailable, and falls back to `POST /summarize` on older servers. `POST /summarize` still works synchronously
+- New settings: `SUMMARY_WORKERS`, `SUMMARY_REQUEST_TTL`, `SUMMARY_MAX_REQUESTS`, `SUMMARY_MAX_ACTIVE_PER_SESSION`
 
 ### Added
 - **Webshare Proxy Support**: Added support for using webshare proxies for YouTube transcript fetching

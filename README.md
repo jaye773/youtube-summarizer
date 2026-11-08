@@ -119,6 +119,9 @@ The test suite bypasses authentication. This requires both `TESTING=true` in the
 | `MAX_TTS_CHARS` | `50000` | Maximum text length accepted by `/speak` |
 | `NETWORK_TIMEOUT` | `60` | Timeout (seconds) for each transcript HTTP request; also the default socket timeout for network calls without their own |
 | `SSE_MAX_CONNECTIONS` | `20` | Maximum concurrent progress streams (each holds a server thread) |
+| `SUMMARY_WORKERS` | `2` | Background threads that process summary requests |
+| `SUMMARY_REQUEST_TTL` | `3600` | Seconds finished summary requests stay retrievable |
+| `SUMMARY_MAX_ACTIVE_PER_SESSION` | `3` | Summary requests one browser can have running at once |
 | `GUNICORN_THREADS` | `32` | Request threads in the single gunicorn process |
 | `RATE_LIMIT_ENABLED` | `true` | Per-client-IP rate limiting of the endpoints below. `false` disables all of them |
 | `RATE_LIMIT_SUMMARIZE` | `10 per minute;100 per day` | Limit for `/summarize` (AI credits). `;`-separated [limits](https://limits.readthedocs.io/en/stable/quickstart.html#rate-limit-string-notation) strings; empty disables |
@@ -299,7 +302,7 @@ The application will be available at `http://localhost:5001`
    - Playlist URLs are also supported
    - Multiple URLs can be entered on separate lines
 
-4. **Generate Summaries**: Click the "Summarize" button to process the videos
+4. **Generate Summaries**: Click the "Summarize" button to process the videos. Work runs in the background, so long playlists are not cut off by proxy timeouts; each summary card appears as soon as it is ready
 
 5. **View Results**: 
    - Summaries appear below each video
@@ -315,12 +318,13 @@ youtube-summarizer/
 ├── auth.py               # Passcode login, lockout, require_auth
 ├── cache.py              # SQLite summary store (summaries.db) and JSON migration
 ├── sse.py                # Server-Sent Events progress stream
+├── summary_jobs.py       # Background summary requests (thread pool + request store)
 ├── tts_helpers.py        # Text-to-speech synthesis helpers
 ├── voice_config.py       # TTS voices and audio cache management
 ├── youtube_helpers.py    # YouTube API and transcript helpers
 ├── gunicorn_config.py    # Production server config (1 process, threads)
 ├── templates/            # index, login, settings pages
-├── static/               # CSS, theme JS, icons
+├── static/               # CSS, page and theme JS, icons
 ├── tests/                # pytest suite
 ├── Dockerfile
 └── docker-compose.yml
