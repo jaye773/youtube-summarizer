@@ -61,7 +61,9 @@ from ai_models import (
     generate_summary,
     generate_summary_gemini,
     generate_summary_openai,
+    get_model_options,
     get_summary_prompt,
+    resolve_model_key,
 )
 
 # --- CONFIGURATION ---
@@ -640,6 +642,8 @@ def api_status():
         "gemini_model_initialized": gemini_client is not None,
         "openai_client_initialized": openai_client is not None,
         "available_models": list(AVAILABLE_MODELS.keys()),
+        "models": get_model_options(),
+        "default_model": DEFAULT_MODEL,
         "testing_mode": bool(os.environ.get("TESTING")),
     }
     return jsonify(status)
@@ -844,10 +848,13 @@ def summarize_links():
         if not urls:
             return jsonify({"error": "No URLs provided"}), 400
 
-        model_key = data.get("model", DEFAULT_MODEL)
-        if model_key not in AVAILABLE_MODELS:
+        requested_model = data.get("model", DEFAULT_MODEL)
+        model_key = resolve_model_key(requested_model)  # retired keys map to their successor
+        if model_key is None:
             available_models = list(AVAILABLE_MODELS.keys())
-            return jsonify({"error": f"Unsupported model: {model_key}. Available models: {available_models}"}), 400
+            return jsonify({
+                "error": f"Unsupported model: {requested_model}. Available models: {available_models}"
+            }), 400
 
         session_id = session.get("session_id")
 

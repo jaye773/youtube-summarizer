@@ -3,46 +3,96 @@
 import openai
 from google import genai
 
+# Model keys are what the UI sends and what cached summaries store as
+# "model_used". Use provider aliases (no dated snapshots) so the provider's
+# own upgrades apply; review against the provider deprecation pages:
+#   https://developers.openai.com/api/docs/deprecations
+#   https://aistudio.google.com/docs/deprecations
 AVAILABLE_MODELS = {
-    "gemini-2.5-flash": {
+    "gemini-3.5-flash-lite": {
         "provider": "google",
-        "model": "gemini-2.5-flash",
-        "display_name": "Gemini 2.5 Flash (Fast)",
-        "description": "Fast and efficient for most content",
+        "model": "gemini-3.5-flash-lite",
+        "display_name": "Gemini 3.5 Flash-Lite (Fast)",
+        "description": "Fastest and most cost-effective",
     },
-    "gemini-2.5-pro": {
+    "gemini-3.8-flash": {
         "provider": "google",
-        "model": "gemini-2.5-pro",
-        "display_name": "Gemini 2.5 Pro (Advanced)",
-        "description": "More capable for complex content",
+        "model": "gemini-3.8-flash",
+        "display_name": "Gemini 3.8 Flash (Balanced)",
+        "description": "Most capable Flash model",
     },
-    "gpt-5": {
-        "provider": "openai",
-        "model": "gpt-5-2025-08-07",
-        "display_name": "GPT-5 (Latest)",
-        "description": "OpenAI's most advanced model",
+    "gemini-4-argon": {
+        "provider": "google",
+        "model": "gemini-4-argon",
+        "display_name": "Gemini 4 Argon (Advanced)",
+        "description": "Google's flagship reasoning model",
     },
-    "gpt-5-mini": {
+    "gpt-6-luna": {
         "provider": "openai",
-        "model": "gpt-5-mini-2025-08-07",
-        "display_name": "GPT-5 Mini (Fast)",
-        "description": "Faster GPT-5 variant",
+        "model": "gpt-6-luna",
+        "display_name": "GPT-6 Luna (Efficient)",
+        "description": "Lowest-cost OpenAI model",
+        "reasoning_effort": "low",
     },
-    "gpt-4o": {
+    "gpt-6.1-terra": {
         "provider": "openai",
-        "model": "gpt-4o-2024-11-20",
-        "display_name": "GPT-4o (Multimodal)",
-        "description": "Advanced multimodal capabilities",
+        "model": "gpt-6.1-terra",
+        "display_name": "GPT-6.1 Terra (Fast)",
+        "description": "Fast, efficient OpenAI model",
+        "reasoning_effort": "low",
     },
-    "gpt-4o-mini": {
+    "gpt-6.1-sol": {
         "provider": "openai",
-        "model": "gpt-4o-mini-2024-07-18",
-        "display_name": "GPT-4o Mini (Efficient)",
-        "description": "Fast and cost-effective",
+        "model": "gpt-6.1-sol",
+        "display_name": "GPT-6.1 Sol (Advanced)",
+        "description": "Near-flagship quality at lower cost",
+        "reasoning_effort": "low",
     },
 }
 
-DEFAULT_MODEL = "gemini-2.5-flash"
+# Retired model keys -> current key. Old keys still arrive from cached
+# summaries, saved clients and stale browser tabs; they are served by the
+# successor instead of failing. All of these provider models shut down
+# between 2026-12-01 and 2027-01-14.
+LEGACY_MODEL_ALIASES = {
+    "gemini-2.5-flash": "gemini-3.5-flash-lite",
+    "gemini-2.5-pro": "gemini-3.8-flash",
+    "gpt-5": "gpt-6.1-sol",
+    "gpt-5-mini": "gpt-6.1-terra",
+    "gpt-4o": "gpt-6-luna",
+    "gpt-4o-mini": "gpt-6-luna",
+}
+
+DEFAULT_MODEL = "gemini-3.5-flash-lite"
+
+# Output budget for OpenAI reasoning models. Reasoning tokens count against
+# max_completion_tokens; if the budget runs out while reasoning, the answer
+# comes back empty. OpenAI recommends reserving at least 25,000 tokens for
+# reasoning and output; only tokens actually generated are billed.
+OPENAI_MAX_COMPLETION_TOKENS = 25000
+
+
+def resolve_model_key(model_key):
+    """Return the current key for model_key (following legacy aliases), or None if unknown."""
+    if not model_key:
+        return DEFAULT_MODEL
+    if model_key in AVAILABLE_MODELS:
+        return model_key
+    return LEGACY_MODEL_ALIASES.get(model_key)
+
+
+def get_model_options():
+    """Model metadata for the UI: key, provider, display name and description."""
+    return [
+        {
+            "key": key,
+            "provider": config["provider"],
+            "display_name": config["display_name"],
+            "description": config["description"],
+        }
+        for key, config in AVAILABLE_MODELS.items()
+    ]
+
 
 # Module-level clients, injected by app.py
 gemini_client = None
@@ -129,6 +179,8 @@ def generate_summary_gemini(transcript, title, model_name):
 
     try:
         prompt = get_summary_prompt(transcript, title)
+        # No max_output_tokens: thinking tokens count against that limit, and the
+        # models' default thinking level is fine for summaries.
         response = gemini_client.models.generate_content(model=model_name, contents=prompt)
         if not response.text:
             return None, "Empty response from Gemini API"
@@ -138,7 +190,7 @@ def generate_summary_gemini(transcript, title, model_name):
         return None, f"Error calling Gemini API: {e}"
 
 
-def generate_summary_openai(transcript, title, model_name):
+def generate_summary_openai(transcript, title, model_name, reasoning_effort=None):
     """Generate summary using OpenAI"""
     if not openai_client:
         return (
@@ -162,12 +214,16 @@ def generate_summary_openai(transcript, title, model_name):
                 },
                 {"role": "user", "content": prompt},
             ],
-            "max_completion_tokens": 2000,
+            "max_completion_tokens": OPENAI_MAX_COMPLETION_TOKENS,
         }
+        if reasoning_effort:
+            api_params["reasoning_effort"] = reasoning_effort
 
         response = openai_client.chat.completions.create(**api_params)
 
         if not response.choices or not response.choices[0].message.content:
+            if response.choices and response.choices[0].finish_reason == "length":
+                return None, "OpenAI response hit the output token limit before producing a summary"
             return None, "Empty response from OpenAI API"
 
         return response.choices[0].message.content, None
@@ -191,18 +247,14 @@ def generate_summary(transcript, title, model_key=None):
     if not transcript:
         return None, "Cannot generate summary from empty transcript."
 
-    # Use default model if none specified
-    if not model_key:
-        model_key = DEFAULT_MODEL
-
-    # Validate model key
-    if model_key not in AVAILABLE_MODELS:
+    resolved_key = resolve_model_key(model_key)
+    if resolved_key is None:
         return (
             None,
             f"Unsupported model: {model_key}. Available models: {list(AVAILABLE_MODELS.keys())}",
         )
 
-    model_config = AVAILABLE_MODELS[model_key]
+    model_config = AVAILABLE_MODELS[resolved_key]
     provider = model_config["provider"]
     model_name = model_config["model"]
 
@@ -210,6 +262,8 @@ def generate_summary(transcript, title, model_key=None):
     if provider == "google":
         return generate_summary_gemini(transcript, title, model_name)
     elif provider == "openai":
-        return generate_summary_openai(transcript, title, model_name)
+        return generate_summary_openai(
+            transcript, title, model_name, reasoning_effort=model_config.get("reasoning_effort")
+        )
     else:
         return None, f"Unknown provider: {provider}"

@@ -34,11 +34,13 @@ Because SSE connections and the summary cache live in memory, **the app must run
 `DATA_DIR` defaults to `data` in Docker and `.` otherwise.
 
 ## AI Models
-Defined in `ai_models.AVAILABLE_MODELS` (key → provider + model id):
-- Google: `gemini-2.5-flash` (default), `gemini-2.5-pro`
-- OpenAI: `gpt-5`, `gpt-5-mini`, `gpt-4o`, `gpt-4o-mini`
+Defined in `ai_models.AVAILABLE_MODELS` (key → provider + model id, using provider aliases rather than dated snapshots):
+- Google: `gemini-3.5-flash-lite` (default), `gemini-3.8-flash`, `gemini-4-argon`
+- OpenAI: `gpt-6-luna`, `gpt-6.1-terra`, `gpt-6.1-sol` (reasoning models, called with `reasoning_effort="low"` and `max_completion_tokens=25000` because reasoning tokens count against that budget)
 
-To add a model: add it to `AVAILABLE_MODELS` (the UI reads the list from `/api_status`) and, for a new provider, add a branch in `generate_summary()`.
+Retired keys (`gemini-2.5-*`, `gpt-5`, `gpt-5-mini`, `gpt-4o*`) are mapped to successors by `LEGACY_MODEL_ALIASES`; `resolve_model_key()` is used by `/summarize` and `generate_summary()`.
+
+To add a model: add it to `AVAILABLE_MODELS` (the UI builds the selector from `models` in `/api_status`) and, for a new provider, add a branch in `generate_summary()`. Check the provider deprecation pages when reviewing the list.
 
 ## Environment Variables
 

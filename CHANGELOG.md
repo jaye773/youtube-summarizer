@@ -15,6 +15,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `/preview-voice` validates `voice_id` (path traversal)
 
 ### Changed
+- AI models updated: `gemini-3.5-flash-lite` (new default), `gemini-3.8-flash`, `gemini-4-argon`, `gpt-6-luna`, `gpt-6.1-terra`, `gpt-6.1-sol`. Retired keys (`gemini-2.5-*`, `gpt-5`, `gpt-5-mini`, `gpt-4o*`) map to successors instead of failing; the model selector is built from `/api_status`
+- OpenAI calls set `reasoning_effort="low"` and a 25,000-token completion budget so reasoning tokens can no longer leave the summary empty
 - Docker image runs gunicorn with `gunicorn_config.py` (1 process, gthread) as a non-root user, with a health check
 - Gemini calls use the `google-genai` SDK (replaces deprecated `google-generativeai`)
 - Settings saved in the UI persist across restarts (`DATA_DIR/.env` is loaded at startup); generated session secret persists in `DATA_DIR/.secret_key`

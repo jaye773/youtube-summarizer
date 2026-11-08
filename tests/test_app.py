@@ -177,7 +177,9 @@ class TestYouTubeSummarizer(unittest.TestCase):
         self.assertEqual(data[0]["video_url"], f"https://www.youtube.com/watch?v={self.test_video_id}")
 
         # Verify that generate_summary was called with default model
-        mock_generate_summary.assert_called_with("This is a test transcript", "Test Video Title", "gemini-2.5-flash")
+        mock_generate_summary.assert_called_with(
+            "This is a test transcript", "Test Video Title", "gemini-3.5-flash-lite"
+        )
 
     @patch("app.summary_cache", {})  # Clear the cache for this test
     @patch("app.generate_summary")
@@ -200,7 +202,7 @@ class TestYouTubeSummarizer(unittest.TestCase):
 
         response = self.client.post(
             "/summarize",
-            data=json.dumps({"urls": [self.test_video_url], "model": "gpt-4o"}),
+            data=json.dumps({"urls": [self.test_video_url], "model": "gpt-6.1-sol"}),
             content_type="application/json",
         )
 
@@ -211,7 +213,35 @@ class TestYouTubeSummarizer(unittest.TestCase):
         self.assertEqual(data[0]["summary"], "This is a test summary from GPT-4o")
 
         # Verify that generate_summary was called with the specified model
-        mock_generate_summary.assert_called_with("This is a test transcript", "Test Video Title", "gpt-4o")
+        mock_generate_summary.assert_called_with("This is a test transcript", "Test Video Title", "gpt-6.1-sol")
+
+    @patch("app.summary_cache", {})
+    @patch("app.save_summary_cache")
+    @patch("app.generate_summary")
+    @patch("app.get_transcript")
+    @patch("app.get_video_details")
+    @patch("app.youtube")
+    def test_summarize_with_retired_model_key_uses_successor(
+        self, mock_youtube, mock_get_video_details, mock_get_transcript, mock_generate_summary, _mock_save
+    ):
+        """Retired keys from stale clients are mapped to their successor, not rejected"""
+        mock_get_video_details.return_value = {
+            self.test_video_id: {"title": "Test Video Title", "thumbnail_url": "http://example.com/thumb.jpg"}
+        }
+        mock_get_transcript.return_value = ("This is a test transcript", None)
+        mock_generate_summary.return_value = ("summary", None)
+
+        response = self.client.post(
+            "/summarize",
+            data=json.dumps({"urls": [self.test_video_url], "model": "gpt-4o"}),
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        mock_generate_summary.assert_called_with("This is a test transcript", "Test Video Title", "gpt-6-luna")
+        import app as app_module
+
+        self.assertEqual(app_module.summary_cache[self.test_video_id]["model_used"], "gpt-6-luna")
 
     @patch("app.summary_cache", {})  # Clear the cache for this test
     @patch("app.get_transcript")
@@ -646,6 +676,8 @@ class TestYouTubeSummarizer(unittest.TestCase):
             "gemini_model_initialized",
             "openai_client_initialized",
             "available_models",
+            "models",
+            "default_model",
             "testing_mode",
         ]
         for key in expected_keys:
